@@ -1,12 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -15,47 +9,30 @@ datasource db {
   directUrl = env("DATABASE_URL")
 }
 
-
-model EmployeeInformation {
-  firstName                    String
-  lastName                     String
-  middleName                   String?
-  birthdate                    DateTime
-  address                      String?
-  startDate                    DateTime
-  endDate                      DateTime?
-  position                     String
-  department                   String
-  civilStatus                  CIVIL_STATUS
-  createdAt                    DateTime                       @default(now())
-  email                        String?
-  employeeCode                 String                         @unique
-  employeeId                   String                         @id @default(cuid())
-  img                          String?
-  nationality                  String
-  phone                        String?
-  updatedAt                    DateTime                       @updatedAt
-  sex                          GENDER
-  employmentStatus             EMPLOYMENT_STATUS
-  currentStatus                CURRENT_STATUS
-  // Commented out temporarily - will implement these later
-  // employeeContributionSettings EmployeeContributionSettings[]
-  // governmentId               EmployeeGovernmentId?
-  // Shift                      Shift?
-  // shiftId                     Int?
-  // EmployeeHalfMonthAssignment  EmployeeHalfMonthAssignment[]
-  // EmployeeShiftOverride        EmployeeShiftOverride[]
-  // Attendance                   Attendance[]
-  // Punch                        Punch[]
-
-  // PayrollEntry         PayrollEntry[]
-  // EmployeeCompensation EmployeeCompensation[]
-  // EmployeeQrCredential EmployeeQrCredential?
-  // AdhocPayItem         AdhocPayItem[]
-  // EmployeeUserLink     EmployeeUserLink?
-  // MemoRecipient        MemoRecipient[]
+model Employee {
+  id               String            @id
+  userId           String?           @unique
+  employeeCode     String            @unique
+  firstName        String
+  lastName         String
+  middleName       String?
+  suffix           SUFFIX?
+  sex              GENDER
+  civilStatus      CIVIL_STATUS
+  birthdate        DateTime
+  address          String?
+  img              String?
+  startDate        DateTime
+  endDate          DateTime?
+  position         String
+  department       String
+  employmentStatus EMPLOYMENT_STATUS
+  currentStatus    CURRENT_STATUS
+  email            String?
+  phone            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
-
 
 enum GENDER {
   MALE
@@ -80,4 +57,13 @@ enum CURRENT_STATUS {
   ON_LEAVE
   VACATION
   SICK_LEAVE
+  INACTIVE
+}
+
+enum SUFFIX {
+  JR
+  SR
+  II
+  III
+  IV
 }
