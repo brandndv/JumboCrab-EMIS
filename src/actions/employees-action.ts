@@ -42,21 +42,20 @@ type Employee = {
 
 export async function getEmployees() {
   try {
+    console.log("Fetching employees...");
     const employees = await db.employee.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
     });
-
-    return {
-      success: true,
-      data: employees,
-    };
+    console.log(`Fetched ${employees.length} employees`);
+    return { success: true, data: employees };
   } catch (error) {
-    console.error("Error in getEmployees:", error);
+    console.error("Error in getEmployees:", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return {
       success: false,
-      error: "Failed to fetch employees",
+      error: "Failed to fetch employees. Check server logs for details.",
     };
   }
 }

@@ -11,7 +11,6 @@ export default function EmployeesPage() {
 
   return (
     <div className="px-20 py-10">
-      <h1>Actions</h1>
       <EmployeesProvider>
         <EmployeesTable employees={employees} />
       </EmployeesProvider>
