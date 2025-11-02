@@ -205,7 +205,7 @@ export async function getDepartments() {
 
     return {
       success: true,
-      data: departments.map((d) => d.department),
+      data: departments.map((d: { department: string }) => d.department),
     };
   } catch (error) {
     console.error("Error in getDepartments:", error);
