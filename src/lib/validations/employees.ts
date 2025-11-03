@@ -53,6 +53,7 @@ export const employeeSchema = z.object({
     }),
   sex: z.enum(GENDER),
   civilStatus: z.enum(CIVIL_STATUS),
+  nationality: z.string().optional().nullable(),
   birthdate: z
     .union([z.string(), z.date()])
     .pipe(z.coerce.date())

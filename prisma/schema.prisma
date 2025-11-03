@@ -19,6 +19,7 @@ model Employee {
   suffix           SUFFIX?
   sex              GENDER
   civilStatus      CIVIL_STATUS
+  nationality      String?
   birthdate        DateTime
   address          String?
   img              String?

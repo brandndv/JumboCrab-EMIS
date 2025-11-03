@@ -24,7 +24,7 @@ import { useState, useEffect } from "react";
 
 type EmployeeDialogProps = {
   employee: Employee | null;
-  mode: "view" | "edit" | "archive" | null;
+  mode: "create" | "view" | "edit" | "archive" | null;
   onClose: () => void;
   onSave: (employee: Employee) => void;
   onArchive: () => void;
@@ -37,34 +37,120 @@ export function EmployeeDialog({
   onSave,
   onArchive,
 }: EmployeeDialogProps) {
-  const [formData, setFormData] = useState<Partial<Employee>>(employee || {});
+  // Initialize form data with proper defaults
+  const getInitialFormData = (emp: Employee | null): Partial<Employee> => {
+    const defaults = {
+      employmentStatus: "PROBATIONARY" as const,
+      currentStatus: "ACTIVE" as const,
+      startDate: new Date(),
+    };
+
+    if (!emp) {
+      return { ...defaults };
+    }
+
+    return {
+      ...defaults,
+      ...emp,
+    };
+  };
+
+  const [formData, setFormData] = useState<Partial<Employee>>(() =>
+    getInitialFormData(employee)
+  );
+
   const isOpen = mode !== null;
 
+  // Update form data when employee prop changes
   useEffect(() => {
+    console.log("EmployeeDialog - Mode:", mode);
+    console.log("EmployeeDialog - Received employee data:", employee);
+
     if (employee) {
-      setFormData(employee);
+      // Create a clean data object with all fields properly set
+      const updatedData = getInitialFormData(employee);
+      console.log("EmployeeDialog - Setting form data with:", {
+        ...updatedData,
+        // Log dates as strings for better readability
+        startDate: updatedData.startDate?.toISOString(),
+        birthdate: (updatedData as any).birthdate?.toISOString(),
+        endDate: (updatedData as any).endDate?.toISOString(),
+      });
+      setFormData(updatedData);
+    } else if (mode === "create") {
+      // Only reset to defaults if we're in create mode
+      const defaultData = getInitialFormData(null);
+      console.log(
+        "EmployeeDialog - Initializing new employee with:",
+        defaultData
+      );
+      setFormData(defaultData);
     }
-  }, [employee]);
+  }, [employee, mode]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    console.log(
+      `Field changed - ${name}:`,
+      value,
+      "Current form data:",
+      formData
+    );
+
+    setFormData((prev) => {
+      const newValue =
+        name === "nationality"
+          ? value === ""
+            ? null
+            : value // Convert empty string to null for nationality
+          : value;
+
+      const newData = {
+        ...prev,
+        [name]: newValue,
+      };
+
+      console.log("New form data:", newData);
+      return newData;
+    });
   };
 
   const handleSelectChange = (name: keyof Employee, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    console.log(`Select changed - ${name}:`, value);
+
+    setFormData((prev) => {
+      const newValue = name === "nationality" && value === "" ? null : value;
+      const newData = {
+        ...prev,
+        [name]: newValue,
+      };
+      console.log("Updated form data after select change:", newData);
+      return newData;
+    });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData) {
-      onSave(formData as Employee);
+    if (!formData) {
+      console.error("No form data available");
+      return;
+    }
+
+    try {
+      console.log("[FORM] Starting form submission with data:", {
+        ...formData,
+        // Log dates as strings for better readability
+        startDate: formData.startDate?.toISOString(),
+        birthdate: (formData as any).birthdate?.toISOString(),
+        endDate: (formData as any).endDate?.toISOString(),
+      });
+
+      await onSave(formData as Employee);
+      console.log("[FORM] Form submitted successfully");
+      onClose();
+    } catch (error) {
+      console.error("[FORM] Error submitting form:", error);
+      // You might want to show an error toast/message to the user here
     }
   };
 
@@ -76,11 +162,13 @@ export function EmployeeDialog({
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>
+              {mode === "create" && "Add New Employee"}
               {mode === "view" && "View Employee"}
               {mode === "edit" && "Edit Employee"}
               {mode === "archive" && "Archive Employee"}
             </DialogTitle>
             <DialogDescription>
+              {mode === "create" && "Add a new employee to the system"}
               {mode === "view" && "View employee details"}
               {mode === "edit" && "Edit employee information"}
               {mode === "archive" &&
@@ -214,6 +302,34 @@ export function EmployeeDialog({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
+                    <Label htmlFor="nationality">Nationality</Label>
+                    <Input
+                      id="nationality"
+                      name="nationality"
+                      value={
+                        typeof formData.nationality === "string"
+                          ? formData.nationality
+                          : ""
+                      }
+                      onChange={(e) => {
+                        const value = e.target.value || null;
+                        console.log("Nationality changed:", {
+                          old: formData.nationality,
+                          new: value,
+                        });
+                        setFormData((prev) => ({
+                          ...prev,
+                          nationality: value,
+                        }));
+                      }}
+                      disabled={mode === "view"}
+                      placeholder="e.g., Filipino, American, etc."
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
                     <Label htmlFor="startDate">Start Date</Label>
                     <Input
                       id="startDate"
@@ -221,7 +337,12 @@ export function EmployeeDialog({
                       type="date"
                       value={
                         formData.startDate
-                          ? format(new Date(formData.startDate), "yyyy-MM-dd")
+                          ? format(
+                              formData.startDate instanceof Date
+                                ? formData.startDate
+                                : new Date(formData.startDate),
+                              "yyyy-MM-dd"
+                            )
                           : ""
                       }
                       onChange={handleChange}
@@ -251,17 +372,14 @@ export function EmployeeDialog({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="mr-2"
-            >
-              {mode === "view" ? "Close" : "Cancel"}
+            <Button type="button" variant="outline" onClick={onClose}>
+              {mode === "archive" ? "Cancel" : "Close"}
             </Button>
-
-            {mode === "edit" && <Button type="submit">Save Changes</Button>}
-
+            {(mode === "create" || mode === "edit") && (
+              <Button type="submit">
+                {mode === "create" ? "Create Employee" : "Save Changes"}
+              </Button>
+            )}
             {mode === "archive" && (
               <Button type="button" variant="destructive" onClick={onArchive}>
                 Archive

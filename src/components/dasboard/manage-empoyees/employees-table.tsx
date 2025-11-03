@@ -3,13 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal } from "lucide-react";
-import {
-  SUFFIX,
-  GENDER,
-  CIVIL_STATUS,
-  EMPLOYMENT_STATUS,
-  CURRENT_STATUS,
-} from "@/lib/validations/employees";
+import { SUFFIX } from "@/lib/validations/employees";
 // import { EmployeeDialog } from "./employee-dialog";
 import {
   Pagination,
@@ -159,75 +153,59 @@ export default function EmployeesTable({
 
   const handleSave = async (updatedEmployee: Employee) => {
     try {
-      // Ensure we have a valid ID
       if (!updatedEmployee.id) {
         console.error("Error: No employee ID provided for update");
         return;
       }
 
-      // Create a new object with explicit type and fields
-      const employeeData: Parameters<typeof updateEmployee>[0] = {
-        // Required fields
+      // Create a new object with all fields from updatedEmployee
+      const employeeData = {
         id: updatedEmployee.id,
         // Basic info
         employeeCode: updatedEmployee.employeeCode,
         firstName: updatedEmployee.firstName,
         middleName: updatedEmployee.middleName,
         lastName: updatedEmployee.lastName,
-        // Enums with type assertions
-        sex: updatedEmployee.sex as "MALE" | "FEMALE",
-        civilStatus: updatedEmployee.civilStatus as
-          | "SINGLE"
-          | "MARRIED"
-          | "DIVORCED"
-          | "WIDOWED",
-        employmentStatus: updatedEmployee.employmentStatus as
-          | "REGULAR"
-          | "PROBATIONARY"
-          | "TRAINING",
-        currentStatus: updatedEmployee.currentStatus as
-          | "ACTIVE"
-          | "ON_LEAVE"
-          | "VACATION"
-          | "SICK_LEAVE",
-        // Handle suffix with type check
-        suffix:
-          updatedEmployee.suffix &&
-          SUFFIX.includes(updatedEmployee.suffix as any)
-            ? (updatedEmployee.suffix as SUFFIX)
-            : null,
-        // Dates
-        birthdate: new Date(updatedEmployee.birthdate),
-        startDate: new Date(updatedEmployee.startDate),
+        // Include nationality
+        nationality: updatedEmployee.nationality || undefined,
+        // Enums
+        sex: updatedEmployee.sex,
+        civilStatus: updatedEmployee.civilStatus,
+        employmentStatus: updatedEmployee.employmentStatus,
+        currentStatus: updatedEmployee.currentStatus,
+        suffix: updatedEmployee.suffix || undefined,
+        // Dates - using undefined instead of null to match the expected type
+        birthdate: updatedEmployee.birthdate
+          ? new Date(updatedEmployee.birthdate)
+          : undefined,
+        startDate: updatedEmployee.startDate
+          ? new Date(updatedEmployee.startDate)
+          : undefined,
         endDate: updatedEmployee.endDate
           ? new Date(updatedEmployee.endDate)
-          : null,
-        // Optional fields
-        address: updatedEmployee.address,
-        img: updatedEmployee.img,
-        position: updatedEmployee.position,
-        department: updatedEmployee.department,
-        email: updatedEmployee.email,
-        phone: updatedEmployee.phone,
-        // Timestamps
-        createdAt: updatedEmployee.createdAt
-          ? new Date(updatedEmployee.createdAt)
-          : new Date(),
-        updatedAt: new Date(),
+          : undefined,
+        // Other fields - using undefined instead of null to match the expected type
+        address: updatedEmployee.address || undefined,
+        img: updatedEmployee.img || undefined,
+        position: updatedEmployee.position || undefined,
+        department: updatedEmployee.department || undefined,
+        email: updatedEmployee.email || undefined,
+        phone: updatedEmployee.phone || undefined,
       };
 
-      // Call the server action with the employee data
+      console.log("Saving employee data:", employeeData); // Debug log
+
       const result = await updateEmployee(employeeData);
 
       if (result?.error) {
         throw new Error(result.error);
       }
 
-      // Refresh the employee list
+      // Use router.refresh() instead of window.location.reload() in Next.js
       window.location.reload();
     } catch (error) {
       console.error("Error updating employee:", error);
-      // You might want to show an error message to the user
+      // Consider adding toast or alert here
     } finally {
       handleDialogClose();
     }

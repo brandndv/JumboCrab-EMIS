@@ -1,9 +1,11 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { getEmployees } from '@/actions/employees-action';
-import { Employee, validateEmployee } from '@/lib/validations/employees';
+import { createContext, useContext, useEffect, useState } from "react";
+import { getEmployees } from "@/actions/employees-action";
+import { Employee, validateEmployee } from "@/lib/validations/employees";
 import EmployeesTable from "./employees-table";
+import EmployeeSearch from "./employee-combo/employee-search";
+import EmployeeComboBox from "./employee-combo/employee-combobox";
 
 type EmployeeContextType = {
   employees: Employee[];
@@ -27,11 +29,11 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("Fetching employees...");
       const response = await getEmployees();
-      
+
       if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to fetch employees');
+        throw new Error(response.error || "Failed to fetch employees");
       }
-      
+
       // Validate each employee
       const validatedEmployees: Employee[] = [];
       for (const emp of response.data) {
@@ -39,15 +41,17 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
         if (result.success) {
           validatedEmployees.push(result.data);
         } else {
-          console.error('Invalid employee data:', result.error);
+          console.error("Invalid employee data:", result.error);
         }
       }
-      
+
       setEmployees(validatedEmployees);
       console.log(`Successfully loaded ${validatedEmployees.length} employees`);
     } catch (err) {
-      console.error('Error in fetchEmployeesData:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch employees');
+      console.error("Error in fetchEmployeesData:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch employees"
+      );
     } finally {
       setLoading(false);
     }
@@ -61,19 +65,23 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
   if (error) return <div className="text-red-500">{error}</div>;
 
   return (
-    <EmployeesContext.Provider 
-      value={{ 
-        employees, 
-        loading, 
-        error, 
-        refreshEmployees: fetchEmployeesData 
+    <EmployeesContext.Provider
+      value={{
+        employees,
+        loading,
+        error,
+        refreshEmployees: fetchEmployeesData,
       }}
     >
+      <div></div>
       <h1 className="text-2xl font-bold mb-2">Employees</h1>
       <p className="text-muted-foreground mb-5">
         Manage your employee's records
       </p>
       <div className="mt-5">
+        <div className="mb-5">
+          <EmployeeComboBox />
+        </div>
         <EmployeesTable employees={employees} />
       </div>
     </EmployeesContext.Provider>
@@ -83,7 +91,7 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
 export function useEmployees() {
   const context = useContext(EmployeesContext);
   if (context === undefined) {
-    throw new Error('useEmployees must be used within an EmployeesProvider');
+    throw new Error("useEmployees must be used within an EmployeesProvider");
   }
   return context;
 }
