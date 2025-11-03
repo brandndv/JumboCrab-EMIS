@@ -3,14 +3,19 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { getEmployees } from "@/actions/employees-action";
 import { Employee, validateEmployee } from "@/lib/validations/employees";
-import EmployeesTable from "./employees-table";
-import EmployeeSearch from "./employee-combo/employee-search";
-import EmployeeComboBox from "./employee-combo/employee-combobox";
 
 type EmployeeContextType = {
   employees: Employee[];
+  filteredEmployees: Employee[];
   loading: boolean;
   error: string | null;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  selectedDepartment: string | null;
+  setSelectedDepartment: (dept: string | null) => void;
+  selectedStatus: string | null;
+  setSelectedStatus: (status: string | null) => void;
+  departments: string[];
   refreshEmployees: () => Promise<void>;
 };
 
@@ -19,9 +24,20 @@ const EmployeesContext = createContext<EmployeeContextType | undefined>(
 );
 
 export function EmployeesProvider({ children }: { children: React.ReactNode }) {
+  // State declarations at the top level (no conditional hooks)
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(
+    null
+  );
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<string[]>([
+    "KITCHEN",
+    "DINING",
+  ]); // Default departments
 
   const fetchEmployeesData = async () => {
     setLoading(true);
@@ -46,6 +62,11 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
       }
 
       setEmployees(validatedEmployees);
+      // Extract unique departments from employees
+      const uniqueDepartments = Array.from(
+        new Set(validatedEmployees.map((emp) => emp.department).filter(Boolean))
+      ) as string[];
+      setDepartments((prev) => [...new Set([...prev, ...uniqueDepartments])]);
       console.log(`Successfully loaded ${validatedEmployees.length} employees`);
     } catch (err) {
       console.error("Error in fetchEmployeesData:", err);
@@ -61,29 +82,56 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
     fetchEmployeesData();
   }, []);
 
-  if (loading) return <div>Loading employees...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
+  // Loading and error states moved to the render part, not before hooks
+
+  // Apply filters and search
+  useEffect(() => {
+    let result = [...employees];
+
+    // Apply department filter
+    if (selectedDepartment) {
+      result = result.filter((emp) => emp.department === selectedDepartment);
+    }
+
+    // Apply status filter
+    if (selectedStatus) {
+      result = result.filter((emp) => emp.currentStatus === selectedStatus);
+    }
+
+    // Apply search term
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (emp) =>
+          emp.firstName?.toLowerCase().includes(term) ||
+          emp.lastName?.toLowerCase().includes(term) ||
+          emp.employeeCode?.toLowerCase().includes(term) ||
+          emp.email?.toLowerCase().includes(term)
+      );
+    }
+
+    setFilteredEmployees(result);
+  }, [employees, selectedDepartment, selectedStatus, searchTerm]);
+
+  // Provide the context value
+  const contextValue = {
+    employees: filteredEmployees,
+    filteredEmployees,
+    loading,
+    error,
+    searchTerm,
+    setSearchTerm,
+    selectedDepartment,
+    setSelectedDepartment,
+    selectedStatus,
+    setSelectedStatus,
+    departments,
+    refreshEmployees: fetchEmployeesData,
+  };
 
   return (
-    <EmployeesContext.Provider
-      value={{
-        employees,
-        loading,
-        error,
-        refreshEmployees: fetchEmployeesData,
-      }}
-    >
-      <div></div>
-      <h1 className="text-2xl font-bold mb-2">Employees</h1>
-      <p className="text-muted-foreground mb-5">
-        Manage your employee's records
-      </p>
-      <div className="mt-5">
-        <div className="mb-5">
-          <EmployeeComboBox />
-        </div>
-        <EmployeesTable employees={employees} />
-      </div>
+    <EmployeesContext.Provider value={contextValue}>
+      {children}
     </EmployeesContext.Provider>
   );
 }

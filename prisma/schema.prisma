@@ -68,3 +68,8 @@ enum SUFFIX {
   III
   IV
 }
+
+enum DEPARTMENT {
+  KITCHEN
+  DINING
+}
