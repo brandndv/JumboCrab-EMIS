@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useId } from "react";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -39,6 +40,7 @@ interface NavSidebarProps {
 const NavSidebar = ({ userRole }: NavSidebarProps) => {
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({});
   const pathname = usePathname();
+  const collapsibleId = useId(); // Generate a stable ID prefix
 
   const updateOpenState = (key: string, value: boolean) => {
     setOpenStates((prev) => ({ ...prev, [key]: value }));
@@ -185,9 +187,13 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                 onOpenChange={(value: boolean) =>
                   updateOpenState(item.id, value)
                 }
+                data-collapsible-id={`${collapsibleId}-${item.id}`}
               >
                 <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
+                  <CollapsibleTrigger 
+                    asChild
+                    data-collapsible-id={`${collapsibleId}-${item.id}-trigger`}
+                  >
                     <SidebarMenuButton
                       tooltip={{
                         children: item.label,
