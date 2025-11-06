@@ -1,10 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { MoreHorizontal } from "lucide-react";
-import { SUFFIX } from "@/lib/validations/employees";
-// import { EmployeeDialog } from "./employee-dialog";
 import {
   Pagination,
   PaginationContent,

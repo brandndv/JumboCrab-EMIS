@@ -157,237 +157,239 @@ export function EmployeeDialog({
   if (!isOpen) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px]">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>
-              {mode === "create" && "Add New Employee"}
-              {mode === "view" && "View Employee"}
-              {mode === "edit" && "Edit Employee"}
-              {mode === "archive" && "Archive Employee"}
-            </DialogTitle>
-            <DialogDescription>
-              {mode === "create" && "Add a new employee to the system"}
-              {mode === "view" && "View employee details"}
-              {mode === "edit" && "Edit employee information"}
-              {mode === "archive" &&
-                "Are you sure you want to archive this employee?"}
-            </DialogDescription>
-          </DialogHeader>
+    <div className="w-500">
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-[80%]">
+          <form onSubmit={handleSubmit}>
+            <DialogHeader>
+              <DialogTitle>
+                {mode === "create" && "Add New Employee"}
+                {mode === "view" && "View Employee"}
+                {mode === "edit" && "Edit Employee"}
+                {mode === "archive" && "Archive Employee"}
+              </DialogTitle>
+              <DialogDescription>
+                {mode === "create" && "Add a new employee to the system"}
+                {mode === "view" && "View employee details"}
+                {mode === "edit" && "Edit employee information"}
+                {mode === "archive" &&
+                  "Are you sure you want to archive this employee?"}
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="grid gap-4 py-4">
-            {mode === "archive" ? (
-              <p>
-                This action cannot be undone. The employee will be archived.
-              </p>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input
-                      id="firstName"
-                      name="firstName"
-                      value={formData.firstName || ""}
-                      onChange={handleChange}
-                      disabled={mode === "view"}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input
-                      id="lastName"
-                      name="lastName"
-                      value={formData.lastName || ""}
-                      onChange={handleChange}
-                      disabled={mode === "view"}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={formData.email || ""}
-                      onChange={handleChange}
-                      disabled={mode === "view"}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input
-                      id="phone"
-                      name="phone"
-                      value={formData.phone || ""}
-                      onChange={handleChange}
-                      disabled={mode === "view"}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="position">Position</Label>
-                    <Input
-                      id="position"
-                      name="position"
-                      value={formData.position || ""}
-                      onChange={handleChange}
-                      disabled={mode === "view"}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="department">Department</Label>
-                    <Input
-                      id="department"
-                      name="department"
-                      value={formData.department || ""}
-                      onChange={handleChange}
-                      disabled={mode === "view"}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Employment Status</Label>
-                    <Select
-                      value={formData.employmentStatus || ""}
-                      onValueChange={(value: string) =>
-                        handleSelectChange(
-                          "employmentStatus" as keyof Employee,
-                          value
-                        )
-                      }
-                      disabled={mode === "view"}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="REGULAR">Regular</SelectItem>
-                        <SelectItem value="PROBATIONARY">
-                          Probationary
-                        </SelectItem>
-                        <SelectItem value="TRAINING">Training</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Current Status</Label>
-                    <Select
-                      value={formData.currentStatus || ""}
-                      onValueChange={(value) =>
-                        handleSelectChange("currentStatus", value)
-                      }
-                      disabled={mode === "view"}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ACTIVE">Active</SelectItem>
-                        <SelectItem value="ON_LEAVE">On Leave</SelectItem>
-                        <SelectItem value="VACATION">Vacation</SelectItem>
-                        <SelectItem value="SICK_LEAVE">Sick Leave</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="nationality">Nationality</Label>
-                    <Input
-                      id="nationality"
-                      name="nationality"
-                      value={
-                        typeof formData.nationality === "string"
-                          ? formData.nationality
-                          : ""
-                      }
-                      onChange={(e) => {
-                        const value = e.target.value || null;
-                        console.log("Nationality changed:", {
-                          old: formData.nationality,
-                          new: value,
-                        });
-                        setFormData((prev) => ({
-                          ...prev,
-                          nationality: value,
-                        }));
-                      }}
-                      disabled={mode === "view"}
-                      placeholder="e.g., Filipino, American, etc."
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="startDate">Start Date</Label>
-                    <Input
-                      id="startDate"
-                      name="startDate"
-                      type="date"
-                      value={
-                        formData.startDate
-                          ? format(
-                              formData.startDate instanceof Date
-                                ? formData.startDate
-                                : new Date(formData.startDate),
-                              "yyyy-MM-dd"
-                            )
-                          : ""
-                      }
-                      onChange={handleChange}
-                      disabled={mode === "view"}
-                    />
-                  </div>
-                  {formData.endDate && (
+            <div className="grid gap-4 py-4">
+              {mode === "archive" ? (
+                <p>
+                  This action cannot be undone. The employee will be archived.
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="endDate">End Date</Label>
+                      <Label htmlFor="firstName">First Name</Label>
                       <Input
-                        id="endDate"
-                        name="endDate"
+                        id="firstName"
+                        name="firstName"
+                        value={formData.firstName || ""}
+                        onChange={handleChange}
+                        disabled={mode === "view"}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        name="lastName"
+                        value={formData.lastName || ""}
+                        onChange={handleChange}
+                        disabled={mode === "view"}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        value={formData.email || ""}
+                        onChange={handleChange}
+                        disabled={mode === "view"}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Phone</Label>
+                      <Input
+                        id="phone"
+                        name="phone"
+                        value={formData.phone || ""}
+                        onChange={handleChange}
+                        disabled={mode === "view"}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="position">Position</Label>
+                      <Input
+                        id="position"
+                        name="position"
+                        value={formData.position || ""}
+                        onChange={handleChange}
+                        disabled={mode === "view"}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="department">Department</Label>
+                      <Input
+                        id="department"
+                        name="department"
+                        value={formData.department || ""}
+                        onChange={handleChange}
+                        disabled={mode === "view"}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Employment Status</Label>
+                      <Select
+                        value={formData.employmentStatus || ""}
+                        onValueChange={(value: string) =>
+                          handleSelectChange(
+                            "employmentStatus" as keyof Employee,
+                            value
+                          )
+                        }
+                        disabled={mode === "view"}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="REGULAR">Regular</SelectItem>
+                          <SelectItem value="PROBATIONARY">
+                            Probationary
+                          </SelectItem>
+                          <SelectItem value="TRAINING">Training</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Current Status</Label>
+                      <Select
+                        value={formData.currentStatus || ""}
+                        onValueChange={(value) =>
+                          handleSelectChange("currentStatus", value)
+                        }
+                        disabled={mode === "view"}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ACTIVE">Active</SelectItem>
+                          <SelectItem value="ON_LEAVE">On Leave</SelectItem>
+                          <SelectItem value="VACATION">Vacation</SelectItem>
+                          <SelectItem value="SICK_LEAVE">Sick Leave</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="nationality">Nationality</Label>
+                      <Input
+                        id="nationality"
+                        name="nationality"
+                        value={
+                          typeof formData.nationality === "string"
+                            ? formData.nationality
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const value = e.target.value || null;
+                          console.log("Nationality changed:", {
+                            old: formData.nationality,
+                            new: value,
+                          });
+                          setFormData((prev) => ({
+                            ...prev,
+                            nationality: value,
+                          }));
+                        }}
+                        disabled={mode === "view"}
+                        placeholder="e.g., Filipino, American, etc."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="startDate">Start Date</Label>
+                      <Input
+                        id="startDate"
+                        name="startDate"
                         type="date"
                         value={
-                          formData.endDate
-                            ? format(new Date(formData.endDate), "yyyy-MM-dd")
+                          formData.startDate
+                            ? format(
+                                formData.startDate instanceof Date
+                                  ? formData.startDate
+                                  : new Date(formData.startDate),
+                                "yyyy-MM-dd"
+                              )
                             : ""
                         }
                         onChange={handleChange}
                         disabled={mode === "view"}
                       />
                     </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+                    {formData.endDate && (
+                      <div className="space-y-2">
+                        <Label htmlFor="endDate">End Date</Label>
+                        <Input
+                          id="endDate"
+                          name="endDate"
+                          type="date"
+                          value={
+                            formData.endDate
+                              ? format(new Date(formData.endDate), "yyyy-MM-dd")
+                              : ""
+                          }
+                          onChange={handleChange}
+                          disabled={mode === "view"}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              {mode === "archive" ? "Cancel" : "Close"}
-            </Button>
-            {(mode === "create" || mode === "edit") && (
-              <Button type="submit">
-                {mode === "create" ? "Create Employee" : "Save Changes"}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>
+                {mode === "archive" ? "Cancel" : "Close"}
               </Button>
-            )}
-            {mode === "archive" && (
-              <Button type="button" variant="destructive" onClick={onArchive}>
-                Archive
-              </Button>
-            )}
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              {(mode === "create" || mode === "edit") && (
+                <Button type="submit">
+                  {mode === "create" ? "Create Employee" : "Save Changes"}
+                </Button>
+              )}
+              {mode === "archive" && (
+                <Button type="button" variant="destructive" onClick={onArchive}>
+                  Archive
+                </Button>
+              )}
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
