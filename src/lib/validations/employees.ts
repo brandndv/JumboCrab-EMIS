@@ -59,6 +59,10 @@ export const employeeSchema = z.object({
     .pipe(z.coerce.date())
     .refine((date) => date <= new Date(), "Birthdate cannot be in the future"),
   address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  postalCode: z.string().optional().nullable(),
+  country: z.string().optional().nullable(),
   img: z.string().url("Invalid image URL").optional().nullable(),
   startDate: z
     .union([z.string(), z.date()])
@@ -76,6 +80,11 @@ export const employeeSchema = z.object({
   currentStatus: z.enum(CURRENT_STATUS),
   email: z.string().email("Invalid email").optional().nullable(),
   phone: z.string().optional().nullable(),
+  emergencyContactName: z.string().min(1, "Emergency contact name is required").optional().nullable(),
+  emergencyContactRelationship: z.string().min(1, "Relationship is required").optional().nullable(),
+  emergencyContactPhone: z.string().min(1, "Emergency contact phone is required").optional().nullable(),
+  emergencyContactEmail: z.string().email("Invalid emergency contact email").optional().nullable(),
+  description: z.string().optional().nullable(),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional(),
 });

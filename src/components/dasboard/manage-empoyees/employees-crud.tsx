@@ -1,28 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { MoreHorizontalIcon, Eye, Pencil, Archive } from "lucide-react";
+import { MoreHorizontalIcon, Pencil, Archive } from "lucide-react";
 import { Employee } from "@/lib/validations/employees";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
 interface EmployeesActionsProps {
   employee: Employee;
-  onView: (employee: Employee) => void;
-  onEdit: (employee: Employee) => void;
+  onEdit: (employeeId: string) => void;
   onArchive: (employee: Employee) => void;
 }
 
 export function EmployeesActions({
   employee,
-  onView,
   onEdit,
   onArchive,
 }: EmployeesActionsProps) {
@@ -31,24 +27,27 @@ export function EmployeesActions({
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-8 w-8 p-0">
-          <span className="sr-only">Open menu</span>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
           <MoreHorizontalIcon className="h-4 w-4" />
+          <span className="sr-only">More options</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => onView(employee)}>
-          <Eye className="mr-2 h-4 w-4" />
-          View
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onEdit(employee)}>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem 
+          onClick={() => {
+            if (employee.id) {
+              onEdit(employee.id);
+            } else {
+              console.error('Cannot edit: Employee ID is missing');
+            }
+          }}
+          disabled={!employee.id}
+        >
           <Pencil className="mr-2 h-4 w-4" />
           Edit
         </DropdownMenuItem>
         <DropdownMenuItem
-          className="text-red-600"
+          className="text-red-600 focus:text-red-600"
           onClick={() => onArchive(employee)}
         >
           <Archive className="mr-2 h-4 w-4" />

@@ -2,7 +2,7 @@
 
 // ========== IMPORTS ========= //
 import { revalidatePath } from "next/cache";
-import { db, checkConnection } from '@/lib/db';
+import { db, checkConnection } from "@/lib/db";
 import {
   type Employee as EmployeeType,
   type GENDER,
@@ -40,12 +40,19 @@ export async function getEmployees() {
  * @param id - The unique identifier of the employee to retrieve
  * @returns Object containing success status and either the employee data or an error message
  */
-export async function getEmployeeById(id: string): Promise<{
+export async function getEmployeeById(id: string | undefined): Promise<{
   success: boolean;
-  data?: EmployeeType;
+  data?: EmployeeType | null;
   error?: string;
 }> {
   try {
+    if (!id) {
+      return {
+        success: false,
+        error: 'Employee ID is required',
+      };
+    }
+    
     // Query the database for a single employee with the specified ID
     const employee = await db.employee.findUnique({
       where: { id },
@@ -153,7 +160,7 @@ export async function updateEmployee(
   // Verify database connection
   const isConnected = await checkConnection();
   if (!isConnected) {
-    throw new Error('Database connection not available');
+    throw new Error("Database connection not available");
   }
 
   try {
@@ -174,7 +181,10 @@ export async function updateEmployee(
       },
     });
 
-    console.log("[SERVER] Current employee data in DB:", JSON.stringify(currentData, null, 2));
+    console.log(
+      "[SERVER] Current employee data in DB:",
+      JSON.stringify(currentData, null, 2)
+    );
 
     // Log current state in database before update
     try {
@@ -188,7 +198,10 @@ export async function updateEmployee(
           updatedAt: true,
         },
       });
-      console.log("[SERVER] Current employee data in DB:", JSON.stringify(currentData, null, 2));
+      console.log(
+        "[SERVER] Current employee data in DB:",
+        JSON.stringify(currentData, null, 2)
+      );
     } catch (dbError) {
       console.error("[SERVER] Error fetching current employee data:", dbError);
     }
@@ -218,23 +231,26 @@ export async function updateEmployee(
     ] as const;
 
     // Log the data we're about to process
-    console.log("[SERVER] Processing update with data:", JSON.stringify(data, null, 2));
+    console.log(
+      "[SERVER] Processing update with data:",
+      JSON.stringify(data, null, 2)
+    );
 
     // Initialize fields to update with updatedAt
-    const fieldsToUpdate: Record<string, any> = { 
-      updatedAt: new Date() 
+    const fieldsToUpdate: Record<string, any> = {
+      updatedAt: new Date(),
     };
 
     // Handle nationality update if it's in the data
-    if ('nationality' in data) {
-      console.log('[SERVER] Processing nationality update...');
-      
+    if ("nationality" in data) {
+      console.log("[SERVER] Processing nationality update...");
+
       // Convert empty string to null for nationality
-      data.nationality = data.nationality === '' ? null : data.nationality;
-      
+      data.nationality = data.nationality === "" ? null : data.nationality;
+
       // Log the nationality value we're trying to set
-      console.log('[SERVER] Setting nationality to:', data.nationality);
-      
+      console.log("[SERVER] Setting nationality to:", data.nationality);
+
       // Ensure nationality is included in the fields to update
       fieldsToUpdate.nationality = data.nationality;
     }
@@ -243,49 +259,65 @@ export async function updateEmployee(
     Object.entries(data).forEach(([key, value]) => {
       if (allowedFields.includes(key as any)) {
         // Skip if the value is undefined or specifically handling nationality
-        if (value === undefined || key === 'nationality') return;
-        
+        if (value === undefined || key === "nationality") return;
+
         // Convert empty strings to null for all fields
-        fieldsToUpdate[key] = value === '' ? null : value;
+        fieldsToUpdate[key] = value === "" ? null : value;
       }
     });
-    
-    console.log('[SERVER] Final fields to be updated:', JSON.stringify(fieldsToUpdate, null, 2));
 
-    console.log('[SERVER] Fields to be updated with Prisma:', JSON.stringify(fieldsToUpdate, null, 2));
+    console.log(
+      "[SERVER] Final fields to be updated:",
+      JSON.stringify(fieldsToUpdate, null, 2)
+    );
+
+    console.log(
+      "[SERVER] Fields to be updated with Prisma:",
+      JSON.stringify(fieldsToUpdate, null, 2)
+    );
 
     // If no fields to update, return early
-    if (Object.keys(fieldsToUpdate).length <= 1) { // Only updatedAt
+    if (Object.keys(fieldsToUpdate).length <= 1) {
+      // Only updatedAt
       console.log("[SERVER] No valid fields to update");
       return { success: false, error: "No valid fields to update" };
     }
 
     // Use a transaction for the update
     try {
-      console.log(`[SERVER] Updating employee ${id} with data:`, JSON.stringify(fieldsToUpdate, null, 2));
-      
+      console.log(
+        `[SERVER] Updating employee ${id} with data:`,
+        JSON.stringify(fieldsToUpdate, null, 2)
+      );
+
       // First, verify the employee exists
       const existing = await db.employee.findUnique({
         where: { id },
-        select: { id: true, nationality: true }
+        select: { id: true, nationality: true },
       });
-      
+
       if (!existing) {
         throw new Error(`Employee with ID ${id} not found`);
       }
-      
-      console.log(`[SERVER] Current nationality before update: ${existing.nationality}`);
-      
+
+      console.log(
+        `[SERVER] Current nationality before update: ${existing.nationality}`
+      );
+
       // Perform the update
       const updatedEmployee = await db.employee.update({
         where: { id },
         data: fieldsToUpdate,
       });
-      
-      console.log(`[SERVER] Nationality after update: ${updatedEmployee.nationality}`);
 
-      console.log("[SERVER] Update successful. Updated employee:",
-        JSON.stringify(updatedEmployee, null, 2));
+      console.log(
+        `[SERVER] Nationality after update: ${updatedEmployee.nationality}`
+      );
+
+      console.log(
+        "[SERVER] Update successful. Updated employee:",
+        JSON.stringify(updatedEmployee, null, 2)
+      );
 
       revalidatePath("/dashboard/employees");
       return {
@@ -296,12 +328,15 @@ export async function updateEmployee(
       console.error("[SERVER] Error updating employee:", updateError);
       return {
         success: false,
-        error: `Failed to update employee: ${updateError instanceof Error ? updateError.message : 'Unknown error'}`
+        error: `Failed to update employee: ${
+          updateError instanceof Error ? updateError.message : "Unknown error"
+        }`,
       };
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[SERVER] Error in updateEmployee:', {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[SERVER] Error in updateEmployee:", {
       error: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
       employeeId: employeeData.id,
@@ -310,7 +345,7 @@ export async function updateEmployee(
 
     return {
       success: false,
-      error: `Failed to update employee: ${errorMessage}`
+      error: `Failed to update employee: ${errorMessage}`,
     };
   }
 }
@@ -348,11 +383,12 @@ export async function deleteEmployee(id: string): Promise<{
 
     return { success: true };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     console.error(`Error deleting employee with ID ${id}:`, errorMessage);
     return {
       success: false,
-      error: `Failed to delete employee: ${errorMessage}`
+      error: `Failed to delete employee: ${errorMessage}`,
     };
   }
 }
@@ -370,11 +406,22 @@ export async function getDepartments(): Promise<{
   try {
     // Use Prisma's distinct to get unique department values
     const employees = await db.employee.findMany();
-    const departments = [...new Set(employees.map((emp: EmployeeType) => emp.department).filter(Boolean as any))];
-    const departmentCounts = departments.reduce((acc: Record<string, number>, d: string) => {
-      acc[d] = employees.filter((emp: EmployeeType) => emp.department === d).length;
-      return acc;
-    }, {} as Record<string, number>);
+    const departments = [
+      ...new Set(
+        employees
+          .map((emp: EmployeeType) => emp.department)
+          .filter(Boolean as any)
+      ),
+    ];
+    const departmentCounts = departments.reduce(
+      (acc: Record<string, number>, d: string) => {
+        acc[d] = employees.filter(
+          (emp: EmployeeType) => emp.department === d
+        ).length;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
     // Extract just the department strings from the results
     const departmentList = departments;

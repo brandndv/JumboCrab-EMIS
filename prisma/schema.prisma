@@ -22,6 +22,10 @@ model Employee {
   nationality      String?
   birthdate        DateTime
   address          String?
+  city             String?
+  state            String?
+  postalCode       String?
+  country          String?
   img              String?
   startDate        DateTime
   endDate          DateTime?
@@ -29,10 +33,15 @@ model Employee {
   department       String
   employmentStatus EMPLOYMENT_STATUS
   currentStatus    CURRENT_STATUS
-  email            String?
-  phone            String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  email                     String?
+  phone                    String?
+  emergencyContactName     String?
+  emergencyContactRelationship String?
+  emergencyContactPhone    String?
+  emergencyContactEmail    String?
+  description             String?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
 }
 
 enum GENDER {
