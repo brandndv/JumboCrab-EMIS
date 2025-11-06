@@ -1,88 +1,70 @@
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { RotateCcw } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import EmployeeSearch from "./employee-search";
 import EmployeeSelect from "./employee-select";
-import { EmployeeDialog } from "../employee-dialog";
-import { Employee } from "@/lib/validations/employees";
 import { useEmployees } from "../employees-provider";
-import { createEmployee } from "@/actions/employees-action";
 
 const EmployeeComboBox = () => {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { refreshEmployees } = useEmployees();
+  const {
+    setSearchTerm,
+    setSelectedDepartment,
+    setSelectedStatus,
+    searchTerm,
+    selectedDepartment,
+    selectedStatus,
+  } = useEmployees();
 
-  const handleCreateEmployee = async (employeeData: Employee) => {
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      // Create the employee using the API
-      const response = await createEmployee({
-        // Required fields with defaults
-        employeeCode: employeeData.employeeCode || `EMP-${Date.now()}`,
-        firstName: employeeData.firstName || "",
-        lastName: employeeData.lastName || "",
-        sex: employeeData.sex || "MALE",
-        civilStatus: employeeData.civilStatus || "SINGLE",
-        birthdate: employeeData.birthdate
-          ? new Date(employeeData.birthdate)
-          : new Date(),
-        startDate: employeeData.startDate
-          ? new Date(employeeData.startDate)
-          : new Date(),
-        position: employeeData.position || "Staff",
-        department: employeeData.department || "General",
-        employmentStatus: employeeData.employmentStatus || "PROBATIONARY",
-        currentStatus: employeeData.currentStatus || "ACTIVE",
-        nationality: employeeData.nationality || "Filipino",
+  const hasActiveFilters = searchTerm || selectedDepartment || selectedStatus;
 
-        // Optional fields with null defaults
-        middleName: employeeData.middleName || null,
-        address: employeeData.address || null,
-        img: employeeData.img || null,
-        email: employeeData.email || null,
-        phone: employeeData.phone || null,
-        endDate: employeeData.endDate ? new Date(employeeData.endDate) : null,
-        userId: employeeData.userId || null,
-        suffix: employeeData.suffix || null,
-      });
-
-      if (!response.success) {
-        throw new Error(response.error || "Failed to create employee");
-      }
-
-      // Refresh the employee list
-      await refreshEmployees();
-      setDialogOpen(false);
-    } catch (err) {
-      console.error("Error creating employee:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to create employee"
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleReset = () => {
+    setSearchTerm("");
+    setSelectedDepartment(null);
+    setSelectedStatus(null);
   };
 
   return (
-    <div className="flex flex-row justify-between">
-      <div className="flex flex-row">
-        <EmployeeSearch />
-        <EmployeeSelect />
+    <div className="w-full">
+      <div className="flex flex-col gap-3 w-full">
+        {/* Search bar - full width */}
+        <div className="w-full">
+          <EmployeeSearch />
+        </div>
+        
+        {/* Filters and reset button in a single row */}
+        <div className="flex flex-row items-center gap-2 w-full">
+          <div className="flex-1">
+            <EmployeeSelect />
+          </div>
+          
+          {/* Reset button - only show when filters are active */}
+          {hasActiveFilters && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleReset}
+                    className="h-10 w-10 shrink-0"
+                    aria-label="Reset filters"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Reset all filters</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
       </div>
-      <div className="flex flex-col items-end gap-2">
-        <Button onClick={() => setDialogOpen(true)}>Create Employee</Button>
-        {error && <p className="text-sm text-red-500">{error}</p>}
-      </div>
-
-      <EmployeeDialog
-        employee={null}
-        mode={dialogOpen ? "create" : null}
-        onClose={() => setDialogOpen(false)}
-        onSave={handleCreateEmployee}
-        onArchive={() => {}}
-      />
     </div>
   );
 };

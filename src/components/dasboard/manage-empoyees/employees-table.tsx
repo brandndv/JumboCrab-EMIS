@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal } from "lucide-react";
-import { SUFFIX } from "@/lib/validations/employees";
-// import { EmployeeDialog } from "./employee-dialog";
+import { Employee, SUFFIX } from "@/lib/validations/employees";
 import {
   Pagination,
   PaginationContent,
@@ -21,13 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Employee } from "@/lib/validations/employees";
 import { EmployeesActions } from "./employees-crud";
-import {
-  updateEmployee,
-  deleteEmployee,
-} from "../../../actions/employees-action";
-import { EmployeeDialog } from "./employee-dialog";
+import { Separator } from "@/components/ui/separator";
 
 // ========== PAGINATION LOGIC ========= //
 
@@ -36,19 +31,34 @@ export default function EmployeesTable({
 }: {
   employees: Employee[];
 }) {
-  // Dialog state
-  const [dialogState, setDialogState] = useState<{
-    isOpen: boolean;
-    mode: "view" | "edit" | "archive" | null;
-    employee: Employee | null;
-  }>({
-    isOpen: false,
-    mode: null,
-    employee: null,
-  });
+  const router = useRouter();
   // State for pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 3; // You can adjust this number
+  const [itemsPerPage, setItemsPerPage] = useState(8);
+
+  // Handle view employee
+  const handleViewEmployee = (employeeId: string | undefined) => {
+    if (!employeeId) {
+      console.error('No employee ID provided for view');
+      return;
+    }
+    router.push(`/admin/employees/${employeeId}/view`);
+  };
+
+  // Handle edit employee
+  const handleEditEmployee = (employeeId: string | undefined) => {
+    if (!employeeId) {
+      console.error('No employee ID provided for edit');
+      return;
+    }
+    router.push(`/admin/employees/${employeeId}/edit`);
+  };
+
+  // Handle archive employee
+  const handleArchiveClick = (employee: Employee) => {
+    // TODO: Implement archive functionality with confirmation dialog
+    console.log('Archive employee:', employee.id);
+  };
 
   // Calculate pagination
   const totalPages = Math.ceil(employees.length / itemsPerPage);
@@ -96,156 +106,116 @@ export default function EmployeesTable({
   };
 
   const handleView = (employee: Employee) => {
-    setDialogState({
-      isOpen: true,
-      mode: "view",
-      employee,
-    });
+    router.push(`/admin/employees/${employee.id}`);
   };
 
   const handleEdit = (employee: Employee) => {
-    setDialogState({
-      isOpen: true,
-      mode: "edit",
-      employee,
-    });
+    router.push(`/admin/employees/${employee.id}/edit`);
   };
 
   const handleArchive = (employee: Employee) => {
-    setDialogState({
-      isOpen: true,
-      mode: "archive",
-      employee,
-    });
-  };
-
-  const handleConfirmArchive = async () => {
-    if (!dialogState.employee?.id) {
-      console.error("Error: No employee ID provided for deletion");
-      return;
-    }
-
-    try {
-      // Call the server action
-      const result = await deleteEmployee(dialogState.employee.id);
-
-      if (result?.error) {
-        throw new Error(result.error);
-      }
-
-      // Refresh the employee list
-      window.location.reload();
-    } catch (error) {
-      console.error("Error archiving employee:", error);
-      // You might want to show an error message to the user
-    } finally {
-      handleDialogClose();
-    }
-  };
-
-  const handleDialogClose = () => {
-    setDialogState({
-      isOpen: false,
-      mode: null,
-      employee: null,
-    });
-  };
-
-  const handleSave = async (updatedEmployee: Employee) => {
-    try {
-      if (!updatedEmployee.id) {
-        console.error("Error: No employee ID provided for update");
-        return;
-      }
-
-      // Create a new object with all fields from updatedEmployee
-      const employeeData = {
-        id: updatedEmployee.id,
-        // Basic info
-        employeeCode: updatedEmployee.employeeCode,
-        firstName: updatedEmployee.firstName,
-        middleName: updatedEmployee.middleName,
-        lastName: updatedEmployee.lastName,
-        // Include nationality
-        nationality: updatedEmployee.nationality || undefined,
-        // Enums
-        sex: updatedEmployee.sex,
-        civilStatus: updatedEmployee.civilStatus,
-        employmentStatus: updatedEmployee.employmentStatus,
-        currentStatus: updatedEmployee.currentStatus,
-        suffix: updatedEmployee.suffix || undefined,
-        // Dates - using undefined instead of null to match the expected type
-        birthdate: updatedEmployee.birthdate
-          ? new Date(updatedEmployee.birthdate)
-          : undefined,
-        startDate: updatedEmployee.startDate
-          ? new Date(updatedEmployee.startDate)
-          : undefined,
-        endDate: updatedEmployee.endDate
-          ? new Date(updatedEmployee.endDate)
-          : undefined,
-        // Other fields - using undefined instead of null to match the expected type
-        address: updatedEmployee.address || undefined,
-        img: updatedEmployee.img || undefined,
-        position: updatedEmployee.position || undefined,
-        department: updatedEmployee.department || undefined,
-        email: updatedEmployee.email || undefined,
-        phone: updatedEmployee.phone || undefined,
-      };
-
-      console.log("Saving employee data:", employeeData); // Debug log
-
-      const result = await updateEmployee(employeeData);
-
-      if (result?.error) {
-        throw new Error(result.error);
-      }
-
-      // Use router.refresh() instead of window.location.reload() in Next.js
-      window.location.reload();
-    } catch (error) {
-      console.error("Error updating employee:", error);
-      // Consider adding toast or alert here
-    } finally {
-      handleDialogClose();
-    }
+    handleArchiveClick(employee);
   };
 
   return (
     <div className="w-full">
-      <EmployeeDialog
-        employee={dialogState.employee}
-        mode={dialogState.mode}
-        onClose={handleDialogClose}
-        onSave={handleSave}
-        onArchive={handleConfirmArchive}
-      />
-      <div className="w-full border rounded-md overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-4">Code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Position</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Current Status</TableHead>
-              <TableHead>Employment Status</TableHead>
-              <TableHead>Start & End Date</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {currentItems.map((employee) => (
-              <TableRow key={employee.id} className="odd:bg-muted/50">
-                <TableCell className="pl-4">{employee.employeeCode}</TableCell>
-                <TableCell className="font-medium">{`${employee.firstName} ${
-                  employee.lastName
-                } ${employee.suffix ? `${employee.suffix}` : ""}`}</TableCell>
-                <TableCell>{employee.position}</TableCell>
-                <TableCell>{employee.department}</TableCell>
-                <TableCell>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+        {currentItems.map((employee) => (
+          <div
+            key={employee.id}
+            className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow flex flex-col h-[280px]"
+          >
+            <div className="flex-1 flex flex-col">
+              {/* Header with Avatar and Name */}
+              <div className="flex justify-between items-start w-full">
+                <div className="flex items-center space-x-2 flex-1 min-w-0">
+                  <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center shrink-0">
+                    <span className="text-blue-600 font-medium text-base">
+                      {employee.firstName?.charAt(0)}
+                      {employee.lastName?.charAt(0)}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-gray-900 truncate">
+                      {employee.firstName} {employee.lastName}
+                    </h3>
+                    <p className="text-xs text-gray-600 truncate">
+                      {employee.position || "No position"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <EmployeesActions
+                    employee={employee}
+                    onEdit={handleEditEmployee}
+                    onArchive={handleArchiveClick}
+                  />
+                </div>
+              </div>
+              <Separator className="my-2" />
+
+              {/* Employee Info */}
+              <div className="flex-1 min-w-0">
+                <div className="space-y-1 text-sm text-gray-600">
+                  <div className="flex items-center">
+                    <svg
+                      className="w-4 h-4 mr-2 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                      />
+                    </svg>
+                    {employee.department || "No department"}
+                  </div>
+                  <div className="flex items-center">
+                    <svg
+                      className="w-4 h-4 mr-2 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                      />
+                    </svg>
+                    {employee.email || "No email"}
+                  </div>
+                  <div className="flex items-center">
+                    <svg
+                      className="w-4 h-4 mr-2 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                      />
+                    </svg>
+                    Hired:{" "}
+                    {employee.startDate
+                      ? new Date(employee.startDate).toLocaleDateString()
+                      : "N/A"}
+                  </div>
+                </div>
+              </div>
+              {/* Status and Preview */}
+              <Separator className="my-2" />
+              <div>
+                <div className="flex justify-between items-center w-full">
+                  <div
+                    className={`mr-auto px-3 py-1 rounded-full text-xs font-medium ${
                       employee.currentStatus === "ACTIVE"
                         ? "bg-green-100 text-green-800"
                         : employee.currentStatus === "ON_LEAVE"
@@ -257,44 +227,26 @@ export default function EmployeesTable({
                         : "bg-gray-100 text-gray-800"
                     }`}
                   >
-                    {employee.currentStatus === "ACTIVE"
-                      ? "Active"
-                      : employee.currentStatus === "ON_LEAVE"
-                      ? "On Leave"
-                      : employee.currentStatus === "VACATION"
-                      ? "On Vacation"
-                      : employee.currentStatus === "SICK_LEAVE"
-                      ? "Sick Leave"
+                    {employee.currentStatus
+                      ? employee.currentStatus.replace("_", " ")
                       : "Inactive"}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    {employee.employmentStatus === "REGULAR"
-                      ? "Regular"
-                      : employee.employmentStatus === "PROBATIONARY"
-                      ? "Probationary"
-                      : "Training"}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  {new Date(employee.startDate).toLocaleDateString()}
-                  {employee.endDate
-                    ? ` - ${new Date(employee.endDate).toLocaleDateString()}`
-                    : " - Present"}
-                </TableCell>
-                <TableCell>
-                  <EmployeesActions
-                    employee={employee}
-                    onView={handleView}
-                    onEdit={handleEdit}
-                    onArchive={handleArchive}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        employee.id && handleViewEmployee(employee.id)
+                      }
+                    >
+                      View
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       <Pagination className="m-0 mt-5">
