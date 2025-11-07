@@ -89,6 +89,13 @@ export async function createEmployee(
   try {
     console.log("Creating new employee with data:", employeeData);
 
+    // Convert string dates to Date objects if needed
+    const parseDate = (date: any): Date => {
+      if (date instanceof Date) return date;
+      if (typeof date === 'string') return new Date(date);
+      return new Date();
+    };
+
     // Set default values for required fields
     const defaults = {
       employeeCode: employeeData.employeeCode,
@@ -96,8 +103,8 @@ export async function createEmployee(
       lastName: employeeData.lastName || "",
       sex: employeeData.sex || "",
       civilStatus: employeeData.civilStatus || "",
-      birthdate: employeeData.birthdate || "",
-      startDate: employeeData.startDate || "",
+      birthdate: employeeData.birthdate ? parseDate(employeeData.birthdate) : new Date(),
+      startDate: employeeData.startDate ? parseDate(employeeData.startDate) : new Date(),
       position: employeeData.position || "",
       department: employeeData.department || "",
       employmentStatus: employeeData.employmentStatus || "",
@@ -107,13 +114,18 @@ export async function createEmployee(
       middleName: employeeData.middleName || null,
       address: employeeData.address || null,
       img: employeeData.img || null,
-      endDate: employeeData.endDate || null,
+      endDate: employeeData.endDate ? parseDate(employeeData.endDate) : null,
       email: employeeData.email || null,
       phone: employeeData.phone || null,
+      description: employeeData.description || null,
       suffix:
         employeeData.suffix && SUFFIX.includes(employeeData.suffix as any)
           ? (employeeData.suffix as SUFFIX_TYPE)
           : null,
+      emergencyContactName: employeeData.emergencyContactName || null,
+      emergencyContactRelationship: employeeData.emergencyContactRelationship || null,
+      emergencyContactPhone: employeeData.emergencyContactPhone || null,
+      emergencyContactEmail: employeeData.emergencyContactEmail || null,
       userId: employeeData.userId || null,
     };
 
@@ -217,7 +229,7 @@ export async function updateEmployee(
       "firstName",
       "middleName",
       "lastName",
-      "gender",
+      "sex",
       "birthdate",
       "civilStatus",
       "department",
@@ -228,6 +240,16 @@ export async function updateEmployee(
       "phone",
       "suffix",
       "nationality",
+      "description",
+      "emergencyContactName",
+      "emergencyContactRelationship",
+      "emergencyContactPhone",
+      "emergencyContactEmail",
+      "city",
+      "state",
+      "postalCode",
+      "country",
+      "address"
     ] as const;
 
     // Log the data we're about to process
@@ -240,6 +262,25 @@ export async function updateEmployee(
     const fieldsToUpdate: Record<string, any> = {
       updatedAt: new Date(),
     };
+
+    // Helper function to parse dates
+    const parseDate = (date: any): Date | null => {
+      if (!date) return null;
+      if (date instanceof Date) return date;
+      if (typeof date === 'string') return new Date(date);
+      return null;
+    };
+
+    // Handle date fields
+    const dateFields = ['birthdate', 'startDate', 'endDate'];
+    dateFields.forEach(field => {
+      if (field in data) {
+        const dateValue = parseDate(data[field as keyof typeof data]);
+        if (dateValue) {
+          fieldsToUpdate[field] = dateValue;
+        }
+      }
+    });
 
     // Handle nationality update if it's in the data
     if ("nationality" in data) {

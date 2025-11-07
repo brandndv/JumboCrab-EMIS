@@ -63,7 +63,13 @@ export const employeeSchema = z.object({
   state: z.string().optional().nullable(),
   postalCode: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
-  img: z.string().url("Invalid image URL").optional().nullable(),
+  img: z
+    .string()
+    .url("Invalid image URL")
+    .optional()
+    .or(z.literal('')) // Allow empty string
+    .transform(val => val || null) // Convert empty string to null
+    .nullable(),
   startDate: z
     .union([z.string(), z.date()])
     .pipe(z.coerce.date())

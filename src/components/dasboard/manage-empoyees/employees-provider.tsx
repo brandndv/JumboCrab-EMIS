@@ -115,8 +115,8 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
 
   // Provide the context value
   const contextValue = {
-    employees: filteredEmployees,
-    filteredEmployees,
+    employees, // The full list of employees
+    filteredEmployees, // The filtered list of employees
     loading,
     error,
     searchTerm,

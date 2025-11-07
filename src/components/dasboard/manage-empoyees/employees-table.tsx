@@ -39,7 +39,7 @@ export default function EmployeesTable({
   // Handle view employee
   const handleViewEmployee = (employeeId: string | undefined) => {
     if (!employeeId) {
-      console.error('No employee ID provided for view');
+      console.error("No employee ID provided for view");
       return;
     }
     router.push(`/admin/employees/${employeeId}/view`);
@@ -48,7 +48,7 @@ export default function EmployeesTable({
   // Handle edit employee
   const handleEditEmployee = (employeeId: string | undefined) => {
     if (!employeeId) {
-      console.error('No employee ID provided for edit');
+      console.error("No employee ID provided for edit");
       return;
     }
     router.push(`/admin/employees/${employeeId}/edit`);
@@ -57,7 +57,7 @@ export default function EmployeesTable({
   // Handle archive employee
   const handleArchiveClick = (employee: Employee) => {
     // TODO: Implement archive functionality with confirmation dialog
-    console.log('Archive employee:', employee.id);
+    console.log("Archive employee:", employee.id);
   };
 
   // Calculate pagination
@@ -155,8 +155,15 @@ export default function EmployeesTable({
               <Separator className="my-2" />
 
               {/* Employee Info */}
-              <div className="flex-1 min-w-0">
-                <div className="space-y-1 text-sm text-gray-600">
+              <div className="flex-1 min-w-0 space-y-3">
+                {employee.description && (
+                  <div>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-3">
+                      {employee.description}
+                    </p>
+                  </div>
+                )}
+                <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                   <div className="flex items-center">
                     <svg
                       className="w-4 h-4 mr-2 text-gray-400"
@@ -175,7 +182,7 @@ export default function EmployeesTable({
                   </div>
                   <div className="flex items-center">
                     <svg
-                      className="w-4 h-4 mr-2 text-gray-400"
+                      className="w-4 h-4 mr-2 text-gray-400 shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -187,7 +194,12 @@ export default function EmployeesTable({
                         d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                       />
                     </svg>
-                    {employee.email || "No email"}
+                    <span
+                      className="truncate max-w-[180px]"
+                      title={employee.email || ""}
+                    >
+                      {employee.email || "No email"}
+                    </span>
                   </div>
                   <div className="flex items-center">
                     <svg
@@ -251,6 +263,22 @@ export default function EmployeesTable({
 
       <Pagination className="m-0 mt-5">
         <PaginationContent>
+          {/* Back to Start Button - Shows when current page > 3 */}
+          {currentPage > 3 && (
+            <PaginationItem>
+              <PaginationLink
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  paginate(1);
+                }}
+                className="cursor-pointer"
+              >
+                «
+              </PaginationLink>
+            </PaginationItem>
+          )}
+          
           <PaginationItem>
             <PaginationPrevious
               href="#"
@@ -296,6 +324,22 @@ export default function EmployeesTable({
               }
             />
           </PaginationItem>
+          
+          {/* Go to End Button - Shows when current page < totalPages - 2 */}
+          {currentPage < totalPages - 2 && (
+            <PaginationItem>
+              <PaginationLink
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  paginate(totalPages);
+                }}
+                className="cursor-pointer"
+              >
+                »
+              </PaginationLink>
+            </PaginationItem>
+          )}
         </PaginationContent>
       </Pagination>
     </div>

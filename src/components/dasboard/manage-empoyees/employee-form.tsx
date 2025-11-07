@@ -20,6 +20,7 @@ import {
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
+import { createEmployee, updateEmployee } from "@/actions/employees-action";
 
 // Helper component to display form field errors
 const FormError = ({ message }: { message?: string }) => {
@@ -87,15 +88,21 @@ export default function EmployeeForm({
             throw new Error("Failed to fetch employee data");
           }
           const data = await response.json();
-          setFormData(data);
+          setFormData({
+            ...data,
+            img: data.img || '/default-avatar.png' // Default image if none provided
+          });
         } catch (error) {
           console.error("Error fetching employee:", error);
         } finally {
           setIsLoading(false);
         }
       } else if (initialData) {
-        // Use the provided initialData
-        setFormData(initialData);
+        // Use the provided initialData with default image
+        setFormData({
+          ...initialData,
+          img: initialData.img || '/default-avatar.png'
+        });
         setIsLoading(false);
       } else {
         // Initialize new employee with default values
@@ -120,7 +127,7 @@ export default function EmployeeForm({
           nationality: "",
           birthdate: new Date(),
           address: "",
-          img: "",
+          img: null, // Set to null to match the updated schema
         });
         setIsLoading(false);
       }
@@ -219,49 +226,86 @@ export default function EmployeeForm({
     e.preventDefault();
     if (mode === "view") return; // Prevent form submission in view mode
 
-    // Reset previous errors
+    console.log("Form submitted with data:", formData);
+    setIsSubmitting(true);
     setErrors({});
 
-    // Validate the form data
-    const validationResult =
-      mode === "create"
-        ? validateEmployee(formData)
-        : validatePartialEmployee(formData);
+    try {
+      // Validate the form data
+      const validationResult =
+        mode === "create"
+          ? validateEmployee(formData)
+          : validatePartialEmployee(formData);
 
-    if (!validationResult.success) {
-      // Format the errors into a more usable format
-      const formattedErrors: Record<string, string> = {};
+      console.log("Validation result:", validationResult);
 
-      validationResult.error.issues.forEach((issue) => {
-        const field = issue.path[0] as string;
-        formattedErrors[field] = issue.message;
-      });
+      if (!validationResult.success) {
+        // Format the errors into a more usable format
+        const formattedErrors: Record<string, string> = {};
 
-      setErrors(formattedErrors);
+        validationResult.error.issues.forEach((issue) => {
+          const field = issue.path[0] as string;
+          formattedErrors[field] = issue.message;
+        });
 
-      // Scroll to the first error
-      const firstError = document.querySelector('[data-error="true"]');
-      if (firstError) {
-        firstError.scrollIntoView({ behavior: "smooth", block: "center" });
+        setErrors(formattedErrors);
+
+        // Scroll to the first error
+        const firstError = document.querySelector('[data-error="true"]');
+        if (firstError) {
+          firstError.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        return;
       }
 
-      return;
-    }
+      console.log("Attempting to save employee...");
+      let result;
 
-    try {
-      // TODO: Replace with actual API call
-      // const method = mode === 'create' ? 'POST' : 'PUT';
-      // const url = mode === 'create' ? '/api/employees' : `/api/employees/${employeeId}`;
-      // await fetch(url, {
-      //   method,
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(formData),
-      // });
+      if (mode === "create") {
+        console.log("Creating new employee with data:", formData);
+        result = await createEmployee(formData as any);
+        console.log("Create employee result:", result);
+      } else if (employeeId) {
+        console.log(
+          "Updating employee with ID:",
+          employeeId,
+          "Data:",
+          formData
+        );
+        result = await updateEmployee({
+          ...formData,
+          id: employeeId,
+        } as any);
+        console.log("Update employee result:", result);
+      } else {
+        const error = "Employee ID is required for update";
+        console.error(error);
+        throw new Error(error);
+      }
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to save employee");
+      }
+
+      // Show success message
+      alert(
+        `Employee ${mode === "create" ? "created" : "updated"} successfully!`
+      );
 
       // Redirect back to employees list
       router.push("/admin/employees");
+      router.refresh();
     } catch (error) {
       console.error("Error saving employee:", error);
+      setErrors((prev) => ({
+        ...prev,
+        form:
+          error instanceof Error
+            ? error.message
+            : "An error occurred while saving the employee",
+      }));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

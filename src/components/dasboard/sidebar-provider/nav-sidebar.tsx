@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useId } from "react";
+import { useId, useState, useEffect } from "react";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -31,19 +31,25 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useState } from "react";
-
 interface NavSidebarProps {
   userRole?: string;
 }
 
 const NavSidebar = ({ userRole }: NavSidebarProps) => {
+  const [mounted, setMounted] = useState(false);
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({});
   const pathname = usePathname();
   const collapsibleId = useId(); // Generate a stable ID prefix
 
+  // Set mounted state after component mounts
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const updateOpenState = (key: string, value: boolean) => {
-    setOpenStates((prev) => ({ ...prev, [key]: value }));
+    if (mounted) {
+      setOpenStates((prev) => ({ ...prev, [key]: value }));
+    }
   };
 
   const isActive = (href: string) => pathname.startsWith(href);
@@ -190,7 +196,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                 data-collapsible-id={`${collapsibleId}-${item.id}`}
               >
                 <SidebarMenuItem>
-                  <CollapsibleTrigger 
+                  <CollapsibleTrigger
                     asChild
                     data-collapsible-id={`${collapsibleId}-${item.id}-trigger`}
                   >
