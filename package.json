@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "ts-node --compiler-options '{\"module\":\"commonjs\"}' ./scripts/seedEmployees.ts",
+    "prisma:seed": "ts-node -r dotenv/config --compiler-options '{\"module\":\"commonjs\"}' ./scripts/seedEmployees.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -31,7 +31,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
-    "dotenv": "^17.2.3",
     "lucide-react": "^0.552.0",
     "next": "16.0.1",
     "pg": "^8.16.3",
@@ -47,6 +46,7 @@
     "@types/node": "^20.19.24",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
     "prisma": "^6.18.0",

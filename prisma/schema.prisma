@@ -9,39 +9,58 @@ datasource db {
   directUrl = env("DATABASE_URL")
 }
 
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  salt      String
+  role      Roles    @default(employee)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Roles {
+  admin
+  generalManager
+  manager
+  supervisor
+  clerk
+  employee
+}
+
 model Employee {
-  id               String            @id
-  userId           String?           @unique
-  employeeCode     String            @unique
-  firstName        String
-  lastName         String
-  middleName       String?
-  suffix           SUFFIX?
-  sex              GENDER
-  civilStatus      CIVIL_STATUS
-  nationality      String?
-  birthdate        DateTime
-  address          String?
-  city             String?
-  state            String?
-  postalCode       String?
-  country          String?
-  img              String?
-  startDate        DateTime
-  endDate          DateTime?
-  position         String
-  department       String
-  employmentStatus EMPLOYMENT_STATUS
-  currentStatus    CURRENT_STATUS
-  email                     String?
-  phone                    String?
-  emergencyContactName     String?
+  id                           String            @id
+  employeeCode                 String            @unique
+  firstName                    String
+  lastName                     String
+  middleName                   String?
+  suffix                       SUFFIX?
+  sex                          GENDER
+  civilStatus                  CIVIL_STATUS
+  nationality                  String?
+  birthdate                    DateTime
+  address                      String?
+  city                         String?
+  state                        String?
+  postalCode                   String?
+  country                      String?
+  img                          String?
+  startDate                    DateTime
+  endDate                      DateTime?
+  position                     String
+  department                   String
+  employmentStatus             EMPLOYMENT_STATUS
+  currentStatus                CURRENT_STATUS
+  email                        String?
+  phone                        String?
+  emergencyContactName         String?
   emergencyContactRelationship String?
-  emergencyContactPhone    String?
-  emergencyContactEmail    String?
-  description             String?
-  createdAt               DateTime          @default(now())
-  updatedAt               DateTime          @updatedAt
+  emergencyContactPhone        String?
+  emergencyContactEmail        String?
+  description                  String?
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @updatedAt
 }
 
 enum GENDER {

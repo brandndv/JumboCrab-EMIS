@@ -49,10 +49,10 @@ export async function getEmployeeById(id: string | undefined): Promise<{
     if (!id) {
       return {
         success: false,
-        error: 'Employee ID is required',
+        error: "Employee ID is required",
       };
     }
-    
+
     // Query the database for a single employee with the specified ID
     const employee = await db.employee.findUnique({
       where: { id },
@@ -92,7 +92,7 @@ export async function createEmployee(
     // Convert string dates to Date objects if needed
     const parseDate = (date: any): Date => {
       if (date instanceof Date) return date;
-      if (typeof date === 'string') return new Date(date);
+      if (typeof date === "string") return new Date(date);
       return new Date();
     };
 
@@ -103,8 +103,12 @@ export async function createEmployee(
       lastName: employeeData.lastName || "",
       sex: employeeData.sex || "",
       civilStatus: employeeData.civilStatus || "",
-      birthdate: employeeData.birthdate ? parseDate(employeeData.birthdate) : new Date(),
-      startDate: employeeData.startDate ? parseDate(employeeData.startDate) : new Date(),
+      birthdate: employeeData.birthdate
+        ? parseDate(employeeData.birthdate)
+        : new Date(),
+      startDate: employeeData.startDate
+        ? parseDate(employeeData.startDate)
+        : new Date(),
       position: employeeData.position || "",
       department: employeeData.department || "",
       employmentStatus: employeeData.employmentStatus || "",
@@ -123,7 +127,8 @@ export async function createEmployee(
           ? (employeeData.suffix as SUFFIX_TYPE)
           : null,
       emergencyContactName: employeeData.emergencyContactName || null,
-      emergencyContactRelationship: employeeData.emergencyContactRelationship || null,
+      emergencyContactRelationship:
+        employeeData.emergencyContactRelationship || null,
       emergencyContactPhone: employeeData.emergencyContactPhone || null,
       emergencyContactEmail: employeeData.emergencyContactEmail || null,
       userId: employeeData.userId || null,
@@ -249,7 +254,7 @@ export async function updateEmployee(
       "state",
       "postalCode",
       "country",
-      "address"
+      "address",
     ] as const;
 
     // Log the data we're about to process
@@ -267,13 +272,13 @@ export async function updateEmployee(
     const parseDate = (date: any): Date | null => {
       if (!date) return null;
       if (date instanceof Date) return date;
-      if (typeof date === 'string') return new Date(date);
+      if (typeof date === "string") return new Date(date);
       return null;
     };
 
     // Handle date fields
-    const dateFields = ['birthdate', 'startDate', 'endDate'];
-    dateFields.forEach(field => {
+    const dateFields = ["birthdate", "startDate", "endDate"];
+    dateFields.forEach((field) => {
       if (field in data) {
         const dateValue = parseDate(data[field as keyof typeof data]);
         if (dateValue) {
