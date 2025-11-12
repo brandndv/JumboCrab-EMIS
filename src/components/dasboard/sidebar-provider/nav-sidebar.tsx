@@ -74,7 +74,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       id: "user",
       label: "User",
       icon: Users,
-      href: "/user",
+      href: `/${userRole}/users`,
       hasSubmenu: false,
       subItems: ["Add user", "Update user"],
       roles: ["admin", "general-manager"],

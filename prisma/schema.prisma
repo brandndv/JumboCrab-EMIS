@@ -10,14 +10,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  email     String   @unique
-  password  String
-  salt      String
-  role      Roles    @default(employee)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  username   String   @unique
+  email      String   @unique
+  password   String
+  salt       String
+  role       Roles    @default(employee)
+  isArchived Boolean
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 enum Roles {

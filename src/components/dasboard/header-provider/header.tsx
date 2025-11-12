@@ -16,7 +16,7 @@ const NavHeader = () => {
         <div className="flex items-center space-x-2">
           <SidebarTrigger className="h-9 w-9 p-0 hover:bg-accent hover:text-accent-foreground" />
           <Separator orientation="vertical" className="mx-2 h-6 bg-border" />
-          <Breadcrumb className="hidden md:flex">
+          {/* <Breadcrumb className="hidden md:flex">
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbLink
@@ -33,7 +33,7 @@ const NavHeader = () => {
                 </BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
-          </Breadcrumb>
+          </Breadcrumb> */}
         </div>
 
         <div className="flex items-center gap-4">
