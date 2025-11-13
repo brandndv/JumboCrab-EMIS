@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import { useId, useState, useEffect } from "react";
 import {
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
@@ -31,6 +30,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+
 interface NavSidebarProps {
   userRole?: string;
 }

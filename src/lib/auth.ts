@@ -74,3 +74,32 @@ export async function getSession() {
   }
   return session;
 }
+
+export async function getUserRole(): Promise<Roles | null> {
+  const session = await getSession();
+  return session.role || null;
+}
+// ======== SIGN IN LOGIC ======== //
+
+export async function signIn(username: string, password: string) {
+  try {
+    const user = await db.user.findUnique({ where: { username } });
+    if (!user) return { success: false, error: "Invalid credentials" };
+    const isValid = await verifyPassword(password, user.password, user.salt);
+
+    if (!isValid) return { success: false, error: "Invalid credentials" };
+    return { success: true, user };
+  } catch (error) {
+    console.error("Sign in error:", error);
+    return { success: false, error: "Failed to sign in" };
+  }
+}
+
+export async function verifyPassword(
+  password: string,
+  hash: string,
+  salt: string
+) {
+  const derivedKey = (await scyrptAsync(password, salt, KEY_LENGTH)) as Buffer;
+  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), derivedKey);
+}

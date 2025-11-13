@@ -1,27 +1,26 @@
-const AdminDashboardPage = () => {
+import { getSession } from "@/lib/auth";
+
+const AdminDashboardPage = async () => {
+  const session = await getSession();
+
   return (
-    <main className="h-full w-full p-4 md:p-6">
-      <div className="mx-auto h-full w-full max-w-[2000px]">
-        <div className="h-full w-full rounded-lg border bg-card p-6 shadow-sm">
-          <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-          <p className="mt-2 text-muted-foreground">
-            Welcome to your admin dashboard
-          </p>
-          
-          {/* Add some sample content to test the layout */}
-          <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map((item) => (
-              <div key={item} className="rounded-lg border p-4">
-                <h3 className="font-medium">Card {item}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  This is a sample card to demonstrate the layout
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+    <div className="p-8">
+      <h1>Admin Dashboard</h1>
+      <h1 className="text-2xl font-bold mb-4">Session Test</h1>
+      <div className="bg-gray-100 p-4 rounded">
+        <h2 className="text-lg font-semibold mb-2">Session Data:</h2>
+        <pre className="bg-white p-4 rounded overflow-auto">
+          {JSON.stringify(session, null, 2)}
+        </pre>
       </div>
-    </main>
+      {session.role && (
+        <div className="mt-4 p-4 bg-green-100 rounded">
+          <p className="text-green-800">
+            User Role: <span className="font-semibold">{session.role}</span>
+          </p>
+        </div>
+      )}
+    </div>
   );
 };
 

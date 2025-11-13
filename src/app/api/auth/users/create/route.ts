@@ -91,21 +91,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session for the new user
-    const session = await getSession();
-    session.Id = result.user.id;
-    session.username = result.user.username;
-    session.email = result.user.email;
-    session.role = result.user.role;
-    session.isLoggedIn = true;
-    await session.save();
+    // const session = await getSession();
+    // session.Id = result.user.id;
+    // session.username = result.user.username;
+    // session.email = result.user.email;
+    // session.role = result.user.role;
+    // session.isLoggedIn = true;
+    // await session.save();
 
     // Return success response with user data (excluding sensitive info)
     const { password: _, salt: __, ...userWithoutPassword } = result.user;
     return NextResponse.json(
-      { 
-        success: true, 
+      {
+        success: true,
         message: "User created successfully",
-        user: userWithoutPassword
+        user: userWithoutPassword,
       },
       { status: 201 }
     );
