@@ -34,14 +34,21 @@ function TooltipTrigger({
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
+type TooltipContentProps = React.ComponentProps<typeof TooltipPrimitive.Content> & {
+  // Optional: customize arrow color classes (e.g., "bg-orange-600 fill-orange-600")
+  arrowClassName?: string
+}
+
 function TooltipContent({
   className,
   sideOffset = 0,
   children,
+  arrowClassName,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+}: TooltipContentProps) {
   return (
     <TooltipPrimitive.Portal>
+      {/* TooltipContent can be custom-colored via className; arrow can be customized via arrowClassName */}
       <TooltipPrimitive.Content
         data-slot="tooltip-content"
         sideOffset={sideOffset}
@@ -52,7 +59,11 @@ function TooltipContent({
         {...props}
       >
         {children}
-        <TooltipPrimitive.Arrow className="bg-foreground fill-foreground z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px]" />
+        <TooltipPrimitive.Arrow className={cn(
+          "z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px]",
+          // Default arrow matches default foreground background pair
+          arrowClassName ?? "bg-foreground fill-foreground"
+        )} />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );

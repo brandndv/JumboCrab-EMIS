@@ -119,7 +119,7 @@ export default function EmployeesTable({
 
   return (
     <div className="w-full">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 p-4">
         {currentItems.map((employee) => (
           <div
             key={employee.id}
@@ -135,8 +135,8 @@ export default function EmployeesTable({
                       {employee.lastName?.charAt(0)}
                     </span>
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-gray-900 truncate">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-semibold text-gray-900 line-clamp-2">
                       {employee.firstName} {employee.lastName}
                     </h3>
                     <p className="text-xs text-gray-600 truncate">
@@ -195,7 +195,7 @@ export default function EmployeesTable({
                       />
                     </svg>
                     <span
-                      className="truncate max-w-[180px]"
+                      className="truncate max-w-full"
                       title={employee.email || ""}
                     >
                       {employee.email || "No email"}
@@ -278,7 +278,7 @@ export default function EmployeesTable({
               </PaginationLink>
             </PaginationItem>
           )}
-          
+
           <PaginationItem>
             <PaginationPrevious
               href="#"
@@ -324,7 +324,7 @@ export default function EmployeesTable({
               }
             />
           </PaginationItem>
-          
+
           {/* Go to End Button - Shows when current page < totalPages - 2 */}
           {currentPage < totalPages - 2 && (
             <PaginationItem>

@@ -14,14 +14,22 @@ import {
 } from "@/components/ui/card";
 import { Mail, Lock } from "lucide-react";
 
+type SignInResponse = {
+  success: boolean;
+  user?: {
+    id: string;
+    role: string;
+    username: string;
+  };
+  error?: string;
+};
+
 const SignInForm = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-
-  console.log({ username: username, password: password });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -38,14 +46,15 @@ const SignInForm = () => {
         credentials: "include",
       });
 
-      const data = await response.json();
+      const data: SignInResponse = await response.json();
 
-      // Handle successful sign in
-      if (data.success) {
-        router.push("/admin/dashboard"); // or your desired redirect path
-        console.log("Sign in successful");
+      if (data.success && data.user) {
+        // Use the role from the sign-in response
+        const userRole = data.user.role.toLowerCase();
+        router.push(`/${userRole}/dashboard`);
+        router.refresh(); // Ensure the page updates with the new auth state
       } else {
-        setError(data.error || "Sign in failed");
+        setError(data.error || "Sign in failed. Please check your credentials.");
       }
     } catch (error) {
       setError("An error occurred. Please try again");
@@ -78,7 +87,11 @@ const SignInForm = () => {
                 type="text"
                 placeholder="Enter your username"
                 className="pl-10"
-                onChange={(e) => setUsername(e.target.value)}
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                }}
+                required
               />
             </div>
           </div>
@@ -96,13 +109,21 @@ const SignInForm = () => {
                 type="password"
                 placeholder="Enter your password"
                 className="pl-10"
-                onChange={(e) => setPassword(e.target.value)}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                }}
+                required
               />
             </div>
           </div>
 
-          <Button type="submit" className="w-full">
-            Sign In
+          {error && (
+            <p className="text-sm text-red-600">{error}</p>
+          )}
+
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
       </CardContent>

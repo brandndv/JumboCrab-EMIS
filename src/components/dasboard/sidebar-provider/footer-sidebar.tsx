@@ -6,6 +6,7 @@ import {
   ChevronsUpDown,
   CreditCard,
   LogOut,
+  LogOutIcon,
   Sparkles,
 } from "lucide-react";
 
@@ -25,6 +26,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { SignOutButton } from "@/components/ui/signout";
 
 export function FooterSidebar({
   user,
@@ -38,23 +40,27 @@ export function FooterSidebar({
   const { isMobile } = useSidebar();
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
+    // Center footer when collapsed; tweak alignment in classes below
+    <SidebarMenu className="group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center">
+      <SidebarMenuItem className="group-data-[collapsible=icon]:justify-center">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              // Center button when collapsed; keep left align when expanded
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground justify-start group-data-[collapsible=icon]:justify-center"
             >
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage src={user.avatar} alt={user.name} />
                 <AvatarFallback className="rounded-lg">CN</AvatarFallback>
               </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight">
+              {/* Hide text when collapsed; edit to change behavior */}
+              <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-medium">{user.name}</span>
                 <span className="truncate text-xs">{user.email}</span>
               </div>
-              <ChevronsUpDown className="ml-auto size-4" />
+              {/* Hide chevrons when collapsed to keep avatar centered */}
+              <ChevronsUpDown className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -99,8 +105,14 @@ export function FooterSidebar({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
-              <LogOut />
-              Log out
+              <SignOutButton
+                className="flex flex-row gap-2"
+                as="button"
+                unstyled
+              >
+                <LogOutIcon />
+                Sign Out
+              </SignOutButton>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

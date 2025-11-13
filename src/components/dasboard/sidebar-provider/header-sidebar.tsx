@@ -9,11 +9,13 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const HeaderSidebar = () => {
   return (
-    <SidebarMenu className="data-state-collapsed:justify-center my-4">
-      <SidebarMenuItem className="data-state-collapsed:justify-center">
+    // Center logo when collapsed; tweak spacing in className below
+    <SidebarMenu className="my-4 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center">
+      <SidebarMenuItem className="group-data-[collapsible=icon]:justify-center">
+        {/* Center button when collapsed */}
         <SidebarMenuButton
           size="lg"
-          className=""
+          className="justify-start group-data-[collapsible=icon]:justify-center"
         >
           <Avatar className="h-8 w-8 rounded-lg">
             <AvatarImage
@@ -23,7 +25,8 @@ const HeaderSidebar = () => {
             />
             <AvatarFallback className="rounded-lg">Logo</AvatarFallback>
           </Avatar>
-          <div className="grid flex-1 text-left text-sm leading-tight">
+          {/* Hide text when collapsed; edit to change behavior */}
+          <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
             <span className="truncate font-medium">JumboCrab EMIS</span>
           </div>
         </SidebarMenuButton>
