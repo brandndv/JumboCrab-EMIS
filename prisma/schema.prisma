@@ -48,6 +48,7 @@ model Employee {
   country                      String?
   img                          String?
   startDate                    DateTime
+  isEnded                      Boolean?          @default(false)
   endDate                      DateTime?
   position                     String
   department                   String
@@ -60,6 +61,7 @@ model Employee {
   emergencyContactPhone        String?
   emergencyContactEmail        String?
   description                  String?
+  isArchived                   Boolean           @default(false)
   createdAt                    DateTime          @default(now())
   updatedAt                    DateTime          @updatedAt
 }
@@ -88,6 +90,7 @@ enum CURRENT_STATUS {
   VACATION
   SICK_LEAVE
   INACTIVE
+  ENDED
 }
 
 enum SUFFIX {

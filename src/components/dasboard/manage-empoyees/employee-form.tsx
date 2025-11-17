@@ -18,6 +18,7 @@ import {
   validatePartialEmployee,
 } from "@/lib/validations/employees";
 import { useState, useEffect } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { createEmployee, updateEmployee } from "@/actions/employees-action";
@@ -60,6 +61,7 @@ export default function EmployeeForm({
         emergencyContactEmail: initialData.emergencyContactEmail || "",
         // Add other fields as needed
         ...initialData,
+        isEnded: initialData.isEnded ?? false,
       };
     }
     return {
@@ -72,6 +74,7 @@ export default function EmployeeForm({
       emergencyContactRelationship: "",
       emergencyContactPhone: "",
       emergencyContactEmail: "",
+      isEnded: false,
     };
   });
   const [isLoading, setIsLoading] = useState(!initialData);
@@ -90,7 +93,8 @@ export default function EmployeeForm({
           const data = await response.json();
           setFormData({
             ...data,
-            img: data.img || '/default-avatar.png' // Default image if none provided
+            img: data.img || "/default-avatar.png", // Default image if none provided
+            isEnded: data.isEnded ?? false,
           });
         } catch (error) {
           console.error("Error fetching employee:", error);
@@ -101,7 +105,8 @@ export default function EmployeeForm({
         // Use the provided initialData with default image
         setFormData({
           ...initialData,
-          img: initialData.img || '/default-avatar.png'
+          img: initialData.img || "/default-avatar.png",
+          isEnded: initialData.isEnded ?? false,
         });
         setIsLoading(false);
       } else {
@@ -120,6 +125,8 @@ export default function EmployeeForm({
           employmentStatus: "PROBATIONARY",
           currentStatus: "ACTIVE",
           startDate: new Date(),
+          isEnded: false,
+          endDate: null,
           position: "",
           department: "",
           sex: "MALE",
@@ -323,34 +330,15 @@ export default function EmployeeForm({
             <h4 className="font-medium text-sm">Profile Image</h4>
             <div className="flex justify-center">
               <div className="relative">
-                <div className="h-32 w-32 rounded-full bg-gray-100 overflow-hidden border border-gray-200">
-                  {formData.img ? (
-                    <img
-                      src={formData.img}
-                      alt={formData.firstName || "Profile"}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-gray-200 flex items-center justify-center">
-                      <span className="text-gray-400 text-sm text-center p-2">
-                        No Image Available
-                      </span>
-                    </div>
-                  )}
+                <div className="h-32 w-32 rounded-full overflow-hidden border border-gray-200 bg-gray-100">
+                  <img
+                    src={formData.img || "/default-avatar.png"}
+                    alt={formData.firstName || "Profile"}
+                    className="h-full w-full object-cover"
+                  />
                 </div>
                 {mode !== "view" && (
-                  <div className="mt-4 space-y-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() =>
-                        document.getElementById("image-upload")?.click()
-                      }
-                    >
-                      Choose Photo
-                    </Button>
+                  <>
                     <input
                       id="image-upload"
                       type="file"
@@ -370,20 +358,35 @@ export default function EmployeeForm({
                         }
                       }}
                     />
-                    {formData.img && (
+                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/90 rounded-full border px-2 py-1 shadow-sm">
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
-                        className="w-full text-red-600 hover:text-red-700"
+                        size="icon"
+                        className="h-7 w-7"
                         onClick={() =>
-                          setFormData((prev) => ({ ...prev, img: "" }))
+                          document.getElementById("image-upload")?.click()
                         }
+                        aria-label="Change photo"
                       >
-                        Remove Photo
+                        <Pencil className="h-4 w-4" />
                       </Button>
-                    )}
-                  </div>
+                      {formData.img && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-red-600 hover:text-red-700"
+                          onClick={() =>
+                            setFormData((prev) => ({ ...prev, img: "" }))
+                          }
+                          aria-label="Remove photo"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -924,16 +927,35 @@ export default function EmployeeForm({
               )}
             </div>
             <div>
-              <Label htmlFor="endDate" className="mb-1 block">
-                End Date
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="endDate" className="mb-1 block">
+                  End Date
+                </Label>
+                {mode !== "view" && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={!!formData.isEnded}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setFormData((prev) => ({
+                          ...prev,
+                          isEnded: checked,
+                          endDate: checked ? prev.endDate ?? null : null,
+                        }));
+                      }}
+                    />
+                    Ended
+                  </label>
+                )}
+              </div>
               {mode === "view" ? (
                 <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
                   {formData.endDate
                     ? new Date(formData.endDate).toLocaleDateString()
                     : "-"}
                 </div>
-              ) : (
+              ) : formData.isEnded ? (
                 <Input
                   id="endDate"
                   name="endDate"
@@ -945,6 +967,8 @@ export default function EmployeeForm({
                   }
                   onChange={handleChange}
                 />
+              ) : (
+                <div className="text-sm text-gray-500">Currently employed</div>
               )}
             </div>
           </div>

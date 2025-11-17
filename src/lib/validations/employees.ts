@@ -25,6 +25,7 @@ export const CURRENT_STATUS = [
   "VACATION",
   "SICK_LEAVE",
   "INACTIVE",
+  "ENDED",
 ] as const;
 export type CURRENT_STATUS = (typeof CURRENT_STATUS)[number];
 
@@ -65,10 +66,20 @@ export const employeeSchema = z.object({
   country: z.string().optional().nullable(),
   img: z
     .string()
-    .url("Invalid image URL")
     .optional()
-    .or(z.literal('')) // Allow empty string
-    .transform(val => val || null) // Convert empty string to null
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        if (val === '' || val === undefined) return true;
+        if (typeof val !== 'string') return false;
+        return (
+          /^https?:\/\//.test(val) ||
+          /^data:image\/[a-zA-Z]+;base64,/.test(val)
+        );
+      },
+      { message: 'Invalid image format' }
+    )
+    .transform((val) => (val ? val : null))
     .nullable(),
   startDate: z
     .union([z.string(), z.date()])
@@ -77,9 +88,9 @@ export const employeeSchema = z.object({
   endDate: z
     .union([z.string(), z.date()])
     .pipe(z.coerce.date())
-    .refine((date) => date > new Date(), "End date must be in the future")
     .optional()
     .nullable(),
+  isEnded: z.boolean().optional(),
   position: z.string().min(1, "Position is required"),
   department: z.string().min(1, "Department is required"),
   employmentStatus: z.enum(EMPLOYMENT_STATUS),
@@ -91,6 +102,7 @@ export const employeeSchema = z.object({
   emergencyContactPhone: z.string().min(1, "Emergency contact phone is required").optional().nullable(),
   emergencyContactEmail: z.string().email("Invalid emergency contact email").optional().nullable(),
   description: z.string().optional().nullable(),
+  isArchived: z.boolean().optional(),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional(),
 });
