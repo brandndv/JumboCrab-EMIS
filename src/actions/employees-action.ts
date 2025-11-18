@@ -145,6 +145,8 @@ export async function createEmployee(employeeData: any): Promise<{
         employeeData.emergencyContactRelationship || null,
       emergencyContactPhone: employeeData.emergencyContactPhone || null,
       emergencyContactEmail: employeeData.emergencyContactEmail || null,
+
+
     };
 
     // Handle suffix validation
@@ -157,14 +159,21 @@ export async function createEmployee(employeeData: any): Promise<{
 
     console.log("Final create data:", defaults);
 
-    const newEmployee = await db.employee.create({
-      data: {
-        ...defaults,
-        id: Math.random().toString(36).substring(2, 9),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    });
+ const newEmployee = await db.employee.create({
+  data: {
+    ...defaults,
+    id: Math.random().toString(36).substring(2, 9),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    // Replace userId with user relation
+    user: employeeData.userId ? {
+      connect: { id: employeeData.userId }
+    } : undefined,
+  },
+  include: {
+    user: true // Include the user in the returned data if needed
+  }
+});
 
     revalidatePath("/dashboard/employees");
     return { success: true, data: newEmployee };

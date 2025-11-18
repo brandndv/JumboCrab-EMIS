@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { faker } from '@faker-js/faker';
-import { GENDER, CIVIL_STATUS, EMPLOYMENT_STATUS, CURRENT_STATUS, SUFFIX } from '../src/lib/validations/employees';
+import { GENDER, CIVIL_STATUS, EMPLOYMENT_STATUS, CURRENT_STATUS, SUFFIX } from '../src/lib/validations/employees.js';
 
 const prisma = new PrismaClient();
 

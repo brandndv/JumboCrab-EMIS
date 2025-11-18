@@ -4,9 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -16,19 +15,13 @@ model User {
   password   String
   salt       String
   role       Roles    @default(employee)
+  employee   Employee? // One-to-one relation with Employee
+ 
   isArchived Boolean
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
 
-enum Roles {
-  admin
-  generalManager
-  manager
-  supervisor
-  clerk
-  employee
-}
 
 model Employee {
   id                           String            @id
@@ -64,6 +57,10 @@ model Employee {
   isArchived                   Boolean           @default(false)
   createdAt                    DateTime          @default(now())
   updatedAt                    DateTime          @updatedAt
+
+//One is to One relationship with Model User
+  user                         User?             @relation(fields: [userId], references: [id])
+  userId                       String?            @unique // Foreign key
 }
 
 enum GENDER {
@@ -104,4 +101,14 @@ enum SUFFIX {
 enum DEPARTMENT {
   KITCHEN
   DINING
+}
+
+
+enum Roles {
+  admin
+  generalManager
+  manager
+  supervisor
+  clerk
+  employee
 }

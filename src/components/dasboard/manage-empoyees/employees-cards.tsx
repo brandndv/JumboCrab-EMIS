@@ -26,7 +26,7 @@ import { Separator } from "@/components/ui/separator";
 
 // ========== PAGINATION LOGIC ========= //
 
-export default function EmployeesTable({
+export default function EmployeesCards({
   employees,
 }: {
   employees: Employee[];
@@ -119,6 +119,7 @@ export default function EmployeesTable({
 
   return (
     <div className="w-full">
+      {/* Grid: auto-fill with a min card width so cards don't shrink too much. Tweak 280px as needed. */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 p-4">
         {currentItems.map((employee) => (
           <div
@@ -135,6 +136,7 @@ export default function EmployeesTable({
                       {employee.lastName?.charAt(0)}
                     </span>
                   </div>
+                  {/* Name/position: allow two lines for name to avoid over-truncation */}
                   <div className="min-w-0 flex-1">
                     <h3 className="text-base font-semibold text-gray-900 line-clamp-2">
                       {employee.firstName} {employee.lastName}
