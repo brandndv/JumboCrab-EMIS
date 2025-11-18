@@ -64,23 +64,18 @@ export const employeeSchema = z.object({
   state: z.string().optional().nullable(),
   postalCode: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
-  img: z
-    .string()
-    .optional()
-    .or(z.literal(''))
-    .refine(
-      (val) => {
-        if (val === '' || val === undefined) return true;
-        if (typeof val !== 'string') return false;
-        return (
-          /^https?:\/\//.test(val) ||
-          /^data:image\/[a-zA-Z]+;base64,/.test(val)
-        );
-      },
-      { message: 'Invalid image format' }
-    )
-    .transform((val) => (val ? val : null))
-    .nullable(),
+ img: z
+  .union([
+    z.string()
+      .refine(
+        val => val === '' || /^https?:\/\//.test(val) || /^data:image\/[a-zA-Z]+;base64,/.test(val),
+        { message: 'Invalid image format' }
+      )
+      .transform(val => val || null),
+    z.null()
+  ])
+  .optional()
+  .default(null),
   startDate: z
     .union([z.string(), z.date()])
     .pipe(z.coerce.date())

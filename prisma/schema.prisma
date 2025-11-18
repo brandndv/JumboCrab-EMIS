@@ -14,7 +14,7 @@ model User {
   email      String   @unique
   password   String
   salt       String
-  role       Roles    @default(employee)
+  role       Roles   
   employee   Employee? // One-to-one relation with Employee
  
   isArchived Boolean

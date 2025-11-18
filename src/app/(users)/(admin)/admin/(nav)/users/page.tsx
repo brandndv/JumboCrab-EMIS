@@ -22,9 +22,9 @@ function UsersPageContent() {
   if (error) return <div className="text-red-500">Error: {error}</div>;
 
   return (
-    <div className="p-4">
+    <div className="px-20 py-10">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-4">Users Management</h1>
+        <h1 className="text-2xl font-bold mb-4">Users Directory</h1>
         <div className="max-w-md">
           <input
             type="text"

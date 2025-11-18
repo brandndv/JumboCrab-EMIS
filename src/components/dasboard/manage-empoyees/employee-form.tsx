@@ -12,6 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  CURRENT_STATUS,
+  EMPLOYMENT_STATUS,
   Employee,
   SUFFIX,
   validateEmployee,
@@ -61,6 +63,7 @@ export default function EmployeeForm({
         emergencyContactEmail: initialData.emergencyContactEmail || "",
         // Add other fields as needed
         ...initialData,
+        img: initialData.img ?? null,
         isEnded: initialData.isEnded ?? false,
       };
     }
@@ -75,11 +78,13 @@ export default function EmployeeForm({
       emergencyContactPhone: "",
       emergencyContactEmail: "",
       isEnded: false,
+      img: null,
     };
   });
-  const [isLoading, setIsLoading] = useState(!initialData);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [shouldRemoveImage, setShouldRemoveImage] = useState(false);
 
   // Initialize form data
   useEffect(() => {
@@ -93,7 +98,7 @@ export default function EmployeeForm({
           const data = await response.json();
           setFormData({
             ...data,
-            img: data.img || "/default-avatar.png", // Default image if none provided
+            img: data.img ?? null,
             isEnded: data.isEnded ?? false,
           });
         } catch (error) {
@@ -105,7 +110,7 @@ export default function EmployeeForm({
         // Use the provided initialData with default image
         setFormData({
           ...initialData,
-          img: initialData.img || "/default-avatar.png",
+          img: initialData.img ?? null,
           isEnded: initialData.isEnded ?? false,
         });
         setIsLoading(false);
@@ -134,7 +139,7 @@ export default function EmployeeForm({
           nationality: "",
           birthdate: new Date(),
           address: "",
-          img: null, // Set to null to match the updated schema
+          img: null,
         });
         setIsLoading(false);
       }
@@ -147,10 +152,17 @@ export default function EmployeeForm({
     // Create a temporary object with the new value
     const tempData = { ...formData, [name]: value };
 
+    // Prepare data for validation
+    const validationData = {
+      ...tempData,
+      // Ensure img is either a valid URL, base64 string, or null
+      img: tempData.img || null
+    };
+
     // Validate the field using the appropriate schema
     const schema =
       mode === "create" ? validateEmployee : validatePartialEmployee;
-    const result = schema(tempData);
+    const result = schema(validationData);
 
     if (!result.success) {
       // Find the error for this specific field
@@ -215,10 +227,24 @@ export default function EmployeeForm({
   const handleSelectChange = (name: keyof Employee, value: string) => {
     if (mode === "view") return; // Prevent changes in view mode
 
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => {
+      const updated: Partial<Employee> = {
+        ...prev,
+        [name]: value,
+      };
+
+      if (name === "currentStatus") {
+        const requiresEndDate = value === "ENDED" || value === "INACTIVE";
+        updated.isEnded = requiresEndDate;
+        if (!requiresEndDate) {
+          updated.endDate = null;
+        }
+      }
+
+      return updated;
+    });
+
+    validateField(name as string, value);
   };
 
   // Helper function to format field names for display
@@ -233,16 +259,23 @@ export default function EmployeeForm({
     e.preventDefault();
     if (mode === "view") return; // Prevent form submission in view mode
 
-    console.log("Form submitted with data:", formData);
+    // Prepare form data for submission
+    const submissionData = {
+      ...formData,
+      // The schema will handle the img transformation
+      img: formData.img || null,
+    };
+
+    console.log("Form submitted with data:", submissionData);
     setIsSubmitting(true);
     setErrors({});
 
     try {
-      // Validate the form data
+      // Validate the form data with the prepared submission data
       const validationResult =
         mode === "create"
-          ? validateEmployee(formData)
-          : validatePartialEmployee(formData);
+          ? validateEmployee(submissionData)
+          : validatePartialEmployee(submissionData);
 
       console.log("Validation result:", validationResult);
 
@@ -269,18 +302,18 @@ export default function EmployeeForm({
       let result;
 
       if (mode === "create") {
-        console.log("Creating new employee with data:", formData);
-        result = await createEmployee(formData as any);
+        console.log("Creating new employee with data:", submissionData);
+        result = await createEmployee(submissionData as any);
         console.log("Create employee result:", result);
       } else if (employeeId) {
         console.log(
           "Updating employee with ID:",
           employeeId,
           "Data:",
-          formData
+          submissionData
         );
         result = await updateEmployee({
-          ...formData,
+          ...submissionData,
           id: employeeId,
         } as any);
         console.log("Update employee result:", result);
@@ -316,6 +349,9 @@ export default function EmployeeForm({
     }
   };
 
+  const shouldShowEndDateField =
+    formData.currentStatus === "ENDED" || formData.currentStatus === "INACTIVE";
+
   if (isLoading) {
     return <div>Loading...</div>;
   }
@@ -349,10 +385,11 @@ export default function EmployeeForm({
                         if (file) {
                           const reader = new FileReader();
                           reader.onload = (event) => {
-                            setFormData((prev) => ({
+                            setFormData(prev => ({
                               ...prev,
                               img: event.target?.result as string,
                             }));
+                            setShouldRemoveImage(false); // Reset removal flag when new image is selected
                           };
                           reader.readAsDataURL(file);
                         }
@@ -377,9 +414,9 @@ export default function EmployeeForm({
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-red-600 hover:text-red-700"
-                          onClick={() =>
-                            setFormData((prev) => ({ ...prev, img: "" }))
-                          }
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, img: null }));
+                          }}
                           aria-label="Remove photo"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -927,35 +964,18 @@ export default function EmployeeForm({
               )}
             </div>
             <div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="endDate" className="mb-1 block">
-                  End Date
-                </Label>
-                {mode !== "view" && (
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={!!formData.isEnded}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setFormData((prev) => ({
-                          ...prev,
-                          isEnded: checked,
-                          endDate: checked ? prev.endDate ?? null : null,
-                        }));
-                      }}
-                    />
-                    Ended
-                  </label>
-                )}
-              </div>
+              <Label htmlFor="endDate" className="mb-1 block">
+                End Date
+              </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
-                  {formData.endDate
-                    ? new Date(formData.endDate).toLocaleDateString()
-                    : "-"}
-                </div>
-              ) : formData.isEnded ? (
+                formData.endDate && shouldShowEndDateField ? (
+                  <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                    {new Date(formData.endDate).toLocaleDateString()}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">Not applicable</div>
+                )
+              ) : shouldShowEndDateField ? (
                 <Input
                   id="endDate"
                   name="endDate"
@@ -968,7 +988,70 @@ export default function EmployeeForm({
                   onChange={handleChange}
                 />
               ) : (
-                <div className="text-sm text-gray-500">Currently employed</div>
+                <div className="text-sm text-gray-500">
+                  Select ENDED or INACTIVE to set an end date
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="employmentStatus" className="mb-1 block">
+                Employment Status
+              </Label>
+              {mode === "view" ? (
+                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                  {formData.employmentStatus || "-"}
+                </div>
+              ) : (
+                <select
+                  id="employmentStatus"
+                  name="employmentStatus"
+                  value={formData.employmentStatus || ""}
+                  onChange={(e) =>
+                    handleSelectChange("employmentStatus", e.target.value)
+                  }
+                  className="w-full h-10 px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">Select employment status</option>
+                  {EMPLOYMENT_STATUS.map((status) => (
+                    <option key={status} value={status}>
+                      {status.charAt(0) + status.slice(1).toLowerCase()}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="currentStatus" className="mb-1 block">
+                Current Status
+              </Label>
+              {mode === "view" ? (
+                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                  {formData.currentStatus || "-"}
+                </div>
+              ) : (
+                <select
+                  id="currentStatus"
+                  name="currentStatus"
+                  value={formData.currentStatus || ""}
+                  onChange={(e) =>
+                    handleSelectChange("currentStatus", e.target.value)
+                  }
+                  className="w-full h-10 px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">Select current status</option>
+                  {CURRENT_STATUS.map((status) => (
+                    <option key={status} value={status}>
+                      {status
+                        .split("_")
+                        .map(
+                          (word) => word.charAt(0) + word.slice(1).toLowerCase()
+                        )
+                        .join(" ")}
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
           </div>

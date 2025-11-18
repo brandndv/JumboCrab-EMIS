@@ -4,10 +4,6 @@
 import { revalidatePath } from "next/cache";
 import { db, checkConnection } from "@/lib/db";
 import {
-  type GENDER,
-  type CIVIL_STATUS,
-  type EMPLOYMENT_STATUS,
-  type CURRENT_STATUS,
   SUFFIX,
   type SUFFIX as SUFFIX_TYPE,
 } from "@/lib/validations/employees";
@@ -511,5 +507,38 @@ export async function getDepartments(): Promise<{
       success: false,
       error: "Failed to fetch departments. Please try again later.",
     };
+  }
+}
+
+// ========== GET EMPLOYEES USERS========= //
+
+export async function getEmployeesWithoutUser() {
+  try {
+    const employees = await db.employee.findMany({
+      where: {
+        user: null
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        employeeCode: true,
+        email: true
+      },
+      orderBy: {
+        employeeCode: 'asc'
+      }
+    })
+
+    return { 
+      success: true, 
+      data: employees 
+    }
+  } catch (error) {
+    console.error('Error fetching employees without user accounts:', error)
+    return { 
+      success: false, 
+      error: 'Failed to fetch employees without user accounts' 
+    }
   }
 }
