@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { Session } from "@/types/session";
+import { fetchSession } from "@/actions/session-action";
 
 export function useSession() {
   const [session, setSession] = useState<Session | null>(null);
@@ -10,14 +11,13 @@ export function useSession() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const fetchSession = async () => {
+    const loadSession = async () => {
       try {
-        const response = await fetch("/api/auth/session");
-        if (!response.ok) {
-          throw new Error("Failed to fetch session");
+        const result = await fetchSession();
+        if (!result.success || !result.session) {
+          throw new Error(result.error || "Failed to load session");
         }
-        const data = await response.json();
-        setSession(data);
+        setSession(result.session);
       } catch (err) {
         setError(err instanceof Error ? err : new Error("Unknown error"));
       } finally {
@@ -25,7 +25,7 @@ export function useSession() {
       }
     };
 
-    fetchSession();
+    loadSession();
   }, []);
 
   return { session, loading, error };
