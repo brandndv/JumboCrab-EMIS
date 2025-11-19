@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+"use client";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,10 +10,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Select, SelectContent, SelectValue } from "@radix-ui/react-select";
-import { SelectItem, SelectTrigger } from "@/components/ui/select";
-import { Eye, EyeOff } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Eye, EyeOff, Search } from "lucide-react";
 import { Roles } from "@prisma/client";
+import { getEmployeesWithoutUser } from "@/actions/employees-action";
+
+type Employee = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  employeeCode: string;
+  email: string | null;
+};
 
 const CreateUserForm = () => {
   const [username, setUsername] = useState("");
@@ -22,6 +31,41 @@ const CreateUserForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [roleError, setRoleError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+useEffect(() => {
+  const fetchEmployees = async () => {
+    if (role === 'employee') {
+      setIsLoading(true)
+      try {
+        const response = await getEmployeesWithoutUser()
+        if (response.success && response.data) {
+          setEmployees(response.data)
+        } else {
+          console.error('Failed to fetch employees:', response.error)
+        }
+      } catch (error) {
+        console.error('Error fetching employees:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+  }
+  fetchEmployees()
+}, [role])
+
+  useEffect(() => {
+    if (role !== "employee") {
+      setSelectedEmployee(null);
+      setSearchTerm("");
+      return;
+    }
+
+    setEmail(selectedEmployee?.email ?? "");
+  }, [role, selectedEmployee]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -35,6 +79,10 @@ const CreateUserForm = () => {
       setRoleError("Please select a role");
       return;
     }
+    if (role === 'employee' && !selectedEmployee) {
+      alert("Please select an employee");
+      return;
+    }
 
     setRoleError("");
     setLoading(true);
@@ -45,7 +93,14 @@ const CreateUserForm = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, email, password, role }),
+        body: JSON.stringify({ 
+          username, 
+          email, 
+          password, 
+          role, 
+          employee: selectedEmployee ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}` : null,
+          employeeId: selectedEmployee?.id || null
+        }),
       });
 
       const data = await response.json();
@@ -102,6 +157,7 @@ const CreateUserForm = () => {
                   name="username"
                   placeholder="johndoe"
                   className="w-full"
+                  value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
               </div>
@@ -119,7 +175,9 @@ const CreateUserForm = () => {
                   name="email"
                   placeholder="user@example.com"
                   className="w-full"
+                  value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  readOnly={role === "employee" && !!selectedEmployee?.email}
                 />
               </div>
 
@@ -137,6 +195,7 @@ const CreateUserForm = () => {
                     name="password"
                     placeholder="••••••••"
                     className="w-full pr-10"
+                    value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
                   <button
@@ -195,6 +254,64 @@ const CreateUserForm = () => {
                 </div>
               </div>
             </div>
+            {role === 'employee' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">
+                  Select Employee
+                </label>
+                <Select
+                  value={selectedEmployee?.id || ""}
+                  onValueChange={(value) => {
+                    const employee = employees.find(emp => emp.id === value);
+                    setSelectedEmployee(employee || null);
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={
+                      isLoading ? "Loading employees..." : "Select an employee"
+                    } />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60 overflow-y-auto">
+                    <div className="px-3 py-2">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search employees..."
+                          className="pl-8"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    </div>
+                    {employees
+                      .filter(emp => 
+                        `${emp.firstName} ${emp.lastName} ${emp.employeeCode}`
+                          .toLowerCase()
+                          .includes(searchTerm.toLowerCase())
+                      )
+                      .map((employee) => (
+                        <SelectItem key={employee.id} value={employee.id}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{employee.employeeCode}</span>
+                            <span>{employee.firstName} {employee.lastName}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {selectedEmployee && (
+                  <div className="mt-2 p-3 bg-gray-50 rounded-md">
+                    <p className="text-sm">
+                      <span className="font-medium">Selected:</span> {selectedEmployee.firstName} {selectedEmployee.lastName}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Employee ID: {selectedEmployee.employeeCode}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex justify-end gap-4 pt-4">
               <Button variant="outline" type="button">

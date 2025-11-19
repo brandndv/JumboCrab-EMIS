@@ -4,9 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -15,20 +14,14 @@ model User {
   email      String   @unique
   password   String
   salt       String
-  role       Roles    @default(employee)
+  role       Roles   
+  employee   Employee? // One-to-one relation with Employee
+ 
   isArchived Boolean
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
 
-enum Roles {
-  admin
-  generalManager
-  manager
-  supervisor
-  clerk
-  employee
-}
 
 model Employee {
   id                           String            @id
@@ -48,6 +41,7 @@ model Employee {
   country                      String?
   img                          String?
   startDate                    DateTime
+  isEnded                      Boolean?          @default(false)
   endDate                      DateTime?
   position                     String
   department                   String
@@ -60,8 +54,13 @@ model Employee {
   emergencyContactPhone        String?
   emergencyContactEmail        String?
   description                  String?
+  isArchived                   Boolean           @default(false)
   createdAt                    DateTime          @default(now())
   updatedAt                    DateTime          @updatedAt
+
+//One is to One relationship with Model User
+  user                         User?             @relation(fields: [userId], references: [id])
+  userId                       String?            @unique // Foreign key
 }
 
 enum GENDER {
@@ -88,6 +87,7 @@ enum CURRENT_STATUS {
   VACATION
   SICK_LEAVE
   INACTIVE
+  ENDED
 }
 
 enum SUFFIX {
@@ -101,4 +101,14 @@ enum SUFFIX {
 enum DEPARTMENT {
   KITCHEN
   DINING
+}
+
+
+enum Roles {
+  admin
+  generalManager
+  manager
+  supervisor
+  clerk
+  employee
 }

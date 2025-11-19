@@ -134,7 +134,6 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           path: "/create",
           roles: ["admin", "generalManager"],
         },
-        { label: "Assign User", path: "", roles: ["admin", "generalManager"] },
       ],
       roles: ["admin", "generalManager"],
     },

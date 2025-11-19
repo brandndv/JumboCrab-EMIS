@@ -1,0 +1,63 @@
+export const NATIONALITIES = [
+  "Filipino",
+  "American",
+  "Canadian",
+  "Chinese",
+  "Japanese",
+  "Korean",
+  "Australian",
+  "British",
+  "German",
+  "French",
+  "Indian",
+  "Indonesian",
+  "Malaysian",
+  "Singaporean",
+  "Thai",
+  "Vietnamese",
+  "Spanish",
+  "Italian",
+  "New Zealander",
+  "Other",
+] as const;
+
+export const DEPARTMENTS = [
+  "Human Resources",
+  "Finance",
+  "Operations",
+  "Sales",
+  "Marketing",
+  "Customer Service",
+  "Information Technology",
+  "Logistics",
+  "Procurement",
+  "Training",
+] as const;
+
+export const POSITIONS = [
+  "General Manager",
+  "Manager",
+  "Supervisor",
+  "Team Lead",
+  "HR Specialist",
+  "Accountant",
+  "Cook",
+  "Chef",
+  "Server",
+  "Cashier",
+  "Clerk",
+  "Staff",
+] as const;
+
+export const EMERGENCY_RELATIONSHIPS = [
+  "Spouse",
+  "Parent",
+  "Sibling",
+  "Child",
+  "Guardian",
+  "Relative",
+  "Friend",
+  "Colleague",
+  "Neighbor",
+  "Other",
+] as const;

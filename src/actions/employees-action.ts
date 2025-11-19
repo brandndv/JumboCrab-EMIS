@@ -4,17 +4,19 @@
 import { revalidatePath } from "next/cache";
 import { db, checkConnection } from "@/lib/db";
 import {
-  type Employee as EmployeeType,
-  type GENDER,
-  type CIVIL_STATUS,
-  type EMPLOYMENT_STATUS,
-  type CURRENT_STATUS,
+  EMPLOYEE_CODE_REGEX,
   SUFFIX,
   type SUFFIX as SUFFIX_TYPE,
 } from "@/lib/validations/employees";
+import { generateUniqueEmployeeCode } from "@/lib/employees/employee-code";
+import type { Employee as PrismaEmployee } from "@prisma/client";
 
 // ========== GET EMPLOYEES ========= //
-export async function getEmployees() {
+export async function getEmployees(): Promise<{
+  success: boolean;
+  data?: PrismaEmployee[];
+  error?: string;
+}> {
   try {
     console.log("Fetching employees...");
     const employees = await db.employee.findMany({
@@ -42,7 +44,7 @@ export async function getEmployees() {
  */
 export async function getEmployeeById(id: string | undefined): Promise<{
   success: boolean;
-  data?: EmployeeType | null;
+  data?: PrismaEmployee | null;
   error?: string;
 }> {
   try {
@@ -79,11 +81,9 @@ export async function getEmployeeById(id: string | undefined): Promise<{
 }
 
 // ========== CREATE EMPLOYEE ========= //
-export async function createEmployee(
-  employeeData: Omit<EmployeeType, "id" | "createdAt" | "updatedAt">
-): Promise<{
+export async function createEmployee(employeeData: any): Promise<{
   success: boolean;
-  data?: EmployeeType;
+  data?: PrismaEmployee;
   error?: string;
 }> {
   try {
@@ -96,9 +96,16 @@ export async function createEmployee(
       return new Date();
     };
 
+    // Generate or validate the employee code
+    const employeeCode =
+      typeof employeeData.employeeCode === "string" &&
+      EMPLOYEE_CODE_REGEX.test(employeeData.employeeCode)
+        ? employeeData.employeeCode
+        : await generateUniqueEmployeeCode();
+
     // Set default values for required fields
     const defaults = {
-      employeeCode: employeeData.employeeCode,
+      employeeCode,
       firstName: employeeData.firstName || "",
       lastName: employeeData.lastName || "",
       sex: employeeData.sex || "",
@@ -112,13 +119,25 @@ export async function createEmployee(
       position: employeeData.position || "",
       department: employeeData.department || "",
       employmentStatus: employeeData.employmentStatus || "",
-      currentStatus: employeeData.currentStatus || "",
+      currentStatus:
+        typeof (employeeData as any).isEnded === "boolean" &&
+        (employeeData as any).isEnded
+          ? "ENDED"
+          : employeeData.currentStatus || "",
       nationality: employeeData.nationality || "",
 
       middleName: employeeData.middleName || null,
       address: employeeData.address || null,
+      city: (employeeData as any).city ?? null,
+      state: (employeeData as any).state ?? null,
+      postalCode: (employeeData as any).postalCode ?? null,
+      country: (employeeData as any).country ?? null,
       img: employeeData.img || null,
       endDate: employeeData.endDate ? parseDate(employeeData.endDate) : null,
+      isEnded:
+        typeof (employeeData as any).isEnded === "boolean"
+          ? (employeeData as any).isEnded
+          : false,
       email: employeeData.email || null,
       phone: employeeData.phone || null,
       description: employeeData.description || null,
@@ -131,7 +150,8 @@ export async function createEmployee(
         employeeData.emergencyContactRelationship || null,
       emergencyContactPhone: employeeData.emergencyContactPhone || null,
       emergencyContactEmail: employeeData.emergencyContactEmail || null,
-      userId: employeeData.userId || null,
+
+
     };
 
     // Handle suffix validation
@@ -144,14 +164,21 @@ export async function createEmployee(
 
     console.log("Final create data:", defaults);
 
-    const newEmployee = await db.employee.create({
-      data: {
-        ...defaults,
-        id: Math.random().toString(36).substring(2, 9),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    });
+ const newEmployee = await db.employee.create({
+  data: {
+    ...defaults,
+    id: Math.random().toString(36).substring(2, 9),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    // Replace userId with user relation
+    user: employeeData.userId ? {
+      connect: { id: employeeData.userId }
+    } : undefined,
+  },
+  include: {
+    user: true // Include the user in the returned data if needed
+  }
+});
 
     revalidatePath("/dashboard/employees");
     return { success: true, data: newEmployee };
@@ -168,10 +195,10 @@ export async function createEmployee(
 
 // ========== UPDATE EMPLOYEE ========= //
 export async function updateEmployee(
-  employeeData: Partial<EmployeeType> & { id: string }
+  employeeData: Partial<PrismaEmployee> & { id: string }
 ): Promise<{
   success: boolean;
-  data?: EmployeeType;
+  data?: PrismaEmployee;
   error?: string;
 }> {
   // Verify database connection
@@ -185,6 +212,9 @@ export async function updateEmployee(
     const data = JSON.parse(JSON.stringify(employeeData));
     const { id } = data;
     delete data.id; // Remove id from the update data
+    if ("employeeCode" in data) {
+      delete data.employeeCode;
+    }
 
     // Log current state in database before update
     const currentData = await db.employee.findUnique({
@@ -255,6 +285,8 @@ export async function updateEmployee(
       "postalCode",
       "country",
       "address",
+      "img",
+      "isEnded",
     ] as const;
 
     // Log the data we're about to process
@@ -280,12 +312,26 @@ export async function updateEmployee(
     const dateFields = ["birthdate", "startDate", "endDate"];
     dateFields.forEach((field) => {
       if (field in data) {
-        const dateValue = parseDate(data[field as keyof typeof data]);
-        if (dateValue) {
-          fieldsToUpdate[field] = dateValue;
+        const raw = (data as any)[field];
+        if (raw === null) {
+          fieldsToUpdate[field] = null;
+        } else {
+          const dateValue = parseDate(raw);
+          if (dateValue) {
+            fieldsToUpdate[field] = dateValue;
+          }
         }
       }
     });
+
+    // Handle isEnded and auto-currentStatus
+    if ("isEnded" in data) {
+      const ended = Boolean((data as any).isEnded);
+      fieldsToUpdate.isEnded = ended;
+      if (ended) {
+        fieldsToUpdate.currentStatus = "ENDED";
+      }
+    }
 
     // Handle nationality update if it's in the data
     if ("nationality" in data) {
@@ -453,17 +499,11 @@ export async function getDepartments(): Promise<{
     // Use Prisma's distinct to get unique department values
     const employees = await db.employee.findMany();
     const departments = [
-      ...new Set(
-        employees
-          .map((emp: EmployeeType) => emp.department)
-          .filter(Boolean as any)
-      ),
+      ...new Set(employees.map((emp) => emp.department).filter(Boolean as any)),
     ];
     const departmentCounts = departments.reduce(
       (acc: Record<string, number>, d: string) => {
-        acc[d] = employees.filter(
-          (emp: EmployeeType) => emp.department === d
-        ).length;
+        acc[d] = employees.filter((emp) => emp.department === d).length;
         return acc;
       },
       {} as Record<string, number>
@@ -479,5 +519,38 @@ export async function getDepartments(): Promise<{
       success: false,
       error: "Failed to fetch departments. Please try again later.",
     };
+  }
+}
+
+// ========== GET EMPLOYEES USERS========= //
+
+export async function getEmployeesWithoutUser() {
+  try {
+    const employees = await db.employee.findMany({
+      where: {
+        user: null
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        employeeCode: true,
+        email: true
+      },
+      orderBy: {
+        employeeCode: 'asc'
+      }
+    })
+
+    return { 
+      success: true, 
+      data: employees 
+    }
+  } catch (error) {
+    console.error('Error fetching employees without user accounts:', error)
+    return { 
+      success: false, 
+      error: 'Failed to fetch employees without user accounts' 
+    }
   }
 }

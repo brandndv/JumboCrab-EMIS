@@ -12,7 +12,7 @@ import dynamic from "next/dynamic";
 
 // Dynamically import the EmployeesTable component with SSR disabled
 const EmployeesTable = dynamic(
-  () => import("@/components/dasboard/manage-empoyees/employees-table"),
+  () => import("@/components/dasboard/manage-empoyees/employees-cards"),
   { ssr: false, loading: () => <div>Loading table...</div> }
 );
 
