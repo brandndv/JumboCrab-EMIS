@@ -30,30 +30,36 @@ export function UsersCards({ users, onEdit, onDelete }: UsersCardsProps) {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 p-2 sm:p-3">
       {users.map((user) => (
         <Card
           key={user.id}
-          className="shadow-sm transition-shadow hover:shadow-md gap-0 py-0"
+          className="shadow-sm transition-shadow hover:shadow-md gap-0 py-0 h-full"
         >
           <CardHeader className="p-4 pb-3 sm:p-5 sm:pb-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center space-x-3">
+            <div className="grid grid-cols-[1fr_auto] gap-3 items-start w-full">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center">
                   <span className="font-medium">
                     {user.username?.charAt(0).toUpperCase()}
                   </span>
                 </div>
-                <div>
-                  <h3 className="font-medium text-foreground">{user.username}</h3>
-                  <p className="text-sm text-muted-foreground">{user.email}</p>
+                <div className="min-w-0">
+                  <h3 className="font-medium text-foreground truncate w-full leading-tight">
+                    {user.username}
+                  </h3>
+                  <p className="text-sm text-muted-foreground truncate leading-tight">
+                    {user.email}
+                  </p>
                 </div>
               </div>
-              <UsersActions
-                user={user}
-                onEdit={() => onEdit(user)}
-                onDelete={() => onDelete(user)}
-              />
+              <div className="flex items-start justify-end">
+                <UsersActions
+                  user={user}
+                  onEdit={() => onEdit(user)}
+                  onDelete={() => onDelete(user)}
+                />
+              </div>
             </div>
           </CardHeader>
 

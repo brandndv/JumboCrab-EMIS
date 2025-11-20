@@ -5,6 +5,8 @@ import { UsersCards } from "@/components/dasboard/manage-users/users-cards";
 import UsersProvider, {
   useUsers,
 } from "@/components/dasboard/manage-users/users-provider";
+import { Button } from "@/components/ui/button";
+import router from "next/router";
 
 function UsersPageContent() {
   const { users, loading, error } = useUsers();
@@ -48,19 +50,22 @@ function UsersPageContent() {
 
   return (
     <div className="px-4 py-8 sm:px-8 lg:px-12">
-      <div className="mb-8 space-y-2">
-        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-          User Directory
-        </p>
-        <h1 className="text-3xl font-semibold leading-tight">
-          Manage Access & Roles
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Quickly review who has access to what by role group.
-        </p>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Users</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage your User Accounts
+          </p>
+        </div>
+        <Button
+          onClick={() => router.push("/admin/users/new")}
+          className="w-full md:w-auto"
+        >
+          Add New Employee
+        </Button>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-8 mt-6">
         <section className="rounded-2xl border border-border bg-card/40 p-6 shadow-sm">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
