@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { User } from "@/lib/validations/users";
 import { Separator } from "@/components/ui/separator";
 import { UsersActions } from "./users-actions";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 interface UsersCardsProps {
   users: User[];
@@ -15,37 +16,37 @@ export function UsersCards({ users, onEdit, onDelete }: UsersCardsProps) {
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case "admin":
-        return "bg-red-100 text-red-800";
+        return "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-100";
       case "manager":
-        return "bg-blue-100 text-blue-800";
+        return "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-100";
       case "supervisor":
-        return "bg-green-100 text-green-800";
+        return "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100";
       case "clerk":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-100";
       case "employee":
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-muted text-foreground/70";
     }
   };
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {users.map((user) => (
-        <div
+        <Card
           key={user.id}
-          className="overflow-hidden rounded-lg border bg-white shadow-sm transition-shadow hover:shadow-md"
+          className="shadow-sm transition-shadow hover:shadow-md gap-0 py-0"
         >
-          <div className="p-4">
-            <div className="flex items-start justify-between">
+          <CardHeader className="p-4 pb-3 sm:p-5 sm:pb-3">
+            <div className="flex items-start justify-between gap-3">
               <div className="flex items-center space-x-3">
-                <div className="h-10 w-10 shrink-0 rounded-full bg-gray-100 flex items-center justify-center">
-                  <span className="font-medium text-gray-600">
+                <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                  <span className="font-medium">
                     {user.username?.charAt(0).toUpperCase()}
                   </span>
                 </div>
                 <div>
-                  <h3 className="font-medium text-gray-900">{user.username}</h3>
-                  <p className="text-sm text-gray-500">{user.email}</p>
+                  <h3 className="font-medium text-foreground">{user.username}</h3>
+                  <p className="text-sm text-muted-foreground">{user.email}</p>
                 </div>
               </div>
               <UsersActions
@@ -54,12 +55,14 @@ export function UsersCards({ users, onEdit, onDelete }: UsersCardsProps) {
                 onDelete={() => onDelete(user)}
               />
             </div>
+          </CardHeader>
 
-            <Separator className="my-3" />
+          <Separator />
 
+          <CardContent className="p-4 pt-3 sm:p-5 sm:pt-4 space-y-3">
             <div className="space-y-2">
-              <div className="flex items-center text-sm text-gray-600">
-                <span className="mr-2">Role:</span>
+              <div className="flex items-center text-sm text-muted-foreground">
+                <span className="mr-2 text-foreground/80">Role:</span>
                 <span
                   className={`px-2 py-1 text-xs rounded-full ${getRoleBadgeColor(
                     user.role
@@ -70,28 +73,28 @@ export function UsersCards({ users, onEdit, onDelete }: UsersCardsProps) {
               </div>
 
               {user.createdAt && (
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Joined: </span>
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground/90">Joined: </span>
                   {new Date(user.createdAt).toLocaleDateString()}
                 </div>
               )}
             </div>
 
-            <div className="mt-4 flex justify-end space-x-2">
+            <div className="flex justify-end space-x-2 pt-2">
               <Button variant="outline" size="sm" onClick={() => onEdit(user)}>
                 Edit
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                className="text-destructive border-destructive/30 hover:bg-destructive/10"
                 onClick={() => onDelete(user)}
               >
                 Delete
               </Button>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   );

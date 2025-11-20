@@ -416,10 +416,10 @@ export default function EmployeeForm({
         <div className="flex flex-col md:flex-row gap-8">
           {/* ========== PROFILE IMAGE SECTION ========== */}
           <div className="w-full md:w-48 space-y-4">
-            <h4 className="font-medium text-sm">Profile Image</h4>
+            <h4 className="font-medium text-sm text-foreground">Profile Image</h4>
             <div className="flex justify-center">
               <div className="relative">
-                <div className="h-32 w-32 rounded-full overflow-hidden border border-gray-200 bg-gray-100">
+                <div className="h-32 w-32 rounded-full overflow-hidden border border-border bg-muted">
                   <img
                     src={formData.img || "/default-avatar.png"}
                     alt={formData.firstName || "Profile"}
@@ -448,12 +448,12 @@ export default function EmployeeForm({
                         }
                       }}
                     />
-                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/90 rounded-full border px-2 py-1 shadow-sm">
+                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-card/90 backdrop-blur-sm rounded-full border border-border px-2 py-1 shadow-sm">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7"
+                        className="h-7 w-7 text-foreground hover:text-foreground"
                         onClick={() =>
                           document.getElementById("image-upload")?.click()
                         }
@@ -466,7 +466,7 @@ export default function EmployeeForm({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-red-600 hover:text-red-700"
+                          className="h-7 w-7 text-destructive hover:text-destructive/80"
                           onClick={() => {
                             setFormData(prev => ({ ...prev, img: null }));
                           }}
@@ -493,7 +493,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-5 space-y-2">
                     <Label htmlFor="firstName">First Name *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                         {formData.firstName || "-"}
                       </div>
                     ) : (
@@ -520,7 +520,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-5 space-y-2">
                     <Label htmlFor="lastName">Last Name *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                         {formData.lastName || "-"}
                       </div>
                     ) : (
@@ -547,7 +547,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-2 space-y-2">
                     <Label htmlFor="suffix">Suffix</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-24">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-24">
                         {formData.suffix || "-"}
                       </div>
                     ) : (
@@ -560,8 +560,8 @@ export default function EmployeeForm({
                             handleSelectChange("suffix", e.target.value)
                           }
                           className={`w-full h-10 px-2 py-2 rounded-md border ${
-                            errors.suffix ? "border-red-500" : "border-gray-300"
-                          } focus:outline-none focus:ring-1 focus:ring-primary`}
+                            errors.suffix ? "border-destructive" : "border-border"
+                          } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                         >
                           <option value="">-</option>
                           <option value="JR">Jr.</option>
@@ -582,7 +582,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-5 space-y-2">
                     <Label htmlFor="middleName">Middle Name</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                         {formData.middleName || "-"}
                       </div>
                     ) : (
@@ -607,7 +607,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-5 space-y-2">
                     <Label htmlFor="birthdate">Date of Birth *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                         {formData.birthdate
                           ? new Date(formData.birthdate).toLocaleDateString()
                           : "-"}
@@ -646,7 +646,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-2 space-y-2">
                     <Label>Gender *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-24">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-24">
                         {formData.sex || "-"}
                       </div>
                     ) : (
@@ -659,8 +659,8 @@ export default function EmployeeForm({
                               handleSelectChange("sex", e.target.value)
                             }
                             className={`w-full h-10 px-2 py-2 rounded-md border ${
-                              errors.sex ? "border-red-500" : "border-gray-300"
-                            } focus:outline-none focus:ring-1 focus:ring-primary`}
+                              errors.sex ? "border-destructive" : "border-border"
+                            } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                             required
                           >
                             <option value="">-</option>
@@ -677,7 +677,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-3 space-y-2">
                     <Label htmlFor="civilStatus">Civil Status *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                         {formData.civilStatus || "-"}
                       </div>
                     ) : (
@@ -690,10 +690,8 @@ export default function EmployeeForm({
                             handleSelectChange("civilStatus", e.target.value)
                           }
                           className={`w-full h-10 px-3 py-2 rounded-md border ${
-                            errors.civilStatus
-                              ? "border-red-500"
-                              : "border-gray-300"
-                          } focus:outline-none focus:ring-1 focus:ring-primary`}
+                            errors.civilStatus ? "border-destructive" : "border-border"
+                          } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                           required
                         >
                           <option value="">Select Status</option>
@@ -711,7 +709,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-4 space-y-2">
                     <Label htmlFor="nationality">Nationality *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                         {formData.nationality || "-"}
                       </div>
                     ) : (
@@ -724,10 +722,8 @@ export default function EmployeeForm({
                             handleSelectChange("nationality", e.target.value)
                           }
                           className={`w-full h-10 px-3 py-2 rounded-md border ${
-                            errors.nationality
-                              ? "border-red-500"
-                              : "border-gray-300"
-                          } focus:outline-none focus:ring-1 focus:ring-primary`}
+                            errors.nationality ? "border-destructive" : "border-border"
+                          } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                           required
                         >
                           <option value="">Select nationality</option>
@@ -749,7 +745,7 @@ export default function EmployeeForm({
                   <div className="col-span-full sm:col-span-6 space-y-2">
                     <Label htmlFor="phone">Phone Number *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                         {formData.phone || "-"}
                       </div>
                     ) : (
@@ -778,7 +774,7 @@ export default function EmployeeForm({
                       Email Address {!formData.email && "*"}
                     </Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                         {formData.email || "-"}
                       </div>
                     ) : (
@@ -805,12 +801,12 @@ export default function EmployeeForm({
           </div>
         </div>
         {/* ========== EMPLOYEE DESCRIPTION SECTION ========== */}
-        <div className="space-y-2 pt-4 border-t border-gray-200">
+        <div className="space-y-2 pt-4">
           <Label htmlFor="description" className="mb-1 block">
             Description
           </Label>
           {mode === "view" ? (
-            <div className="min-h-[100px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 text-sm text-gray-800 w-full">
+            <div className="min-h-[100px] px-3 py-2 bg-muted rounded-md border border-border text-sm text-foreground w-full">
               {formData.description || "-"}
             </div>
           ) : (
@@ -825,7 +821,7 @@ export default function EmployeeForm({
         </div>
 
         {/* ========== CONTACT INFORMATION SECTION ========== */}
-        <div className="space-y-4 pt-4 border-t border-gray-200">
+        <div className="space-y-4 pt-4">
           <h4 className="font-medium">Contact Information</h4>
           <div className="space-y-4">
             {/* Address */}
@@ -834,7 +830,7 @@ export default function EmployeeForm({
                 Address
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.address || "-"}
                 </div>
               ) : (
@@ -855,7 +851,7 @@ export default function EmployeeForm({
                   City
                 </Label>
                 {mode === "view" ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                     {formData.city || "-"}
                   </div>
                 ) : (
@@ -873,7 +869,7 @@ export default function EmployeeForm({
                   State/Province
                 </Label>
                 {mode === "view" ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                     {formData.state || "-"}
                   </div>
                 ) : (
@@ -895,7 +891,7 @@ export default function EmployeeForm({
                   Postal Code
                 </Label>
                 {mode === "view" ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                     {formData.postalCode || "-"}
                   </div>
                 ) : (
@@ -913,7 +909,7 @@ export default function EmployeeForm({
                   Country
                 </Label>
                 {mode === "view" ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                     {formData.country || "-"}
                   </div>
                 ) : (
@@ -930,7 +926,7 @@ export default function EmployeeForm({
           </div>
         </div>
         {/* ========== EMPLOYEMENT INFORMATION SECTION ========== */}
-        <div className="space-y-4 pt-4 border-t border-gray-200">
+        <div className="space-y-4 pt-4">
           <h4 className="font-medium">Employment Information</h4>
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
             <div className="md:col-span-3">
@@ -938,7 +934,7 @@ export default function EmployeeForm({
                 Employee Code
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.employeeCode || "-"}
                 </div>
               ) : (
@@ -963,7 +959,7 @@ export default function EmployeeForm({
                 Department
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.department || "-"}
                 </div>
               ) : (
@@ -976,8 +972,8 @@ export default function EmployeeForm({
                       handleSelectChange("department", e.target.value)
                     }
                     className={`w-full h-10 px-3 py-2 rounded-md border ${
-                      errors.department ? "border-red-500" : "border-gray-300"
-                    } focus:outline-none focus:ring-1 focus:ring-primary`}
+                      errors.department ? "border-destructive" : "border-border"
+                    } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                   >
                     <option value="">Select department</option>
                     {departmentOptions.map((department) => (
@@ -995,7 +991,7 @@ export default function EmployeeForm({
                 Position
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.position || "-"}
                 </div>
               ) : (
@@ -1008,8 +1004,8 @@ export default function EmployeeForm({
                       handleSelectChange("position", e.target.value)
                     }
                     className={`w-full h-10 px-3 py-2 rounded-md border ${
-                      errors.position ? "border-red-500" : "border-gray-300"
-                    } focus:outline-none focus:ring-1 focus:ring-primary`}
+                      errors.position ? "border-destructive" : "border-border"
+                    } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                   >
                     <option value="">Select position</option>
                     {positionOptions.map((position) => (
@@ -1029,7 +1025,7 @@ export default function EmployeeForm({
                 Start Date
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.startDate
                     ? new Date(formData.startDate).toLocaleDateString()
                     : "-"}
@@ -1054,11 +1050,11 @@ export default function EmployeeForm({
               </Label>
               {mode === "view" ? (
                 formData.endDate && shouldShowEndDateField ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                     {new Date(formData.endDate).toLocaleDateString()}
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-500">Not applicable</div>
+                  <div className="text-sm text-muted-foreground">Not applicable</div>
                 )
               ) : shouldShowEndDateField ? (
                 <Input
@@ -1073,7 +1069,7 @@ export default function EmployeeForm({
                   onChange={handleChange}
                 />
               ) : (
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-muted-foreground">
                   Select ENDED or INACTIVE to set an end date
                 </div>
               )}
@@ -1085,7 +1081,7 @@ export default function EmployeeForm({
                 Employment Status
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.employmentStatus || "-"}
                 </div>
               ) : (
@@ -1096,7 +1092,7 @@ export default function EmployeeForm({
                   onChange={(e) =>
                     handleSelectChange("employmentStatus", e.target.value)
                   }
-                  className="w-full h-10 px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 >
                   <option value="">Select employment status</option>
                   {EMPLOYMENT_STATUS.map((status) => (
@@ -1112,7 +1108,7 @@ export default function EmployeeForm({
                 Current Status
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.currentStatus || "-"}
                 </div>
               ) : (
@@ -1123,7 +1119,7 @@ export default function EmployeeForm({
                   onChange={(e) =>
                     handleSelectChange("currentStatus", e.target.value)
                   }
-                  className="w-full h-10 px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 >
                   <option value="">Select current status</option>
                   {CURRENT_STATUS.map((status) => (
@@ -1143,7 +1139,7 @@ export default function EmployeeForm({
         </div>
 
         {/* ========== EMERGENCY CONTACT SECTION ========== */}
-        <div className="space-y-4 pt-4 border-t border-gray-200">
+        <div className="space-y-4 pt-4">
           <h4 className="font-medium">Emergency Contact</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -1151,7 +1147,7 @@ export default function EmployeeForm({
                 Full Name
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.emergencyContactName || "-"}
                 </div>
               ) : (
@@ -1178,7 +1174,7 @@ export default function EmployeeForm({
                 Relationship
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.emergencyContactRelationship || "-"}
                 </div>
               ) : (
@@ -1195,9 +1191,9 @@ export default function EmployeeForm({
                     }
                     className={`w-full h-10 px-3 py-2 rounded-md border ${
                       errors.emergencyContactRelationship
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    } focus:outline-none focus:ring-1 focus:ring-primary`}
+                        ? "border-destructive"
+                        : "border-border"
+                    } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                   >
                     <option value="">Select relationship</option>
                     {emergencyRelationshipOptions.map((relationship) => (
@@ -1215,7 +1211,7 @@ export default function EmployeeForm({
                 Phone Number
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.emergencyContactPhone || "-"}
                 </div>
               ) : (
@@ -1239,7 +1235,7 @@ export default function EmployeeForm({
                 Email
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-gray-50 rounded-md border border-gray-200 flex items-center text-sm text-gray-800 w-full">
+                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
                   {formData.emergencyContactEmail || "-"}
                 </div>
               ) : (
@@ -1263,7 +1259,7 @@ export default function EmployeeForm({
         </div>
       </div>
 
-      <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
+      <div className="flex justify-end gap-4 pt-6">
         <Button type="button" variant="outline" onClick={() => router.back()}>
           Cancel
         </Button>

@@ -228,19 +228,19 @@ useEffect(() => {
                     }}
                     required
                   >
-                    <SelectTrigger
-                      className={`w-full bg-white ${
-                        roleError ? "border-destructive" : ""
-                      }`}
-                    >
-                      <SelectValue placeholder="Select a role" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white">
-                      {Object.values(Roles).map((roleValue) => (
-                        <SelectItem 
-                          key={roleValue} 
-                          value={roleValue}
-                        >
+                  <SelectTrigger
+                    className={`w-full bg-background text-foreground ${
+                      roleError ? "border-destructive" : ""
+                    }`}
+                  >
+                    <SelectValue placeholder="Select a role" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card text-foreground">
+                    {Object.values(Roles).map((roleValue) => (
+                      <SelectItem 
+                        key={roleValue} 
+                        value={roleValue}
+                      >
                           {roleValue.charAt(0).toUpperCase() + roleValue.slice(1).replace(/([A-Z])/g, ' $1').trim()}
                         </SelectItem>
                       ))}
@@ -266,12 +266,12 @@ useEffect(() => {
                     setSelectedEmployee(employee || null);
                   }}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full bg-background text-foreground">
                     <SelectValue placeholder={
                       isLoading ? "Loading employees..." : "Select an employee"
                     } />
                   </SelectTrigger>
-                  <SelectContent className="max-h-60 overflow-y-auto">
+                  <SelectContent className="max-h-60 overflow-y-auto bg-card text-foreground">
                     <div className="px-3 py-2">
                       <div className="relative">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -301,8 +301,8 @@ useEffect(() => {
                   </SelectContent>
                 </Select>
                 {selectedEmployee && (
-                  <div className="mt-2 p-3 bg-gray-50 rounded-md">
-                    <p className="text-sm">
+                  <div className="mt-2 p-3 bg-muted rounded-md border border-border">
+                    <p className="text-sm text-foreground">
                       <span className="font-medium">Selected:</span> {selectedEmployee.firstName} {selectedEmployee.lastName}
                     </p>
                     <p className="text-sm text-muted-foreground">
