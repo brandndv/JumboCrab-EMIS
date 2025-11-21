@@ -1,9 +1,9 @@
 import { promisify } from "util";
-import db from "./db";
 import crypto from "crypto";
 import { Roles } from "@prisma/client";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
+import { db } from "./db";
 
 export async function createUserAccount(
   username: string,

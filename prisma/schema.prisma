@@ -5,23 +5,22 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
-  id         String   @id @default(cuid())
-  username   String   @unique
-  email      String   @unique
+  id         String    @id @default(cuid())
+  username   String    @unique
+  email      String    @unique
   password   String
   salt       String
-  role       Roles   
-  employee   Employee? // One-to-one relation with Employee
- 
+  role       Roles
+  // employee Employee? // One-to-one relation with Employee
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+  employeeId String?
   isArchived Boolean
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
-
 
 model Employee {
   id                           String            @id
@@ -58,9 +57,10 @@ model Employee {
   createdAt                    DateTime          @default(now())
   updatedAt                    DateTime          @updatedAt
 
-//One is to One relationship with Model User
-  user                         User?             @relation(fields: [userId], references: [id])
-  userId                       String?            @unique // Foreign key
+  //One is to One relationship with Model User
+  // user   User?   @relation(fields: [userId], references: [id])
+  // userId String? @unique // Foreign key
+  users User[]
 }
 
 enum GENDER {
@@ -102,7 +102,6 @@ enum DEPARTMENT {
   KITCHEN
   DINING
 }
-
 
 enum Roles {
   admin
