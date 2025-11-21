@@ -4,12 +4,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { Roles } from "@prisma/client";
 import { db } from "@/lib/db";
 
-
 export async function POST(request: NextRequest) {
   try {
-    const { username, email, password, role, employeeId } = await request.json();
+    const { username, email, password, role, employeeId } =
+      await request.json();
 
-    console.log("Received request with:", { username, email, role, employeeId });
+    console.log("Received request with:", {
+      username,
+      email,
+      role,
+      employeeId,
+    });
 
     // Validate required fields
     if (!username || !password || !email || !role) {
@@ -20,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If role is employee, employeeId is required
-    if (role === 'employee' && !employeeId) {
+    if (role === "employee" && !employeeId) {
       return NextResponse.json(
         { error: "Employee ID is required for employee role" },
         { status: 400 }
@@ -45,9 +50,10 @@ export async function POST(request: NextRequest) {
       console.log("User already exists:", { username, email });
       return NextResponse.json(
         {
-          error: existingUser.username === username
-            ? "Username already in use"
-            : "Email already in use",
+          error:
+            existingUser.username === username
+              ? "Username already in use"
+              : "Email already in use",
         },
         { status: 400 }
       );
@@ -56,7 +62,8 @@ export async function POST(request: NextRequest) {
     // Role validation
     const validRoles = Object.values(Roles);
     const roleValue = role.toString().trim();
-    const normalizedRole = roleValue.charAt(0).toLowerCase() + roleValue.slice(1);
+    const normalizedRole =
+      roleValue.charAt(0).toLowerCase() + roleValue.slice(1);
 
     if (!validRoles.includes(normalizedRole as Roles)) {
       return NextResponse.json(
@@ -66,10 +73,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if employee exists and is not already associated with a user
-    if (role === 'employee' && employeeId) {
+    if (role === "employee" && employeeId) {
       const employee = await db.employee.findUnique({
         where: { id: employeeId },
-        include: { user: true }
+        include: { user: true },
       });
 
       if (!employee) {
@@ -97,20 +104,23 @@ export async function POST(request: NextRequest) {
       salt,
       role: normalizedRole as Roles,
       isArchived: false,
-      ...(role === 'employee' && employeeId && {
-        employee: {
-          connect: { id: employeeId }
-        }
-      })
+      ...(role === "employee" &&
+        employeeId && {
+          employee: {
+            connect: { id: employeeId },
+          },
+        }),
     };
 
-    const result = await db.user.create({
+    // First create the user
+    const user = await db.user.create({
       data: userData,
       select: {
         id: true,
         username: true,
         email: true,
         role: true,
+        isArchived: true,
         createdAt: true,
         updatedAt: true,
         employee: {
@@ -118,17 +128,17 @@ export async function POST(request: NextRequest) {
             id: true,
             employeeCode: true,
             firstName: true,
-            lastName: true
-          }
-        }
-      }
+            lastName: true,
+          },
+        },
+      },
     });
 
     return NextResponse.json(
       {
         success: true,
         message: "User created successfully",
-        user: result,
+        user,
       },
       { status: 201 }
     );

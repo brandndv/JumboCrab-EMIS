@@ -6,12 +6,13 @@ import UsersProvider, {
   useUsers,
 } from "@/components/dasboard/manage-users/users-provider";
 import { Button } from "@/components/ui/button";
-import router from "next/router";
+import { useRouter } from "next/navigation"; // Note: Use 'next/navigation' instead of 'next/router'
 
 function UsersPageContent() {
   const { users, loading, error } = useUsers();
   const [managementSearch, setManagementSearch] = useState("");
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const router = useRouter();
 
   const handleEdit = (user: any) => {
     console.log("Edit user:", user);

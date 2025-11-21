@@ -9,7 +9,7 @@ import {
   type SUFFIX as SUFFIX_TYPE,
 } from "@/lib/validations/employees";
 import { generateUniqueEmployeeCode } from "@/lib/employees/employee-code";
-import type { Employee, Employee as PrismaEmployee } from "@prisma/client";
+import type { Employee as PrismaEmployee } from "@prisma/client";
 
 // ========== GET EMPLOYEES ========= //
 export async function getEmployees(): Promise<{

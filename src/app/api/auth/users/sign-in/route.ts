@@ -1,52 +1,50 @@
+// src/app/api/auth/users/sign-in/route.ts
+import { NextResponse } from "next/server";
 import { getSession, signIn } from "@/lib/auth";
-import { Roles } from "@prisma/client";
-import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const { username, password } = await request.json();
 
     if (!username || !password) {
-      console.log("Missing required fields");
       return NextResponse.json(
-        { error: "Fields are required" },
+        { error: "Username and password are required" },
         { status: 400 }
       );
     }
 
     const result = await signIn(username, password);
 
-    if (!result.success || !result.user) {
+    if (!result.success) {
       return NextResponse.json(
-        { error: result.error || "Failed to create user" },
-        { status: 400 }
+        { error: result.error || "Invalid credentials" },
+        { status: 401 }
       );
     }
-    // Create session for the new user
+
+    // Set session cookie
     const session = await getSession();
-    session.Id = result.user.id;
-    session.username = result.user.username;
-    session.email = result.user.email;
-    session.role = result.user.role;
+    session.Id = result.user?.id;
+    session.username = result.user?.username;
+    session.email = result.user?.email;
+    session.role = result.user?.role;
     session.isLoggedIn = true;
     await session.save();
 
-    return NextResponse.json(
-      {
-        success: true,
-        user: {
-          id: session.Id,
-          username: session.username,
-          email: session.email,
-          role: session.role,
-        },
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: result.user?.id,
+        username: result.user?.username,
+        email: result.user?.email,
+        role: result.user?.role,
       },
-      { status: 200 }
-    );
+    });
   } catch (error) {
-    console.error("Sign in error: ", error);
+    console.error("Sign in error:", error);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

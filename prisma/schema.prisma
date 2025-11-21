@@ -8,18 +8,17 @@ datasource db {
 }
 
 model User {
-  id         String    @id @default(cuid())
-  username   String    @unique
-  email      String    @unique
-  password   String
-  salt       String
-  role       Roles
-  // employee Employee? // One-to-one relation with Employee
-  employee   Employee? @relation(fields: [employeeId], references: [id])
-  employeeId String?
+  id       String    @id @default(cuid())
+  username String    @unique
+  email    String    @unique
+  password String
+  salt     String
+  role     Roles
+  employee Employee? // One-to-one relation with Employee
+
   isArchived Boolean
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Employee {
@@ -58,9 +57,8 @@ model Employee {
   updatedAt                    DateTime          @updatedAt
 
   //One is to One relationship with Model User
-  // user   User?   @relation(fields: [userId], references: [id])
-  // userId String? @unique // Foreign key
-  users User[]
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @unique // Foreign key
 }
 
 enum GENDER {
