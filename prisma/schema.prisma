@@ -56,7 +56,21 @@ model Employee {
   updatedAt                    DateTime          @updatedAt
   userId                       String?           @unique
   user                         User?             @relation(fields: [userId], references: [userId])
+  governmentId                 GovernmentId?     @relation("EmployeeGovernmentId")
 }
+
+model GovernmentId {
+  governmentId      String   @id @default(cuid())
+  sssNumber         String?
+  philHealthNumber  String?
+  tinNumber         String?
+  pagIbigNumber     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  employeeId        String   @unique
+  employee          Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
+}
+
 
 enum GENDER {
   MALE

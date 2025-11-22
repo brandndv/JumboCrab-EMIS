@@ -307,30 +307,20 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       roles: ["admin", "generalManager", "clerk"],
     },
     {
-      id: "contribution",
-      label: "Contribution",
+      id: "contributions",
+      label: "Contributions",
       icon: HandCoins,
-      href: `/${userRole}/contribution`,
+      href: `/${userRole}/contributions`,
       hasSubmenu: true,
       subItems: [
         {
-          label: "Overview",
+          label: "Contributions Directory",
           path: "",
           roles: ["admin", "generalManager", "clerk"],
         },
         {
-          label: "Add Contribution",
-          path: "/add",
-          roles: ["admin", "generalManager", "clerk"],
-        },
-        {
-          label: "Contribution Plans",
-          path: "/plans",
-          roles: ["admin", "generalManager", "clerk"],
-        },
-        {
-          label: "Statements",
-          path: "/statements",
+          label: "Set Contribution",
+          path: "/set-contribution",
           roles: ["admin", "generalManager", "clerk"],
         },
         {

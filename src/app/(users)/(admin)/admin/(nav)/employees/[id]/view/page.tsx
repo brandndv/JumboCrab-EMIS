@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import Link from "next/link";
 import { getEmployeeById } from "@/actions/employees-action";
-import EmployeeForm from "@/components/dasboard/manage-empoyees/employee-form";
+import EmployeeProfileTabs from "@/components/dasboard/manage-empoyees/employee-profile-tabs";
 
 export default async function EmployeeViewPage({
   params,
@@ -14,11 +14,11 @@ export default async function EmployeeViewPage({
   const resolvedParams = await Promise.resolve(params);
   const response = await getEmployeeById(resolvedParams.id);
 
-  if (!response?.data) {
+  const employee = response?.data;
+
+  if (!employee) {
     notFound();
   }
-
-  const employee = response.data;
 
   return (
     <div className="container mx-auto py-10">
@@ -36,11 +36,7 @@ export default async function EmployeeViewPage({
           </Button>
         )}
       </div>
-      <EmployeeForm
-        employeeId={employee.employeeId}
-        mode="view"
-        initialData={employee}
-      />
+      <EmployeeProfileTabs employee={employee} />
     </div>
   );
 }
