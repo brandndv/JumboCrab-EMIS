@@ -37,14 +37,11 @@ export type SUFFIX = (typeof SUFFIX)[number];
 export const EMPLOYEE_CODE_REGEX = /^EMP-\d{3}$/;
 
 export const employeeSchema = z.object({
-  id: z.string().optional(),
+  employeeId: z.string().optional(),
   userId: z.string().optional().nullable(),
   employeeCode: z
     .string()
-    .regex(
-      EMPLOYEE_CODE_REGEX,
-      "Employee code must follow the format EMP-000"
-    ),
+    .regex(EMPLOYEE_CODE_REGEX, "Employee code must follow the format EMP-000"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   middleName: z.string().optional().nullable(),
@@ -71,18 +68,22 @@ export const employeeSchema = z.object({
   state: z.string().optional().nullable(),
   postalCode: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
- img: z
-  .union([
-    z.string()
-      .refine(
-        val => val === '' || /^https?:\/\//.test(val) || /^data:image\/[a-zA-Z]+;base64,/.test(val),
-        { message: 'Invalid image format' }
-      )
-      .transform(val => val || null),
-    z.null()
-  ])
-  .optional()
-  .default(null),
+  img: z
+    .union([
+      z
+        .string()
+        .refine(
+          (val) =>
+            val === "" ||
+            /^https?:\/\//.test(val) ||
+            /^data:image\/[a-zA-Z]+;base64,/.test(val),
+          { message: "Invalid image format" }
+        )
+        .transform((val) => val || null),
+      z.null(),
+    ])
+    .optional()
+    .default(null),
   startDate: z
     .union([z.string(), z.date()])
     .pipe(z.coerce.date())
@@ -92,17 +93,33 @@ export const employeeSchema = z.object({
     .pipe(z.coerce.date())
     .optional()
     .nullable(),
-  isEnded: z.boolean().optional(),
+  isEnded: z.boolean().optional().nullable(),
   position: z.string().min(1, "Position is required"),
   department: z.string().min(1, "Department is required"),
   employmentStatus: z.enum(EMPLOYMENT_STATUS),
   currentStatus: z.enum(CURRENT_STATUS),
   email: z.string().email("Invalid email").optional().nullable(),
   phone: z.string().optional().nullable(),
-  emergencyContactName: z.string().min(1, "Emergency contact name is required").optional().nullable(),
-  emergencyContactRelationship: z.string().min(1, "Relationship is required").optional().nullable(),
-  emergencyContactPhone: z.string().min(1, "Emergency contact phone is required").optional().nullable(),
-  emergencyContactEmail: z.string().email("Invalid emergency contact email").optional().nullable(),
+  emergencyContactName: z
+    .string()
+    .min(1, "Emergency contact name is required")
+    .optional()
+    .nullable(),
+  emergencyContactRelationship: z
+    .string()
+    .min(1, "Relationship is required")
+    .optional()
+    .nullable(),
+  emergencyContactPhone: z
+    .string()
+    .min(1, "Emergency contact phone is required")
+    .optional()
+    .nullable(),
+  emergencyContactEmail: z
+    .string()
+    .email("Invalid emergency contact email")
+    .optional()
+    .nullable(),
   description: z.string().optional().nullable(),
   isArchived: z.boolean().optional(),
   createdAt: z.date().optional(),

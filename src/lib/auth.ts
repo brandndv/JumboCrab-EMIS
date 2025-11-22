@@ -1,9 +1,9 @@
 import { promisify } from "util";
-import db from "./db";
 import crypto from "crypto";
 import { Roles } from "@prisma/client";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
+import { db } from "./db";
 
 export async function createUserAccount(
   username: string,
@@ -23,9 +23,10 @@ export async function createUserAccount(
         password: hash,
         salt,
         role,
-        isArchived: false,
+        isDisabled: false,
       },
     });
+
     return { success: true, user }; // Fixed return statement
   } catch (error) {
     console.error("Create user account error", error);
@@ -44,7 +45,7 @@ export async function hashPassword(password: string) {
 }
 
 export type sessionData = {
-  Id?: string;
+  userId?: string;
   username?: string;
   email?: string;
   role?: Roles;
@@ -81,14 +82,43 @@ export async function getUserRole(): Promise<Roles | null> {
 }
 // ======== SIGN IN LOGIC ======== //
 
+// src/lib/auth.ts
 export async function signIn(username: string, password: string) {
   try {
-    const user = await db.user.findUnique({ where: { username } });
-    if (!user) return { success: false, error: "Invalid credentials" };
+    const user = await db.user.findUnique({
+      where: { username },
+      include: {
+        employee: {
+          select: {
+            employeeId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return { success: false, error: "Invalid username or password" };
+    }
+
     const isValid = await verifyPassword(password, user.password, user.salt);
 
-    if (!isValid) return { success: false, error: "Invalid credentials" };
-    return { success: true, user };
+    if (!isValid) {
+      return { success: false, error: "Invalid username or password" };
+    }
+
+    return {
+      success: true,
+      user: {
+        userId: user.userId,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        isDisabled: user.isDisabled,
+        employee: user.employee,
+      },
+    };
   } catch (error) {
     console.error("Sign in error:", error);
     return { success: false, error: "Failed to sign in" };

@@ -1,5 +1,4 @@
 "use client";
-"use client";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,52 +9,78 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Eye, EyeOff, Search } from "lucide-react";
 import { Roles } from "@prisma/client";
 import { getEmployeesWithoutUser } from "@/actions/employees-action";
+import { useRouter } from "next/navigation";
 
 type Employee = {
-  id: string;
+  employeeId: string; // Changed from id to employeeId
   firstName: string;
   lastName: string;
   employeeCode: string;
-  email: string | null;
+  email?: string | null;
 };
 
-const CreateUserForm = () => {
+type CreateUserFormProps = {
+  defaultEmployeeId?: string;
+};
+
+const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Roles | "">("");
+  const [role, setRole] = useState<Roles | "">(
+    defaultEmployeeId ? Roles.employee : ""
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [roleError, setRoleError] = useState("");
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
+    null
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-useEffect(() => {
-  const fetchEmployees = async () => {
-    if (role === 'employee') {
-      setIsLoading(true)
-      try {
-        const response = await getEmployeesWithoutUser()
-        if (response.success && response.data) {
-          setEmployees(response.data)
-        } else {
-          console.error('Failed to fetch employees:', response.error)
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      if (role === "employee" || defaultEmployeeId) {
+        setIsLoading(true);
+        try {
+          const response = await getEmployeesWithoutUser();
+          if (response.success && response.data) {
+            setEmployees(response.data);
+            if (defaultEmployeeId) {
+              const match = response.data.find(
+                (emp) => emp.employeeId === defaultEmployeeId
+              );
+              if (match) {
+                setSelectedEmployee(match);
+                setEmail(match.email ?? "");
+                setRole(Roles.employee);
+              }
+            }
+          } else {
+            console.error("Failed to fetch employees:", response.error);
+          }
+        } catch (error) {
+          console.error("Error fetching employees:", error);
+        } finally {
+          setIsLoading(false);
         }
-      } catch (error) {
-        console.error('Error fetching employees:', error)
-      } finally {
-        setIsLoading(false)
       }
-    }
-  }
-  fetchEmployees()
-}, [role])
+    };
+    fetchEmployees();
+  }, [role, defaultEmployeeId]);
 
   useEffect(() => {
     if (role !== "employee") {
@@ -66,6 +91,13 @@ useEffect(() => {
 
     setEmail(selectedEmployee?.email ?? "");
   }, [role, selectedEmployee]);
+
+  useEffect(() => {
+    if (selectedEmployee) {
+      setRole(Roles.employee);
+      setEmail(selectedEmployee.email ?? "");
+    }
+  }, [selectedEmployee]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -79,7 +111,7 @@ useEffect(() => {
       setRoleError("Please select a role");
       return;
     }
-    if (role === 'employee' && !selectedEmployee) {
+    if (role === "employee" && !selectedEmployee) {
       alert("Please select an employee");
       return;
     }
@@ -93,13 +125,15 @@ useEffect(() => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
-          username, 
-          email, 
-          password, 
-          role, 
-          employee: selectedEmployee ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}` : null,
-          employeeId: selectedEmployee?.id || null
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+          role,
+          employee: selectedEmployee
+            ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+            : null,
+          employeeId: selectedEmployee?.employeeId || null,
         }),
       });
 
@@ -111,19 +145,18 @@ useEffect(() => {
 
       // Success case
       console.log("User created successfully:", data);
-      
+
       // Clear form on success
       setUsername("");
       setEmail("");
       setPassword("");
       setRole("");
-      
+
       // Show success message
       alert("User created successfully!");
-      
-      // Optionally redirect to users list
-      // router.push('/admin/users');
 
+      // Optionally redirect to users list
+      router.push("/admin/users");
     } catch (error) {
       console.error("Error creating user:", error);
       // Show error message to user
@@ -133,8 +166,8 @@ useEffect(() => {
     }
   };
   return (
-    <div className="flex flex-col items-center justify-center h-screen p-6">
-      <Card className="w-full max-w-2xl">
+    <div className="w-full max-w-4xl mx-auto">
+      <Card className="shadow-sm border border-border/70">
         <CardHeader>
           <CardTitle className="text-2xl font-bold">Create New User</CardTitle>
           <CardDescription>
@@ -229,19 +262,20 @@ useEffect(() => {
                     required
                   >
                     <SelectTrigger
-                      className={`w-full bg-white ${
+                      className={`w-full bg-background text-foreground ${
                         roleError ? "border-destructive" : ""
                       }`}
                     >
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white">
+                    <SelectContent className="bg-card text-foreground">
                       {Object.values(Roles).map((roleValue) => (
-                        <SelectItem 
-                          key={roleValue} 
-                          value={roleValue}
-                        >
-                          {roleValue.charAt(0).toUpperCase() + roleValue.slice(1).replace(/([A-Z])/g, ' $1').trim()}
+                        <SelectItem key={roleValue} value={roleValue}>
+                          {roleValue.charAt(0).toUpperCase() +
+                            roleValue
+                              .slice(1)
+                              .replace(/([A-Z])/g, " $1")
+                              .trim()}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -254,24 +288,31 @@ useEffect(() => {
                 </div>
               </div>
             </div>
-            {role === 'employee' && (
+            {role === "employee" && (
               <div className="space-y-2">
                 <label className="text-sm font-medium leading-none">
                   Select Employee
                 </label>
                 <Select
-                  value={selectedEmployee?.id || ""}
+                  value={selectedEmployee?.employeeId || ""}
                   onValueChange={(value) => {
-                    const employee = employees.find(emp => emp.id === value);
+                    const employee = employees.find(
+                      (emp) => emp.employeeId === value
+                    );
                     setSelectedEmployee(employee || null);
+                    setEmail(employee?.email ?? "");
                   }}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={
-                      isLoading ? "Loading employees..." : "Select an employee"
-                    } />
+                  <SelectTrigger className="w-full bg-background text-foreground">
+                    <SelectValue
+                      placeholder={
+                        isLoading
+                          ? "Loading employees..."
+                          : "Select an employee"
+                      }
+                    />
                   </SelectTrigger>
-                  <SelectContent className="max-h-60 overflow-y-auto">
+                  <SelectContent className="max-h-60 overflow-y-auto bg-card text-foreground">
                     <div className="px-3 py-2">
                       <div className="relative">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -285,25 +326,33 @@ useEffect(() => {
                       </div>
                     </div>
                     {employees
-                      .filter(emp => 
+                      .filter((emp) =>
                         `${emp.firstName} ${emp.lastName} ${emp.employeeCode}`
                           .toLowerCase()
                           .includes(searchTerm.toLowerCase())
                       )
                       .map((employee) => (
-                        <SelectItem key={employee.id} value={employee.id}>
+                        <SelectItem
+                          key={employee.employeeId}
+                          value={employee.employeeId}
+                        >
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{employee.employeeCode}</span>
-                            <span>{employee.firstName} {employee.lastName}</span>
+                            <span className="font-medium">
+                              {employee.employeeCode}
+                            </span>
+                            <span>
+                              {employee.firstName} {employee.lastName}
+                            </span>
                           </div>
                         </SelectItem>
                       ))}
                   </SelectContent>
                 </Select>
                 {selectedEmployee && (
-                  <div className="mt-2 p-3 bg-gray-50 rounded-md">
-                    <p className="text-sm">
-                      <span className="font-medium">Selected:</span> {selectedEmployee.firstName} {selectedEmployee.lastName}
+                  <div className="mt-2 p-3 bg-muted rounded-md border border-border">
+                    <p className="text-sm text-foreground">
+                      <span className="font-medium">Selected:</span>{" "}
+                      {selectedEmployee.firstName} {selectedEmployee.lastName}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       Employee ID: {selectedEmployee.employeeCode}
@@ -314,10 +363,16 @@ useEffect(() => {
             )}
 
             <div className="flex justify-end gap-4 pt-4">
-              <Button variant="outline" type="button">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => router.push("/admin/users")}
+              >
                 Cancel
               </Button>
-              <Button type="submit">Create User</Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Creating..." : "Create User"}
+              </Button>
             </div>
           </form>
         </CardContent>

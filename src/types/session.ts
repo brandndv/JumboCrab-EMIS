@@ -1,10 +1,10 @@
 // src/types/session.ts
-import { Roles } from "@prisma/client";
+import { User } from "@/lib/validations/users";
+import { Employee } from "@/lib/validations/employees";
 
 export interface Session {
-  id?: string;
-  username?: string;
-  email?: string;
-  role?: Roles;
-  isLoggedIn: boolean;
+  user: User & {
+    employee?: Employee | null;
+  };
+  expires: string;
 }

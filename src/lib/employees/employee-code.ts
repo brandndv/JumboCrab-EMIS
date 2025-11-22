@@ -16,7 +16,7 @@ export async function generateUniqueEmployeeCode(): Promise<string> {
 
     const existing = await db.employee.findUnique({
       where: { employeeCode },
-      select: { id: true },
+      select: { employeeId: true },
     });
 
     if (!existing) {

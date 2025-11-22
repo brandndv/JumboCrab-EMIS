@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { getEmployees } from "@/actions/employees-action";
 import { Employee, validateEmployee } from "@/lib/validations/employees";
 
@@ -16,6 +23,8 @@ type EmployeeContextType = {
   selectedStatus: string | null;
   setSelectedStatus: (status: string | null) => void;
   departments: string[];
+  showArchived: boolean;
+  setShowArchived: (value: boolean) => void;
   refreshEmployees: () => Promise<void>;
 };
 
@@ -23,10 +32,8 @@ const EmployeesContext = createContext<EmployeeContextType | undefined>(
   undefined
 );
 
-export function EmployeesProvider({ children }: { children: React.ReactNode }) {
-  // State declarations at the top level (no conditional hooks)
+function useEmployeesData() {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -37,20 +44,19 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
   const [departments, setDepartments] = useState<string[]>([
     "KITCHEN",
     "DINING",
-  ]); // Default departments
+  ]);
+  const [showArchived, setShowArchived] = useState<boolean>(false);
 
-  const fetchEmployeesData = async () => {
+  const fetchEmployeesData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      console.log("Fetching employees...");
       const response = await getEmployees();
 
       if (!response.success || !response.data) {
         throw new Error(response.error || "Failed to fetch employees");
       }
 
-      // Validate each employee
       const validatedEmployees: Employee[] = [];
       for (const emp of response.data) {
         const result = validateEmployee(emp);
@@ -62,12 +68,11 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
       }
 
       setEmployees(validatedEmployees);
-      // Extract unique departments from employees
+
       const uniqueDepartments = Array.from(
         new Set(validatedEmployees.map((emp) => emp.department).filter(Boolean))
       ) as string[];
       setDepartments((prev) => [...new Set([...prev, ...uniqueDepartments])]);
-      console.log(`Successfully loaded ${validatedEmployees.length} employees`);
     } catch (err) {
       console.error("Error in fetchEmployeesData:", err);
       setError(
@@ -76,29 +81,27 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchEmployeesData();
-  }, []);
+  }, [fetchEmployeesData]);
 
-  // Loading and error states moved to the render part, not before hooks
-
-  // Apply filters and search
-  useEffect(() => {
+  const filteredEmployees = useMemo(() => {
     let result = [...employees];
 
-    // Apply department filter
     if (selectedDepartment) {
       result = result.filter((emp) => emp.department === selectedDepartment);
     }
 
-    // Apply status filter
     if (selectedStatus) {
       result = result.filter((emp) => emp.currentStatus === selectedStatus);
     }
 
-    // Apply search term
+    result = result.filter((emp) =>
+      showArchived ? Boolean(emp.isArchived) : !emp.isArchived
+    );
+
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(
@@ -110,13 +113,12 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    setFilteredEmployees(result);
-  }, [employees, selectedDepartment, selectedStatus, searchTerm]);
+    return result;
+  }, [employees, selectedDepartment, selectedStatus, searchTerm, showArchived]);
 
-  // Provide the context value
-  const contextValue = {
-    employees, // The full list of employees
-    filteredEmployees, // The filtered list of employees
+  return {
+    employees,
+    filteredEmployees,
     loading,
     error,
     searchTerm,
@@ -126,8 +128,14 @@ export function EmployeesProvider({ children }: { children: React.ReactNode }) {
     selectedStatus,
     setSelectedStatus,
     departments,
+    showArchived,
+    setShowArchived,
     refreshEmployees: fetchEmployeesData,
   };
+}
+
+export function EmployeesProvider({ children }: { children: React.ReactNode }) {
+  const contextValue = useEmployeesData();
 
   return (
     <EmployeesContext.Provider value={contextValue}>

@@ -48,15 +48,21 @@ function ResetFiltersButton() {
 }
 
 function EmployeesContent() {
-  const { filteredEmployees, loading, error } = useEmployees();
+  const {
+    filteredEmployees,
+    loading,
+    error,
+    showArchived,
+    setShowArchived,
+  } = useEmployees();
   const router = useRouter();
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading employees...</p>
+        <div className="bg-card border border-border rounded-xl shadow-sm px-8 py-10 text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-primary/30 border-t-transparent mx-auto"></div>
+          <p className="text-muted-foreground">Loading employees...</p>
         </div>
       </div>
     );
@@ -64,24 +70,20 @@ function EmployeesContent() {
 
   if (error) {
     return (
-      <div className="bg-red-50 border-l-4 border-red-400 p-4">
-        <div className="flex">
-          <div className="shrink-0">
-            <svg
-              className="h-5 w-5 text-red-400"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </div>
-          <div className="ml-3">
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
+      <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-destructive shadow-sm">
+        <div className="flex items-start space-x-3">
+          <svg
+            className="h-5 w-5 mt-0.5"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <p className="text-sm">{error}</p>
         </div>
       </div>
     );
@@ -91,20 +93,30 @@ function EmployeesContent() {
     <div className="space-y-6 py-10 px-5 md:px-20">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Employees</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Employees</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Manage your employee's records
           </p>
         </div>
-        <Button
-          onClick={() => router.push("/admin/employees/new")}
-          className="w-full md:w-auto"
-        >
-          Add New Employee
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <Button
+            variant="outline"
+            onClick={() => setShowArchived(!showArchived)}
+            className="w-full sm:w-auto"
+          >
+            {showArchived ? "Hide Archived" : "View Archived"}
+          </Button>
+          <Button
+            onClick={() => router.push("/admin/employees/new")}
+            className="w-full sm:w-auto"
+            disabled={showArchived}
+          >
+            Add New Employee
+          </Button>
+        </div>
       </div>
 
-      <div className="mt-6 bg-white shadow rounded-lg p-4">
+      <div className="mt-6 bg-card text-card-foreground border border-border shadow-sm rounded-xl p-5">
         <div className="mb-6">
           <EmployeeComboBox />
         </div>
@@ -113,7 +125,7 @@ function EmployeesContent() {
             <EmployeesTable employees={filteredEmployees} />
           ) : (
             <div className="text-center py-12">
-              <div className="mx-auto h-24 w-24 text-gray-300 mb-4">
+              <div className="mx-auto h-24 w-24 text-muted-foreground opacity-40 mb-4">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="100%"
@@ -129,8 +141,8 @@ function EmployeesContent() {
                   <line x1="8" y1="12" x2="16" y2="12"></line>
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-gray-900">No employees found</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <h3 className="text-lg font-medium text-foreground">No employees found</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
                 Try adjusting your search or filter criteria
               </p>
               <div className="mt-6">

@@ -151,7 +151,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "manager", "supervisor"],
         },
         {
-          label: "Create User",
+          label: "Add Employee",
           path: "/new",
           roles: ["admin", "generalManager"],
         },
@@ -647,7 +647,8 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                       isSidebarCollapsed ? "p-0" : "px-3 py-2"
                     } ${
                       pathname.startsWith(item.href) &&
-                      (pathname === item.href || pathname[item.href.length] === "/")
+                      (pathname === item.href ||
+                        pathname[item.href.length] === "/")
                         ? "bg-orange-600 text-white hover:bg-orange-600 hover:text-white"
                         : "text-foreground hover:bg-orange-100 dark:hover:bg-orange-900/30 hover:text-orange-600"
                     }`}
@@ -656,7 +657,8 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                       asChild
                       tooltip={{
                         children: item.label,
-                        className: "!bg-orange-600 !text-white border-orange-500 shadow-lg",
+                        className:
+                          "!bg-orange-600 !text-white border-orange-500 shadow-lg",
                         arrowClassName: "bg-orange-600 fill-orange-600",
                       }}
                       className={`w-full hover:bg-transparent focus-visible:ring-0 text-inherit hover:text-inherit ${
@@ -668,12 +670,16 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                       <Link
                         href={item.href}
                         className={`${
-                          isSidebarCollapsed ? "flex w-full justify-center" : "block w-full"
+                          isSidebarCollapsed
+                            ? "flex w-full justify-center"
+                            : "block w-full"
                         }`}
                       >
                         <div
                           className={`flex items-center ${
-                            isSidebarCollapsed ? "justify-center" : "justify-start"
+                            isSidebarCollapsed
+                              ? "justify-center"
+                              : "justify-start"
                           } ${isSidebarCollapsed ? "gap-0" : "gap-3"} w-full`}
                         >
                           <item.icon className="h-4 w-4 shrink-0" />

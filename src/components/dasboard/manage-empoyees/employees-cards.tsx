@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal } from "lucide-react";
-import { Employee, SUFFIX } from "@/lib/validations/employees";
+import { Employee } from "@/lib/validations/employees";
 import {
   Pagination,
   PaginationContent,
@@ -13,18 +12,9 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { EmployeesActions } from "./employees-crud";
 import { Separator } from "@/components/ui/separator";
-
-// ========== PAGINATION LOGIC ========= //
+import { useEmployees } from "./employees-provider";
 
 export default function EmployeesCards({
   employees,
@@ -32,6 +22,7 @@ export default function EmployeesCards({
   employees: Employee[];
 }) {
   const router = useRouter();
+  const { refreshEmployees, showArchived } = useEmployees();
   // State for pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(8);
@@ -56,8 +47,75 @@ export default function EmployeesCards({
 
   // Handle archive employee
   const handleArchiveClick = (employee: Employee) => {
-    // TODO: Implement archive functionality with confirmation dialog
-    console.log("Archive employee:", employee.id);
+    if (!employee.employeeId) return;
+    const confirmed = window.confirm(
+      `Archive ${employee.firstName ?? ""} ${employee.lastName ?? ""}?`
+    );
+    if (!confirmed) return;
+
+    fetch(`/api/employees/${employee.employeeId}/archive`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isArchived: true }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to archive employee");
+        }
+        await refreshEmployees();
+      })
+      .catch((err) => {
+        console.error("Archive failed:", err);
+        alert(
+          err instanceof Error ? err.message : "Failed to archive employee"
+        );
+      });
+  };
+
+  const handleUnarchiveClick = (employee: Employee) => {
+    if (!employee.employeeId) return;
+    fetch(`/api/employees/${employee.employeeId}/archive`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isArchived: false }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to unarchive employee");
+        }
+        await refreshEmployees();
+      })
+      .catch((err) => {
+        console.error("Unarchive failed:", err);
+        alert(
+          err instanceof Error ? err.message : "Failed to unarchive employee"
+        );
+      });
+  };
+
+  const handleDeleteClick = (employee: Employee) => {
+    if (!employee.employeeId) return;
+    const confirmed = window.confirm(
+      `Permanently delete ${employee.firstName ?? ""} ${
+        employee.lastName ?? ""
+      }?`
+    );
+    if (!confirmed) return;
+
+    fetch(`/api/employees/${employee.employeeId}`, { method: "DELETE" })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to delete employee");
+        }
+        await refreshEmployees();
+      })
+      .catch((err) => {
+        console.error("Delete failed:", err);
+        alert(err instanceof Error ? err.message : "Failed to delete employee");
+      });
   };
 
   // Calculate pagination
@@ -105,43 +163,31 @@ export default function EmployeesCards({
     }
   };
 
-  const handleView = (employee: Employee) => {
-    router.push(`/admin/employees/${employee.id}`);
-  };
-
-  const handleEdit = (employee: Employee) => {
-    router.push(`/admin/employees/${employee.id}/edit`);
-  };
-
-  const handleArchive = (employee: Employee) => {
-    handleArchiveClick(employee);
-  };
-
   return (
     <div className="w-full">
       {/* Grid: auto-fill with a min card width so cards don't shrink too much. Tweak 280px as needed. */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 p-4">
         {currentItems.map((employee) => (
           <div
-            key={employee.id}
-            className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow flex flex-col h-[280px]"
+            key={employee.employeeId}
+            className="bg-card text-card-foreground rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col min-h-[320px]"
           >
             <div className="flex-1 flex flex-col">
               {/* Header with Avatar and Name */}
-              <div className="flex justify-between items-start w-full">
+              <div className="flex justify-between items-start w-full gap-2">
                 <div className="flex items-center space-x-2 flex-1 min-w-0">
-                  <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center shrink-0">
-                    <span className="text-blue-600 font-medium text-base">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <span className="font-semibold text-base">
                       {employee.firstName?.charAt(0)}
                       {employee.lastName?.charAt(0)}
                     </span>
                   </div>
                   {/* Name/position: allow two lines for name to avoid over-truncation */}
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-base font-semibold text-gray-900 line-clamp-2">
+                    <h3 className="text-base font-semibold text-foreground line-clamp-2">
                       {employee.firstName} {employee.lastName}
                     </h3>
-                    <p className="text-xs text-gray-600 truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       {employee.position || "No position"}
                     </p>
                   </div>
@@ -151,6 +197,9 @@ export default function EmployeesCards({
                     employee={employee}
                     onEdit={handleEditEmployee}
                     onArchive={handleArchiveClick}
+                    onUnarchive={handleUnarchiveClick}
+                    onDelete={handleDeleteClick}
+                    isArchivedView={showArchived}
                   />
                 </div>
               </div>
@@ -160,15 +209,15 @@ export default function EmployeesCards({
               <div className="flex-1 min-w-0 space-y-3">
                 {employee.description && (
                   <div>
-                    <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-3">
+                    <p className="text-sm text-muted-foreground line-clamp-3">
                       {employee.description}
                     </p>
                   </div>
                 )}
-                <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                <div className="space-y-1 text-sm text-muted-foreground">
                   <div className="flex items-center">
                     <svg
-                      className="w-4 h-4 mr-2 text-gray-400"
+                      className="w-4 h-4 mr-2 text-muted-foreground"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -184,7 +233,7 @@ export default function EmployeesCards({
                   </div>
                   <div className="flex items-center">
                     <svg
-                      className="w-4 h-4 mr-2 text-gray-400 shrink-0"
+                      className="w-4 h-4 mr-2 text-muted-foreground shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -205,7 +254,7 @@ export default function EmployeesCards({
                   </div>
                   <div className="flex items-center">
                     <svg
-                      className="w-4 h-4 mr-2 text-gray-400"
+                      className="w-4 h-4 mr-2 text-muted-foreground"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -222,35 +271,67 @@ export default function EmployeesCards({
                       ? new Date(employee.startDate).toLocaleDateString()
                       : "N/A"}
                   </div>
+                  {(employee.currentStatus === "ENDED" ||
+                    employee.currentStatus === "INACTIVE") && (
+                    <div className="flex items-center">
+                      <svg
+                        className="w-4 h-4 mr-2 text-muted-foreground"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4l2 2m6-4a8 8 0 11-16 0 8 8 0 0116 0z"
+                        />
+                      </svg>
+                      End:{" "}
+                      {employee.endDate
+                        ? new Date(employee.endDate).toLocaleDateString()
+                        : "N/A"}
+                    </div>
+                  )}
                 </div>
               </div>
               {/* Status and Preview */}
               <Separator className="my-2" />
               <div>
                 <div className="flex justify-between items-center w-full">
-                  <div
-                    className={`mr-auto px-3 py-1 rounded-full text-xs font-medium ${
-                      employee.currentStatus === "ACTIVE"
-                        ? "bg-green-100 text-green-800"
-                        : employee.currentStatus === "ON_LEAVE"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : employee.currentStatus === "VACATION"
-                        ? "bg-blue-100 text-blue-800"
-                        : employee.currentStatus === "SICK_LEAVE"
-                        ? "bg-purple-100 text-purple-800"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    {employee.currentStatus
+                  {(() => {
+                    const statusStyles: Record<string, string> = {
+                      ACTIVE:
+                        "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100",
+                      ON_LEAVE:
+                        "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-100",
+                      VACATION:
+                        "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-100",
+                      SICK_LEAVE:
+                        "bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-100",
+                    };
+                    const badgeClass =
+                      statusStyles[employee.currentStatus ?? ""] ||
+                      "bg-muted text-muted-foreground";
+                    const statusLabel = employee.currentStatus
                       ? employee.currentStatus.replace("_", " ")
-                      : "Inactive"}
-                  </div>
+                      : "Inactive";
+
+                    return (
+                      <div
+                        className={`mr-auto px-3 py-1 rounded-full text-xs font-medium ${badgeClass}`}
+                      >
+                        {statusLabel}
+                      </div>
+                    );
+                  })()}
                   <div className="flex items-center space-x-1">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        employee.id && handleViewEmployee(employee.id)
+                        employee.employeeId &&
+                        handleViewEmployee(employee.employeeId)
                       }
                     >
                       View

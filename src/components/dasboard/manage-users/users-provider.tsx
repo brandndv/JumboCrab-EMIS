@@ -3,7 +3,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { getUsers } from "@/actions/users-action";
 import { User } from "@/lib/validations/users";
-import { Roles } from "@prisma/client";
 
 type UsersContextType = {
   users: User[];
@@ -19,10 +18,10 @@ type UsersContextType = {
 
 const UsersContext = createContext<UsersContextType | undefined>(undefined);
 
-export function UsersProvider({ 
+export function UsersProvider({
   children,
-  initialUsers = []
-}: { 
+  initialUsers = [],
+}: {
   children: React.ReactNode;
   initialUsers?: User[];
 }) {
@@ -57,12 +56,12 @@ export function UsersProvider({
   useEffect(() => {
     let result = [...users];
     if (selectedRole) {
-      result = result.filter(user => user.role === selectedRole);
+      result = result.filter((user) => user.role === selectedRole);
     }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(
-        user =>
+        (user) =>
           user.username?.toLowerCase().includes(term) ||
           user.email?.toLowerCase().includes(term)
       );

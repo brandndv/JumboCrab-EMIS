@@ -45,7 +45,25 @@ function EmployeeEditPageContent({
           return;
         }
 
-        setEmployee(data);
+        // Normalize nullable fields from Prisma to match the Employee form type
+        setEmployee({
+          ...data,
+          isEnded: data.isEnded ?? false,
+          img: data.img ?? null,
+          emergencyContactName: data.emergencyContactName ?? null,
+          emergencyContactRelationship:
+            data.emergencyContactRelationship ?? null,
+          emergencyContactPhone: data.emergencyContactPhone ?? null,
+          emergencyContactEmail: data.emergencyContactEmail ?? null,
+          address: data.address ?? null,
+          city: data.city ?? null,
+          state: data.state ?? null,
+          postalCode: data.postalCode ?? null,
+          country: data.country ?? null,
+          email: data.email ?? null,
+          phone: data.phone ?? null,
+          description: data.description ?? null,
+        });
       } catch (err) {
         console.error("Error in EmployeeEditPage:", err);
         setError("Failed to load employee data");
@@ -78,15 +96,15 @@ function EmployeeEditPageContent({
           </p>
         </div>
         <Button asChild variant="outline" className="gap-2">
-          <Link href={`/admin/employees/${employee.id}/view`}>
+          <Link href={`/admin/employees/${employee.employeeId}/view`}>
             <ArrowLeft className="h-4 w-4" />
             Back to View
           </Link>
         </Button>
       </div>
-      {employee?.id && (
+      {employee?.employeeId && (
         <EmployeeForm
-          employeeId={employee.id}
+          employeeId={employee.employeeId}
           mode="edit"
           initialData={employee}
         />

@@ -1,4 +1,4 @@
-// src/app/(users)/(admin)/admin/(nav)/employees/[id]/page.tsx
+// src/app/(users)/(admin)/admin/(nav)/users/[id]/page.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -13,7 +13,7 @@ interface PageProps {
   };
 }
 
-export default function EmployeePage({ params }: PageProps) {
+export default function UserPage({ params }: PageProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,10 +30,10 @@ export default function EmployeePage({ params }: PageProps) {
           return;
         }
 
-        router.push(`/admin/employees/${id}/view`);
+        router.push(`/admin/users/${id}/view`);
       } catch (err) {
-        console.error("Error in EmployeePage:", err);
-        setError("Failed to load employee data");
+        console.error("Error in UserPage:", err);
+        setError("Failed to load user data");
       } finally {
         setIsLoading(false);
       }

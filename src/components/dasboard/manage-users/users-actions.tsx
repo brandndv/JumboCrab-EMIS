@@ -8,15 +8,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
-import { User } from "@/lib/validations/users";
+import { UserWithEmployee } from "@/lib/validations/users";
 
 interface UsersActionsProps {
-  user: User;
+  user: UserWithEmployee;
   onEdit: () => void;
-  onDelete: () => void;
+  onDisable: () => void;
+  onEnable?: () => void;
+  onDelete?: () => void;
 }
 
-export function UsersActions({ user, onEdit, onDelete }: UsersActionsProps) {
+export function UsersActions({
+  user,
+  onEdit,
+  onDisable,
+  onEnable,
+  onDelete,
+}: UsersActionsProps) {
+  const isDisabled = !!user.isDisabled;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -26,15 +36,29 @@ export function UsersActions({ user, onEdit, onDelete }: UsersActionsProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onEdit}>
-          Edit
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="text-red-600 focus:bg-red-50 focus:text-red-700"
-          onClick={onDelete}
-        >
-          Delete
-        </DropdownMenuItem>
+        {!isDisabled ? (
+          <>
+            <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-red-600 focus:bg-red-50 focus:text-red-700"
+              onClick={onDisable}
+            >
+              Disable
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <>
+            {onEnable && <DropdownMenuItem onClick={onEnable}>Enable</DropdownMenuItem>}
+            {onDelete && (
+              <DropdownMenuItem
+                className="text-red-600 focus:bg-red-50 focus:text-red-700"
+                onClick={onDelete}
+              >
+                Delete
+              </DropdownMenuItem>
+            )}
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
