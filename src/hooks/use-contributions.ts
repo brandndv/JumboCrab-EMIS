@@ -3,78 +3,91 @@
 import { useEffect, useMemo, useState } from "react";
 
 export type ContributionRow = {
-  id: string;
-  employeeId?: string;
+  employeeId: string;
   employeeName: string;
   employeeCode: string;
   avatarUrl?: string | null;
-  eeContribution: number;
+  department?: string;
+  eeTotal: number;
+  isSet?: boolean;
   updatedAt?: string;
+  sssEe?: number;
+  isSssActive?: boolean;
+  philHealthEe?: number;
+  isPhilHealthActive?: boolean;
+  pagIbigEe?: number;
+  isPagIbigActive?: boolean;
+  withholdingEe?: number;
+  isWithholdingActive?: boolean;
+  // Keep ER values for admin views even if hidden on the directory
+  sssEr?: number;
+  philHealthEr?: number;
+  pagIbigEr?: number;
+  withholdingEr?: number;
 };
 
-const MOCK_CONTRIBUTIONS: ContributionRow[] = [
-  {
-    id: "c1",
-    employeeId: "e1",
-    employeeName: "Alex Carter",
-    employeeCode: "EMP-001",
-    avatarUrl: null,
-    eeContribution: 1200,
-    updatedAt: "2024-06-04",
-  },
-  {
-    id: "c2",
-    employeeId: "e2",
-    employeeName: "Jamie Lee",
-    employeeCode: "EMP-014",
-    avatarUrl: null,
-    eeContribution: 980,
-    updatedAt: "2024-06-02",
-  },
-  {
-    id: "c3",
-    employeeId: "e3",
-    employeeName: "Morgan Silva",
-    employeeCode: "EMP-027",
-    avatarUrl: null,
-    eeContribution: 1500,
-    updatedAt: "2024-05-30",
-  },
-];
-
 export function useContributionsState() {
-  const [contributions, setContributions] =
-    useState<ContributionRow[]>(MOCK_CONTRIBUTIONS);
+  const [contributions, setContributions] = useState<ContributionRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "set" | "not-set">("all");
 
+  // Load the directory from the API; keep it simple for now.
   useEffect(() => {
-    // Placeholder fetch until backend is wired
-    setLoading(true);
-    setError(null);
-    const timer = setTimeout(() => {
-      setContributions(MOCK_CONTRIBUTIONS);
-      setLoading(false);
-    }, 300);
-    return () => clearTimeout(timer);
+    refreshContributions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredContributions = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return contributions;
-
-    return contributions.filter((row) =>
-      `${row.employeeName} ${row.employeeCode}`.toLowerCase().includes(term)
-    );
-  }, [contributions, searchTerm]);
+    return contributions.filter((row) => {
+      const matchesSearch = term
+        ? `${row.employeeName} ${row.employeeCode}`.toLowerCase().includes(term)
+        : true;
+      const matchesDept =
+        departmentFilter === "all" ||
+        (row.department || "").toLowerCase() === departmentFilter.toLowerCase();
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "set" ? row.isSet : !row.isSet);
+      return matchesSearch && matchesDept && matchesStatus;
+    });
+  }, [contributions, departmentFilter, searchTerm, statusFilter]);
 
   const refreshContributions = async () => {
     setLoading(true);
     setError(null);
     try {
-      // TODO: replace with real fetch when contributions API is ready
-      setContributions(MOCK_CONTRIBUTIONS);
+      const res = await fetch("/api/contributions");
+      if (!res.ok) {
+        throw new Error("Failed to fetch contributions");
+      }
+      const data = await res.json();
+      const rows: ContributionRow[] = (data?.data || []).map((row: any) => ({
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        employeeCode: row.employeeCode,
+        avatarUrl: row.avatarUrl,
+        eeTotal: row.eeTotal ?? 0,
+        department: row.department,
+        isSet: row.isSet,
+        updatedAt: row.updatedAt,
+        sssEe: row.contribution?.sssEe ?? 0,
+        sssEr: row.contribution?.sssEr ?? 0,
+        philHealthEe: row.contribution?.philHealthEe ?? 0,
+        philHealthEr: row.contribution?.philHealthEr ?? 0,
+        pagIbigEe: row.contribution?.pagIbigEe ?? 0,
+        pagIbigEr: row.contribution?.pagIbigEr ?? 0,
+        withholdingEe: row.contribution?.withholdingEe ?? 0,
+        withholdingEr: row.contribution?.withholdingEr ?? 0,
+        isSssActive: row.contribution?.isSssActive ?? true,
+        isPhilHealthActive: row.contribution?.isPhilHealthActive ?? true,
+        isPagIbigActive: row.contribution?.isPagIbigActive ?? true,
+        isWithholdingActive: row.contribution?.isWithholdingActive ?? true,
+      }));
+      setContributions(rows);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
@@ -89,6 +102,10 @@ export function useContributionsState() {
     error,
     searchTerm,
     setSearchTerm,
+    departmentFilter,
+    setDepartmentFilter,
+    statusFilter,
+    setStatusFilter,
     refreshContributions,
   };
 }

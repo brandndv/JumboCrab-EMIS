@@ -81,17 +81,23 @@ export function EmployeeProfileTabs({
   const [governmentId, setGovernmentId] = useState<GovernmentId | null>(null);
   const [loadingGovId, setLoadingGovId] = useState<boolean>(true);
   const [govIdError, setGovIdError] = useState<string | null>(null);
+  const [contribution, setContribution] = useState<{
+    sssEe?: number;
+    sssEr?: number;
+    philHealthEe?: number;
+    philHealthEr?: number;
+    pagIbigEe?: number;
+    pagIbigEr?: number;
+    withholdingEe?: number;
+    withholdingEr?: number;
+  } | null>(null);
+  const [loadingContribution, setLoadingContribution] = useState<boolean>(true);
+  const [contributionError, setContributionError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formState, setFormState] = useState<
     Pick<GovernmentId, "tinNumber" | "sssNumber" | "philHealthNumber" | "pagIbigNumber">
   >({
-    tinNumber: "",
-    sssNumber: "",
-    philHealthNumber: "",
-    pagIbigNumber: "",
-  });
-  const [localShares, setLocalShares] = useState<Record<string, string>>({
     tinNumber: "",
     sssNumber: "",
     philHealthNumber: "",
@@ -138,6 +144,28 @@ export function EmployeeProfileTabs({
     };
 
     fetchGovId();
+  }, [employee.employeeId]);
+
+  useEffect(() => {
+    // Load contribution so we can show EE/ER alongside IDs
+    const fetchContribution = async () => {
+      try {
+        setLoadingContribution(true);
+        setContributionError(null);
+        const res = await fetch(`/api/contributions/${employee.employeeId}`);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to load contribution");
+        }
+        setContribution(data?.data ?? null);
+      } catch (error) {
+        console.error("Error loading contribution:", error);
+        setContributionError("Failed to load contribution");
+      } finally {
+        setLoadingContribution(false);
+      }
+    };
+    fetchContribution();
   }, [employee.employeeId]);
 
   const handleSaveGovIds = async () => {
@@ -270,9 +298,6 @@ export function EmployeeProfileTabs({
             <div className="grid gap-3 sm:grid-cols-2">
               {govIdFields.map((item) => {
                 const value = governmentId?.[item.key] ?? "";
-                const showShare = true;
-                const shareValue = localShares[item.key] ?? "";
-
                 return (
                   <Card key={item.label} className="border-dashed">
                     <CardHeader className="gap-2 px-4 pt-4 pb-2">
@@ -306,28 +331,50 @@ export function EmployeeProfileTabs({
                           </span>
                         </div>
                       )}
-                      {showShare && (
-                        <div className="space-y-1">
-                          <Label className="text-xs">Employee Share (not saved)</Label>
-                          <Input
-                            value={shareValue}
-                            onChange={(e) =>
-                              setLocalShares((prev) => ({
-                                ...prev,
-                                [item.key]: e.target.value,
-                              }))
-                            }
-                            placeholder="Enter employee share"
-                          />
-                          <p className="text-[11px] text-muted-foreground">
-                            UI-only for now; hook to DB when employee shares exist.
-                          </p>
-                        </div>
-                      )}
                     </CardContent>
                   </Card>
                 );
               })}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Contributions (EE/ER)</p>
+                {loadingContribution && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" />
+                    Loading...
+                  </div>
+                )}
+              </div>
+              {contributionError && (
+                <p className="text-xs text-destructive">{contributionError}</p>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  ["SSS", "sssEe", "sssEr"],
+                  ["PhilHealth", "philHealthEe", "philHealthEr"],
+                  ["Pag-IBIG", "pagIbigEe", "pagIbigEr"],
+                  ["Tax", "withholdingEe", "withholdingEr"],
+                ].map(([label, eeKey, erKey]) => (
+                  <div key={label} className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs">
+                    <div className="text-xs text-muted-foreground">{label}</div>
+                    <div className="text-sm font-semibold">
+                      EE:{" "}
+                      {contribution && contribution[eeKey as keyof typeof contribution] != null
+                        ? contribution[eeKey as keyof typeof contribution]
+                        : "—"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      ER:{" "}
+                      {contribution && contribution[erKey as keyof typeof contribution] != null
+                        ? contribution[erKey as keyof typeof contribution]
+                        : "—"}{" "}
+                      (admin)
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

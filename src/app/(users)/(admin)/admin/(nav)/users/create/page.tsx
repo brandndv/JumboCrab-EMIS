@@ -1,15 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import CreateUserForm from "@/components/dasboard/manage-users/users-create-form";
 
-export default function AdminUserCreatePage() {
+function AdminUserCreateContent() {
   const searchParams = useSearchParams();
-  const [defaultEmployeeId, setDefaultEmployeeId] = useState<string | undefined>(
-    undefined
-  );
+  const [defaultEmployeeId, setDefaultEmployeeId] =
+    useState<string | undefined>(undefined);
 
   useEffect(() => {
     // Using client-side search params is more reliable after navigations/prefetch, especially on mobile
@@ -34,5 +33,13 @@ export default function AdminUserCreatePage() {
         <CreateUserForm defaultEmployeeId={defaultEmployeeId} />
       </Card>
     </div>
+  );
+}
+
+export default function AdminUserCreatePage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading...</div>}>
+      <AdminUserCreateContent />
+    </Suspense>
   );
 }

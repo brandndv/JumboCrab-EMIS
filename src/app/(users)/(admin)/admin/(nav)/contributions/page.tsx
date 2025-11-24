@@ -14,6 +14,11 @@ function ContributionsContent() {
     setSearchTerm,
     loading,
     error,
+    departmentFilter,
+    setDepartmentFilter,
+    statusFilter,
+    setStatusFilter,
+    refreshContributions,
   } = useContributions();
 
   return (
@@ -25,25 +30,37 @@ function ContributionsContent() {
             Manage contribution records
           </p>
         </div>
-        <Button
-          onClick={() => router.push("/admin/contributions/create")}
-          className="w-full sm:w-auto"
-        >
-          Add New Contribution
-        </Button>
       </div>
 
       <div className="rounded-2xl border border-border/70 bg-card/70 shadow-sm p-4 sm:p-6 space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-muted-foreground">
-            Search by employee name or code
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:items-center">
           <Input
             placeholder="Search employees..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:w-72"
+            className="w-full"
           />
+          <select
+            value={departmentFilter}
+            onChange={(e) => setDepartmentFilter(e.target.value)}
+            className="h-10 rounded-md border bg-background px-3 text-sm"
+          >
+            <option value="all">All departments</option>
+            <option value="Kitchen">Kitchen</option>
+            <option value="Dining">Dining</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="h-10 rounded-md border bg-background px-3 text-sm"
+          >
+            <option value="all">All (Set/Not set)</option>
+            <option value="set">Set only</option>
+            <option value="not-set">Not set only</option>
+          </select>
+          <div className="text-sm text-muted-foreground">
+            Inactive/ended employees are hidden automatically.
+          </div>
         </div>
 
         {error && (
@@ -52,7 +69,11 @@ function ContributionsContent() {
           </div>
         )}
 
-        <ContributionsTable rows={filteredContributions} loading={loading} />
+        <ContributionsTable
+          rows={filteredContributions}
+          loading={loading}
+          onRefresh={refreshContributions}
+        />
       </div>
     </div>
   );
