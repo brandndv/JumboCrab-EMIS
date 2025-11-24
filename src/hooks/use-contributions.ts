@@ -33,6 +33,7 @@ export function useContributionsState() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "set" | "not-set">("all");
+  const [departments, setDepartments] = useState<string[]>([]);
 
   // Load the directory from the API; keep it simple for now.
   useEffect(() => {
@@ -88,6 +89,12 @@ export function useContributionsState() {
         isWithholdingActive: row.contribution?.isWithholdingActive ?? true,
       }));
       setContributions(rows);
+
+      const uniqueDepartments = Array.from(
+        new Set(rows.map((r) => r.department).filter(Boolean))
+      ) as string[];
+      uniqueDepartments.sort((a, b) => a.localeCompare(b));
+      setDepartments(uniqueDepartments);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
@@ -106,6 +113,7 @@ export function useContributionsState() {
     setDepartmentFilter,
     statusFilter,
     setStatusFilter,
+    departments,
     refreshContributions,
   };
 }

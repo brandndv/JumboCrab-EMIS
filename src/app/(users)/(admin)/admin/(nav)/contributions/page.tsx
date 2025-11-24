@@ -18,6 +18,7 @@ function ContributionsContent() {
     setDepartmentFilter,
     statusFilter,
     setStatusFilter,
+    departments,
     refreshContributions,
   } = useContributions();
 
@@ -46,8 +47,11 @@ function ContributionsContent() {
             className="h-10 rounded-md border bg-background px-3 text-sm"
           >
             <option value="all">All departments</option>
-            <option value="Kitchen">Kitchen</option>
-            <option value="Dining">Dining</option>
+            {departments.map((dept) => (
+              <option key={dept} value={dept}>
+                {dept}
+              </option>
+            ))}
           </select>
           <select
             value={statusFilter}

@@ -353,8 +353,22 @@ export default function UserEditPage({
                 </div>
                 <div className="grid gap-3">
                   <InfoField label="Employee Code" value={user.employee.employeeCode} />
-                  <InfoField label="Position" value={user.employee.position} />
-                  <InfoField label="Department" value={user.employee.department} />
+                  <InfoField
+                    label="Position"
+                  value={
+                    typeof user.employee.position === "string"
+                      ? user.employee.position
+                      : (user.employee.position as any)?.name
+                  }
+                />
+                <InfoField
+                  label="Department"
+                  value={
+                    typeof user.employee.department === "string"
+                      ? user.employee.department
+                      : (user.employee.department as any)?.name
+                  }
+                />
                 </div>
                 {user.employee.employeeId && (
                   <Button asChild variant="outline" size="sm" className="w-full">

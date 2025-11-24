@@ -93,7 +93,9 @@ function UsersPageContent() {
       user.email?.toLowerCase().includes(value) ||
       fullName.includes(value) ||
       user.employee?.employeeCode?.toLowerCase().includes(value) ||
-      user.employee?.position?.toLowerCase().includes(value)
+      (typeof user.employee?.position === "string"
+        ? user.employee?.position
+        : user.employee?.position?.name)?.toLowerCase?.().includes(value)
     );
   };
 

@@ -21,6 +21,8 @@ model User {
   // Audit backlinks for contributions
   createdContributions EmployeeContribution[] @relation("EmployeeContributionCreatedBy")
   updatedContributions EmployeeContribution[] @relation("EmployeeContributionUpdatedBy")
+  // Users who supervise employees
+  supervisedEmployees Employee[] @relation("EmployeeSupervisorUser")
 }
 
 model Employee {
@@ -43,8 +45,6 @@ model Employee {
   startDate                    DateTime
   isEnded                      Boolean?          @default(false)
   endDate                      DateTime?
-  position                     String
-  department                   String
   employmentStatus             EMPLOYMENT_STATUS
   currentStatus                CURRENT_STATUS
   email                        String?
@@ -59,8 +59,48 @@ model Employee {
   updatedAt                    DateTime          @updatedAt
   userId                       String?           @unique
   user                         User?             @relation(fields: [userId], references: [userId])
+  departmentId                 String?
+  positionId                   String?
+  supervisorUserId             String?
+  department                   Department?       @relation(fields: [departmentId], references: [departmentId])
+  position                     Position?         @relation(fields: [positionId], references: [positionId])
+  supervisorUser               User?             @relation("EmployeeSupervisorUser", fields: [supervisorUserId], references: [userId])
   governmentId                 GovernmentId?     @relation("EmployeeGovernmentId")
   contribution                 EmployeeContribution?
+  // Scheduling links
+  patternAssignments           EmployeePatternAssignment[]
+  shiftOverrides               EmployeeShiftOverride[]
+  attendances                  Attendance[]
+  punches                      Punch[]
+}
+// ======== ORG STRUCTURE ========= //
+
+/// Department catalog (simple name/description, soft active flag).
+model Department {
+  departmentId String     @id @default(cuid())
+  name         String     @unique
+  description  String?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  positions    Position[]
+  employees    Employee[]
+}
+
+/// Positions (job titles) linked to a department.
+model Position {
+  positionId   String     @id @default(cuid())
+  name         String
+  description  String?
+  isActive     Boolean    @default(true)
+  departmentId String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [departmentId])
+  employees  Employee[]
+
+  @@unique([name, departmentId])
 }
 // ======== EMPLOYEE CONTRIBUTION ========= //
 model GovernmentId {
@@ -99,7 +139,175 @@ model EmployeeContribution {
   createdBy     User?    @relation("EmployeeContributionCreatedBy", fields: [createdById], references: [userId])
   updatedBy     User?    @relation("EmployeeContributionUpdatedBy", fields: [updatedById], references: [userId])
 }
-// ======== SHEDULE AND SHIFTS ========= //
+// ======== SCHEDULE AND SHIFTS ========= //
+
+/// A reusable shift template. Keep it small and only add more fields once needed.
+model Shift {
+  id                  Int      @id @default(autoincrement())
+  code                String   @unique
+  name                String
+  startMinutes        Int      // minutes since midnight (e.g., 9:00 AM -> 540)
+  endMinutes          Int      // minutes since midnight (e.g., 6:00 PM -> 1080)
+  spansMidnight       Boolean  @default(false) // true when end wraps past midnight
+  breakMinutesUnpaid  Int      @default(0)
+  paidHoursPerDay     Decimal  @db.Decimal(5, 2) // e.g., 8.00
+  isActive            Boolean  @default(true)
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations to weekly patterns per day
+  weeklyPatternsSun WeeklyPattern[] @relation("wp_sun")
+  weeklyPatternsMon WeeklyPattern[] @relation("wp_mon")
+  weeklyPatternsTue WeeklyPattern[] @relation("wp_tue")
+  weeklyPatternsWed WeeklyPattern[] @relation("wp_wed")
+  weeklyPatternsThu WeeklyPattern[] @relation("wp_thu")
+  weeklyPatternsFri WeeklyPattern[] @relation("wp_fri")
+  weeklyPatternsSat WeeklyPattern[] @relation("wp_sat")
+
+  // Usage
+  overrides   EmployeeShiftOverride[]
+  attendances Attendance[] @relation("attendance_expected_shift")
+}
+
+/// Weekly pattern that selects one shift per weekday; null means rest day.
+model WeeklyPattern {
+  id      String @id @default(cuid())
+  code    String @unique
+  name    String
+  isActive Boolean @default(true)
+
+  sunShiftId Int?
+  monShiftId Int?
+  tueShiftId Int?
+  wedShiftId Int?
+  thuShiftId Int?
+  friShiftId Int?
+  satShiftId Int?
+
+  sunShift Shift? @relation("wp_sun", fields: [sunShiftId], references: [id])
+  monShift Shift? @relation("wp_mon", fields: [monShiftId], references: [id])
+  tueShift Shift? @relation("wp_tue", fields: [tueShiftId], references: [id])
+  wedShift Shift? @relation("wp_wed", fields: [wedShiftId], references: [id])
+  thuShift Shift? @relation("wp_thu", fields: [thuShiftId], references: [id])
+  friShift Shift? @relation("wp_fri", fields: [friShiftId], references: [id])
+  satShift Shift? @relation("wp_sat", fields: [satShiftId], references: [id])
+
+  assignments EmployeePatternAssignment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Assigns a weekly pattern to an employee starting on a date.
+model EmployeePatternAssignment {
+  id           String   @id @default(cuid())
+  employeeId   String
+  effectiveDate DateTime // changeover date; latest <= target date applies
+  patternId    String
+  reason       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  pattern  WeeklyPattern @relation(fields: [patternId], references: [id])
+
+  @@index([employeeId, effectiveDate])
+}
+
+/// One-day exception that replaces the pattern-based shift.
+model EmployeeShiftOverride {
+  id         String   @id @default(cuid())
+  employeeId String
+  workDate   DateTime // date anchor (use start day for overnight)
+  shiftId    Int?     // null = mark as rest day
+  source     String   // e.g., "MANUAL", "APPROVED_REQUEST"
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  shift    Shift?   @relation(fields: [shiftId], references: [id])
+
+  @@unique([employeeId, workDate])
+  @@index([workDate])
+}
+
+/// Daily attendance snapshot; expected times come from pattern/override.
+model Attendance {
+  id         String            @id @default(cuid())
+  employeeId String
+  workDate   DateTime
+  status     ATTENDANCE_STATUS
+
+  // Expected
+  expectedShiftId       Int?
+  scheduledStartMinutes Int?
+  scheduledEndMinutes   Int?
+  paidHoursPerDay       Decimal? @db.Decimal(5, 2)
+
+  // Actuals
+  actualInAt    DateTime?
+  actualOutAt   DateTime?
+  workedMinutes Int?
+
+  // Variances
+  lateMinutes             Int @default(0)
+  undertimeMinutes        Int @default(0)
+  overtimeMinutesRaw      Int @default(0)
+  overtimeMinutesApproved Int @default(0)
+  nightMinutes            Int @default(0)
+
+  // Posting/lock
+  isLocked        Boolean @default(false)
+  payrollPeriodId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee      Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  expectedShift Shift?   @relation("attendance_expected_shift", fields: [expectedShiftId], references: [id])
+  punches       Punch[]
+
+  @@unique([employeeId, workDate])
+  @@index([employeeId, workDate])
+  @@index([workDate])
+}
+
+/// Raw punch events; use them to recompute Attendance in real time.
+model Punch {
+  id           String      @id @default(cuid())
+  employeeId   String
+  attendanceId String?
+  punchTime    DateTime
+  punchType    PUNCH_TYPE
+  source       String?     // e.g., "BIOMETRIC", "WEB"
+  deviceId     String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  employee   Employee   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  attendance Attendance? @relation(fields: [attendanceId], references: [id])
+
+  @@index([employeeId, punchTime])
+  @@index([attendanceId])
+}
+
+enum ATTENDANCE_STATUS {
+  PRESENT
+  ABSENT
+  LATE
+  OVERTIME
+  HOLIDAY
+  REST
+}
+
+enum PUNCH_TYPE {
+  CLOCK_IN
+  CLOCK_OUT
+  BREAK_OUT
+  BREAK_IN
+}
+
 
 enum GENDER {
   MALE
@@ -134,11 +342,6 @@ enum SUFFIX {
   II
   III
   IV
-}
-
-enum DEPARTMENT {
-  KITCHEN
-  DINING
 }
 
 enum Roles {

@@ -18,8 +18,8 @@ const baseUserSelect = {
       employeeCode: true,
       firstName: true,
       lastName: true,
-      position: true,
-      department: true,
+      position: { select: { name: true } },
+      department: { select: { name: true } },
       employmentStatus: true,
       currentStatus: true,
       startDate: true,
@@ -28,6 +28,18 @@ const baseUserSelect = {
     },
   },
 } as const;
+
+const normalizeUsers = (users: any[]) =>
+  users.map((u) => ({
+    ...u,
+    employee: u.employee
+      ? {
+          ...u.employee,
+          position: u.employee.position?.name ?? null,
+          department: u.employee.department?.name ?? null,
+        }
+      : null,
+  }));
 
 // ========= GET USERS ========= /
 export async function getUsers(): Promise<{
@@ -42,7 +54,7 @@ export async function getUsers(): Promise<{
         createdAt: "desc",
       },
     });
-    return { success: true, data: users, error: null };
+    return { success: true, data: normalizeUsers(users), error: null };
   } catch (error) {
     console.error("Error fetching users:", error);
     return {
@@ -89,7 +101,7 @@ export async function getUserById(id: string | undefined): Promise<{
     // Return the found user with employee data (if any)
     return {
       success: true,
-      data: user,
+      data: user ? normalizeUsers([user])[0] : user,
     };
   } catch (error) {
     // Log the error and return a generic error message
@@ -117,7 +129,7 @@ export async function getUsersWithEmployeeAccount(): Promise<{
     });
     return {
       success: true,
-      data: users,
+      data: normalizeUsers(users),
       error: null,
     };
   } catch (error) {
