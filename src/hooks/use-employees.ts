@@ -18,10 +18,7 @@ export function useEmployeesState() {
     null
   );
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-  const [departments, setDepartments] = useState<string[]>([
-    "KITCHEN",
-    "DINING",
-  ]);
+  const [departments, setDepartments] = useState<string[]>([]);
   const [showArchived, setShowArchived] = useState<boolean>(false);
 
   const fetchEmployeesData = useCallback(async () => {
@@ -49,7 +46,7 @@ export function useEmployeesState() {
       const uniqueDepartments = Array.from(
         new Set(validatedEmployees.map((emp) => emp.department).filter(Boolean))
       ) as string[];
-      setDepartments((prev) => [...new Set([...prev, ...uniqueDepartments])]);
+      setDepartments(uniqueDepartments);
     } catch (err) {
       console.error("Error in fetchEmployeesData:", err);
       setError(

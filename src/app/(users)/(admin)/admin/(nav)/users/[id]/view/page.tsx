@@ -255,8 +255,22 @@ function UserViewPageContent({
                   }`.trim()}
                 />
                 <InfoField label="Employee Code" value={user.employee.employeeCode} />
-                <InfoField label="Position" value={user.employee.position} />
-                <InfoField label="Department" value={user.employee.department} />
+                <InfoField
+                  label="Position"
+                  value={
+                    typeof user.employee.position === "string"
+                      ? user.employee.position
+                      : (user.employee.position as any)?.name
+                  }
+                />
+                <InfoField
+                  label="Department"
+                  value={
+                    typeof user.employee.department === "string"
+                      ? user.employee.department
+                      : (user.employee.department as any)?.name
+                  }
+                />
                 <InfoField
                   label="Employment Status"
                   value={user.employee.employmentStatus}

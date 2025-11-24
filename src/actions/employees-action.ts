@@ -21,9 +21,18 @@ export async function getEmployees(): Promise<{
     console.log("Fetching employees...");
     const employees = await db.employee.findMany({
       orderBy: { employeeCode: "asc" },
+      include: {
+        department: { select: { departmentId: true, name: true } },
+        position: { select: { positionId: true, name: true } },
+      },
     });
+    const normalized = employees.map((emp) => ({
+      ...emp,
+      department: (emp as any).department?.name ?? null,
+      position: (emp as any).position?.name ?? null,
+    })) as unknown as PrismaEmployee[];
     console.log(`Fetched ${employees.length} employees`);
-    return { success: true, data: employees };
+    return { success: true, data: normalized };
   } catch (error) {
     console.error("Error in getEmployees:", {
       error: error instanceof Error ? error.message : "Unknown error",
@@ -52,6 +61,10 @@ export async function getEmployeeById(id: string | undefined): Promise<{
 
     const employee = await db.employee.findUnique({
       where: { employeeId: id },
+      include: {
+        department: { select: { departmentId: true, name: true } },
+        position: { select: { positionId: true, name: true } },
+      },
     });
 
     if (!employee) {
@@ -61,7 +74,15 @@ export async function getEmployeeById(id: string | undefined): Promise<{
       };
     }
 
-    return { success: true, data: employee };
+    const normalized = employee
+      ? ({
+          ...employee,
+          department: (employee as any).department?.name ?? null,
+          position: (employee as any).position?.name ?? null,
+        } as unknown as PrismaEmployee)
+      : employee;
+
+    return { success: true, data: normalized };
   } catch (error) {
     console.error(`Error fetching employee with ID ${id}:`, error);
     return {
@@ -104,8 +125,8 @@ export async function createEmployee(employeeData: any): Promise<{
       startDate: employeeData.startDate
         ? parseDate(employeeData.startDate)
         : new Date(),
-      position: employeeData.position || "",
-      department: employeeData.department || "",
+      departmentId: employeeData.departmentId || null,
+      positionId: employeeData.positionId || null,
       employmentStatus: employeeData.employmentStatus || "",
       currentStatus:
         typeof (employeeData as any).isEnded === "boolean" &&
@@ -151,7 +172,6 @@ export async function createEmployee(employeeData: any): Promise<{
     const newEmployee = await db.employee.create({
       data: {
         ...defaults,
-        employeeId: Math.random().toString(36).substring(2, 9),
         createdAt: new Date(),
         updatedAt: new Date(),
         user: employeeData.userId
@@ -228,8 +248,9 @@ export async function updateEmployee(
       "sex",
       "birthdate",
       "civilStatus",
-      "department",
-      "position",
+      "departmentId",
+      "positionId",
+      "supervisorId",
       "employmentStatus",
       "currentStatus",
       "nationality",
@@ -396,29 +417,19 @@ export async function getEmployeesWithoutUser() {
 // ========== GET DEPARTMENTS ========= //
 export async function getDepartments(): Promise<{
   success: boolean;
-  data?: string[];
+  data?: { departmentId: string; name: string }[];
   error?: string;
 }> {
   try {
-    const employees = await db.employee.findMany();
-    const departments = [
-      ...new Set(employees.map((emp) => emp.department).filter(Boolean as any)),
-    ];
-    const departmentCounts = employees.reduce(
-      (acc: Record<string, number>, emp) => {
-        if (emp.department) {
-          acc[emp.department] = (acc[emp.department] || 0) + 1;
-        }
-        return acc;
-      },
-      {} as Record<string, number>
-    );
+    const departments = await db.department.findMany({
+      where: { isActive: true },
+      select: { departmentId: true, name: true },
+      orderBy: { name: "asc" },
+    });
 
     return {
       success: true,
       data: departments,
-      // @ts-ignore - This is just for internal use
-      _counts: departmentCounts,
     };
   } catch (error) {
     console.error("Error fetching departments:", error);

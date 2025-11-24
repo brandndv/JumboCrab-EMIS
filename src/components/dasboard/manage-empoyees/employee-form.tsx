@@ -11,14 +11,12 @@ import {
   validateEmployee,
   validatePartialEmployee,
 } from "@/lib/validations/employees";
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useMemo } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createEmployee, updateEmployee } from "@/actions/employees-action";
 import {
   NATIONALITIES,
-  DEPARTMENTS,
-  POSITIONS,
   EMERGENCY_RELATIONSHIPS,
 } from "@/lib/employees/options";
 
@@ -100,15 +98,21 @@ export default function EmployeeForm({
     NATIONALITIES,
     formData.nationality || null
   );
-  const departmentOptions = ensureOption(
-    DEPARTMENTS,
-    formData.department || null
-  );
-  const positionOptions = ensureOption(POSITIONS, formData.position || null);
   const emergencyRelationshipOptions = ensureOption(
     EMERGENCY_RELATIONSHIPS,
     formData.emergencyContactRelationship || null
   );
+  const [departments, setDepartments] = useState<
+    { departmentId: string; name: string }[]
+  >([]);
+  const [positions, setPositions] = useState<
+    {
+      positionId: string;
+      name: string;
+      departmentId: string;
+      department?: { departmentId: string; name: string };
+    }[]
+  >([]);
 
   const getGeneratedEmployeeCode = useCallback(async () => {
     try {
@@ -174,8 +178,8 @@ export default function EmployeeForm({
           startDate: new Date(),
           isEnded: false,
           endDate: null,
-          position: "",
-          department: "",
+          positionId: null,
+          departmentId: null,
           sex: "MALE",
           civilStatus: "SINGLE",
           nationality: "",
@@ -191,7 +195,39 @@ export default function EmployeeForm({
     };
 
     fetchEmployee();
+
+    // Load departments/positions from API for selects
+    const fetchLookups = async () => {
+      try {
+        const [deptRes, posRes] = await Promise.all([
+          fetch("/api/departments"),
+          fetch("/api/positions"),
+        ]);
+        if (deptRes.ok) {
+          const data = await deptRes.json();
+          setDepartments(data?.data ?? []);
+        }
+        if (posRes.ok) {
+          const data = await posRes.json();
+          setPositions(data?.data ?? []);
+        }
+      } catch (err) {
+        console.error("Failed to load departments/positions", err);
+      }
+    };
+
+    fetchLookups();
   }, [employeeId, mode, initialData, getGeneratedEmployeeCode]);
+
+  const filteredPositions = useMemo(() => {
+    if (!formData.departmentId) return positions;
+    return positions.filter((p) => p.departmentId === formData.departmentId);
+  }, [positions, formData.departmentId]);
+
+  const handleDepartmentChange = (value: string) => {
+    handleSelectChange("departmentId", value);
+    handleSelectChange("positionId", "");
+  };
 
   const validateField = (name: string, value: any) => {
     // Create a temporary object with the new value
@@ -966,66 +1002,70 @@ export default function EmployeeForm({
               )}
             </div>
             <div className="md:col-span-5">
-              <Label htmlFor="department" className="mb-1 block">
+              <Label htmlFor="departmentId" className="mb-1 block">
                 Department
               </Label>
               {mode === "view" ? (
                 <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
-                  {formData.department || "-"}
+                  {departments.find((d) => d.departmentId === formData.departmentId)
+                    ?.name || "-"}
                 </div>
               ) : (
                 <div className="w-full">
                   <select
-                    id="department"
-                    name="department"
-                    value={formData.department || ""}
-                    onChange={(e) =>
-                      handleSelectChange("department", e.target.value)
-                    }
+                    id="departmentId"
+                    name="departmentId"
+                    value={formData.departmentId || ""}
+                    onChange={(e) => handleDepartmentChange(e.target.value || "")}
                     className={`w-full h-10 px-3 py-2 rounded-md border ${
-                      errors.department ? "border-destructive" : "border-border"
+                      errors.departmentId ? "border-destructive" : "border-border"
                     } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                   >
                     <option value="">Select department</option>
-                    {departmentOptions.map((department) => (
-                      <option key={department} value={department}>
-                        {department}
+                    {departments.map((department) => (
+                      <option
+                        key={department.departmentId}
+                        value={department.departmentId}
+                      >
+                        {department.name}
                       </option>
                     ))}
                   </select>
-                  <FormError message={errors.department} />
+                  <FormError message={errors.departmentId} />
                 </div>
               )}
             </div>
             <div className="md:col-span-4">
-              <Label htmlFor="position" className="mb-1 block">
+              <Label htmlFor="positionId" className="mb-1 block">
                 Position
               </Label>
               {mode === "view" ? (
                 <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
-                  {formData.position || "-"}
+                  {positions.find((p) => p.positionId === formData.positionId)
+                    ?.name || "-"}
                 </div>
               ) : (
                 <div className="w-full">
                   <select
-                    id="position"
-                    name="position"
-                    value={formData.position || ""}
+                    id="positionId"
+                    name="positionId"
+                    value={formData.positionId || ""}
                     onChange={(e) =>
-                      handleSelectChange("position", e.target.value)
+                      handleSelectChange("positionId", e.target.value || "")
                     }
                     className={`w-full h-10 px-3 py-2 rounded-md border ${
-                      errors.position ? "border-destructive" : "border-border"
+                      errors.positionId ? "border-destructive" : "border-border"
                     } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                    disabled={!filteredPositions.length && !!formData.departmentId}
                   >
                     <option value="">Select position</option>
-                    {positionOptions.map((position) => (
-                      <option key={position} value={position}>
-                        {position}
+                    {filteredPositions.map((position) => (
+                      <option key={position.positionId} value={position.positionId}>
+                        {position.name}
                       </option>
                     ))}
                   </select>
-                  <FormError message={errors.position} />
+                  <FormError message={errors.positionId} />
                 </div>
               )}
             </div>

@@ -17,8 +17,25 @@ const selectableUserFields = {
       employeeCode: true,
       firstName: true,
       lastName: true,
-      position: true,
-      department: true,
+      positionId: true,
+      departmentId: true,
+      position: {
+        select: {
+          positionId: true,
+          name: true,
+          departmentId: true,
+          department: { select: { departmentId: true, name: true } },
+        },
+      },
+      department: { select: { departmentId: true, name: true } },
+      supervisorUser: {
+        select: {
+          userId: true,
+          username: true,
+          email: true,
+          role: true,
+        },
+      },
       employmentStatus: true,
       currentStatus: true,
       startDate: true,

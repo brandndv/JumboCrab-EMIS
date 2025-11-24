@@ -94,8 +94,11 @@ export const employeeSchema = z.object({
     .optional()
     .nullable(),
   isEnded: z.boolean().optional().nullable(),
-  position: z.string().min(1, "Position is required"),
-  department: z.string().min(1, "Department is required"),
+  positionId: z.string().optional().nullable(),
+  departmentId: z.string().optional().nullable(),
+  // Legacy string fields kept optional for backward compatibility with forms; prefer IDs + relations.
+  position: z.string().optional().nullable(),
+  department: z.string().optional().nullable(),
   employmentStatus: z.enum(EMPLOYMENT_STATUS),
   currentStatus: z.enum(CURRENT_STATUS),
   email: z.string().email("Invalid email").optional().nullable(),

@@ -159,6 +159,31 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       roles: ["admin", "generalManager", "manager", "supervisor"],
     },
     {
+      id: "organization",
+      label: "Organization",
+      icon: Clock,
+      href: `/${userRole}/organization`,
+      hasSubmenu: true,
+      subItems: [
+        {
+          label: "Departments",
+          path: "/departments",
+          roles: ["admin", "generalManager", "manager"],
+        },
+        {
+          label: "Positions",
+          path: "/positions",
+          roles: ["admin", "generalManager", "manager"],
+        },
+        {
+          label: "Structure",
+          path: "/structure",
+          roles: ["admin", "generalManager", "manager", "supervisor"],
+        },
+      ],
+      roles: ["admin", "generalManager", "manager", "supervisor"],
+    },
+    {
       id: "attendance",
       label: "Attendance",
       icon: ClipboardClock,
@@ -167,27 +192,12 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       // Subitems: roles aligned with parent by default
       subItems: [
         {
-          label: "Dashboard",
+          label: "Attendance Directory",
           path: "",
           roles: [
             "admin",
             "generalManager",
             "manager",
-            "supervisor",
-            "clerk",
-            "employee",
-          ],
-        },
-        {
-          label: "Mark Attendance",
-          path: "/mark",
-          roles: [
-            "admin",
-            "generalManager",
-            "manager",
-            "supervisor",
-            "clerk",
-            "employee",
           ],
         },
         {
@@ -214,18 +224,6 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
             "employee",
           ],
         },
-        {
-          label: "Settings",
-          path: "/settings",
-          roles: [
-            "admin",
-            "generalManager",
-            "manager",
-            "supervisor",
-            "clerk",
-            "employee",
-          ],
-        },
       ],
       roles: [
         "admin",
@@ -235,41 +233,6 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         "clerk",
         "employee",
       ],
-    },
-    {
-      id: "schedule",
-      label: "Schedule",
-      icon: Clock,
-      href: `/${userRole}/schedule`,
-      hasSubmenu: true,
-      subItems: [
-        {
-          label: "View Schedule",
-          path: "",
-          roles: ["admin", "manager", "supervisor", "clerk", "employee"],
-        },
-        {
-          label: "Create Shift",
-          path: "/create",
-          roles: ["admin", "manager", "supervisor", "clerk", "employee"],
-        },
-        {
-          label: "Assign Shifts",
-          path: "/assign",
-          roles: ["admin", "manager", "supervisor", "clerk", "employee"],
-        },
-        {
-          label: "Time Off Requests",
-          path: "/time-off",
-          roles: ["admin", "manager", "supervisor", "clerk", "employee"],
-        },
-        {
-          label: "Calendar View",
-          path: "/calendar",
-          roles: ["admin", "manager", "supervisor", "clerk", "employee"],
-        },
-      ],
-      roles: ["admin", "manager", "supervisor", "clerk", "employee"],
     },
     {
       id: "deduction",
