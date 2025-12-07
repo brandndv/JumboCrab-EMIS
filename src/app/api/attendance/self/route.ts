@@ -4,18 +4,7 @@ import { PUNCH_TYPE } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createPunchAndMaybeRecompute, getExpectedShiftForDate } from "@/lib/attendance";
-
-const startOfDay = (date: Date) => {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-const endOfDay = (date: Date) => {
-  const d = startOfDay(date);
-  d.setDate(d.getDate() + 1);
-  return d;
-};
+import { startOfZonedDay, endOfZonedDay, zonedNow } from "@/lib/timezone";
 
 const isIpAllowed = (ip: string | null) => {
   const raw = process.env.ALLOWED_PUNCH_IPS;
@@ -32,17 +21,23 @@ export async function GET(req: Request) {
   try {
     const session = await getSession();
     if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "Unauthorized", reason: "unauthorized" },
+        { status: 401 }
+      );
     }
 
     const { searchParams } = new URL(req.url);
     const dateParam = searchParams.get("date");
     const day = dateParam ? new Date(dateParam) : new Date();
     if (Number.isNaN(day.getTime())) {
-      return NextResponse.json({ success: false, error: "Invalid date" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Invalid date", reason: "invalid_date" },
+        { status: 400 }
+      );
     }
-    const dayStart = startOfDay(day);
-    const dayEnd = endOfDay(day);
+    const dayStart = startOfZonedDay(day);
+    const dayEnd = endOfZonedDay(day);
 
     const employee = await db.employee.findUnique({
       where: { userId: session.userId },
@@ -56,7 +51,10 @@ export async function GET(req: Request) {
       },
     });
     if (!employee) {
-      return NextResponse.json({ success: false, error: "Employee not found for user" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Employee not found for user", reason: "employee_not_found" },
+        { status: 404 }
+      );
     }
 
     const expected = await getExpectedShiftForDate(employee.employeeId, dayStart);
@@ -121,13 +119,19 @@ export async function POST(req: Request) {
       hdr.get("x-real-ip") ||
       null;
     if (!isIpAllowed(clientIp)) {
-      return NextResponse.json({ success: false, error: "Punching not allowed from this device" }, { status: 403 });
+      return NextResponse.json(
+        { success: false, error: "Punching not allowed from this device", reason: "ip_not_allowed" },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();
     const punchType = typeof body?.punchType === "string" ? body.punchType : "";
     if (!Object.values(PUNCH_TYPE).includes(punchType as PUNCH_TYPE)) {
-      return NextResponse.json({ success: false, error: "Invalid punchType" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Invalid punchType", reason: "invalid_punch_type" },
+        { status: 400 }
+      );
     }
 
     const employee = await db.employee.findUnique({
@@ -135,13 +139,49 @@ export async function POST(req: Request) {
       select: { employeeId: true },
     });
     if (!employee) {
-      return NextResponse.json({ success: false, error: "Employee not found for user" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Employee not found for user", reason: "employee_not_found" },
+        { status: 404 }
+      );
+    }
+
+    const now = zonedNow();
+    const todayStart = startOfZonedDay(now);
+    const expected = await getExpectedShiftForDate(employee.employeeId, todayStart);
+
+    if (punchType === PUNCH_TYPE.TIME_IN) {
+      if (expected.scheduledStartMinutes == null) {
+        return NextResponse.json(
+          { success: false, error: "No scheduled shift for today", reason: "no_shift_today" },
+          { status: 400 }
+        );
+      }
+      const minutesSinceStart = Math.round((now.getTime() - todayStart.getTime()) / 60000);
+      if (minutesSinceStart < expected.scheduledStartMinutes) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Too early to clock in. You can time in at the scheduled start time.",
+            reason: "too_early",
+          },
+          { status: 400 }
+        );
+      }
+      if (
+        expected.scheduledEndMinutes != null &&
+        minutesSinceStart > expected.scheduledEndMinutes
+      ) {
+        return NextResponse.json(
+          { success: false, error: "Cannot clock in after your scheduled end time.", reason: "too_late" },
+          { status: 400 }
+        );
+      }
     }
 
     const punch = await createPunchAndMaybeRecompute({
       employeeId: employee.employeeId,
       punchType: punchType as PUNCH_TYPE,
-      punchTime: new Date(),
+      punchTime: now,
       source: "WEB_SELF",
       recompute: true,
     });

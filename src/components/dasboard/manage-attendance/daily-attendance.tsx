@@ -26,6 +26,7 @@ type AttendanceRow = {
   actualInAt?: string | null;
   actualOutAt?: string | null;
   lateMinutes?: number | null;
+  undertimeMinutes?: number | null;
   overtimeMinutesRaw?: number | null;
   breakMinutes?: number | null;
   breakCount?: number | null;
@@ -57,6 +58,20 @@ type PunchRow = {
 };
 
 const todayISO = () => new Date().toLocaleDateString("en-CA", { timeZone: TZ });
+const formatPunchLabel = (type: string) => {
+  switch (type) {
+    case "TIME_IN":
+      return "TIME IN";
+    case "TIME_OUT":
+      return "TIME OUT";
+    case "BREAK_IN":
+      return "BREAK START";
+    case "BREAK_OUT":
+      return "BREAK END";
+    default:
+      return type.replace("_", " ").toUpperCase();
+  }
+};
 
 const formatTime = (value?: string | null) => {
   if (!value) return "—";
@@ -103,12 +118,15 @@ export function DailyAttendance() {
   const [punchEditType, setPunchEditType] = useState("");
   const [punchEditTime, setPunchEditTime] = useState("");
   const [punchSaving, setPunchSaving] = useState(false);
+  const [lockLoading, setLockLoading] = useState(false);
+  const [lockMessage, setLockMessage] = useState<string | null>(null);
 
   const load = async () => {
     try {
       setLoading(true);
       setError(null);
       setPunchError(null);
+      setLockMessage(null);
       const params = new URLSearchParams({ start: date, end: date, includeAll: "true" });
       const res = await fetch(`/api/attendance?${params.toString()}`);
       const json = await res.json();
@@ -124,6 +142,26 @@ export function DailyAttendance() {
       setPunches([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const lockDay = async () => {
+    try {
+      setLockLoading(true);
+      setLockMessage(null);
+      const res = await fetch("/api/attendance/auto-lock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to lock attendance");
+      setLockMessage(`Locked ${json?.lockedCount ?? 0} attendance row(s) for ${date}.`);
+      await load();
+    } catch (err) {
+      setLockMessage(err instanceof Error ? err.message : "Failed to lock attendance");
+    } finally {
+      setLockLoading(false);
     }
   };
 
@@ -228,9 +266,15 @@ export function DailyAttendance() {
           <Button onClick={load} size="sm" className="gap-2">
             <RefreshCcw className="h-4 w-4" /> Load
           </Button>
+          <Button onClick={lockDay} size="sm" variant="outline" className="gap-2" disabled={lockLoading}>
+            {lockLoading ? "Locking..." : "Lock day"}
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 p-4">
+        {lockMessage && (
+          <p className="text-sm text-muted-foreground">{lockMessage}</p>
+        )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Input
             placeholder="Search by name, code, department"
@@ -274,7 +318,7 @@ export function DailyAttendance() {
                     <TableHead>Breaks</TableHead>
                     <TableHead>Time out</TableHead>
                     <TableHead>Late</TableHead>
-                    <TableHead>Overtime</TableHead>
+                    <TableHead>Over/Under</TableHead>
                     <TableHead>Expected</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -298,7 +342,8 @@ export function DailyAttendance() {
                         className={cn(
                           "uppercase tracking-wide",
                           row.status === "ABSENT" && "border-destructive text-destructive",
-                          row.status === "LATE" && "border-amber-500 text-amber-600"
+                          row.status === "LATE" && "border-amber-500 text-amber-600",
+                          row.status === "INCOMPLETE" && "border-blue-500 text-blue-600"
                         )}
                       >
                         {row.status}
@@ -322,7 +367,13 @@ export function DailyAttendance() {
                       {row.lateMinutes != null ? formatMinutesToTime(row.lateMinutes, false) : "—"}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {row.overtimeMinutesRaw != null ? formatMinutesToTime(row.overtimeMinutesRaw, false) : "—"}
+                      {!row.actualOutAt || row.scheduledEndMinutes == null
+                        ? "—"
+                        : row.overtimeMinutesRaw != null && row.overtimeMinutesRaw > 0
+                          ? `${formatMinutesToTime(row.overtimeMinutesRaw, false)} OT`
+                          : row.undertimeMinutes != null && row.undertimeMinutes > 0
+                            ? `${formatMinutesToTime(row.undertimeMinutes, false)} UT`
+                            : "On time"}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {row.scheduledStartMinutes != null && row.scheduledEndMinutes != null ? (
@@ -373,9 +424,9 @@ export function DailyAttendance() {
               onChange={(e) => setPunchTypeFilter(e.target.value)}
             >
               <option value="">All types</option>
-              {["CLOCK_IN", "CLOCK_OUT", "BREAK_IN", "BREAK_OUT"].map((t) => (
+              {["TIME_IN", "TIME_OUT", "BREAK_IN", "BREAK_OUT"].map((t) => (
                 <option key={t} value={t}>
-                  {t.replace("_", " ")}
+                  {formatPunchLabel(t)}
                 </option>
               ))}
             </select>
@@ -410,11 +461,7 @@ export function DailyAttendance() {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm uppercase text-muted-foreground">
-                      {p.punchType === "BREAK_IN"
-                        ? "Break start"
-                        : p.punchType === "BREAK_OUT"
-                          ? "Break end"
-                          : p.punchType.replace("_", " ")}
+                      {formatPunchLabel(p.punchType)}
                     </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatTime(p.punchTime)}
@@ -446,7 +493,7 @@ export function DailyAttendance() {
               <label className="text-sm font-medium">Type</label>
               <Input
                 readOnly
-                value={punchEditType.replace("_", " ")}
+                value={formatPunchLabel(punchEditType)}
                 className="bg-muted text-muted-foreground"
               />
               <p className="text-xs text-muted-foreground">Type is fixed; you can only edit the time.</p>

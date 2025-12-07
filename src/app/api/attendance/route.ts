@@ -76,37 +76,43 @@ export async function GET(req: Request) {
         const expectedStart = expected.scheduledStartMinutes ?? null;
         const expectedEnd = expected.scheduledEndMinutes ?? null;
 
-        const actualInAt = r.actualInAt ? new Date(r.actualInAt) : null;
-        const actualOutAt = r.actualOutAt ? new Date(r.actualOutAt) : null;
+        const firstClockIn = punches.find((p) => p.punchType === "TIME_IN") ?? null;
+        const lastClockOut =
+          [...punches].reverse().find((p) => p.punchType === "TIME_OUT") ?? null;
+
+        const actualInAt = firstClockIn?.punchTime ?? (r.actualInAt ? new Date(r.actualInAt) : null);
+        const actualOutAt = lastClockOut?.punchTime ?? null;
         const actualInMinutes = actualInAt ? Math.round((actualInAt.getTime() - dayStart.getTime()) / 60000) : null;
         const actualOutMinutes = actualOutAt ? Math.round((actualOutAt.getTime() - dayStart.getTime()) / 60000) : null;
 
         const lateMinutes =
-          expectedStart != null && actualInMinutes != null ? Math.max(0, actualInMinutes - expectedStart) : r.lateMinutes ?? 0;
+          expectedStart != null && actualInMinutes != null
+            ? Math.max(0, actualInMinutes - expectedStart)
+            : r.lateMinutes ?? null;
         const undertimeMinutes =
           expectedEnd != null && actualOutMinutes != null
             ? Math.max(0, expectedEnd - actualOutMinutes)
-            : r.undertimeMinutes ?? 0;
+            : null;
         const overtimeMinutesRaw =
           expectedEnd != null && actualOutMinutes != null
             ? Math.max(0, actualOutMinutes - expectedEnd)
-            : r.overtimeMinutesRaw ?? 0;
+            : null;
         const workedMinutes =
-          r.workedMinutes != null
-            ? r.workedMinutes
-            : actualInAt && actualOutAt
-              ? Math.max(0, Math.round((actualOutAt.getTime() - actualInAt.getTime()) / 60000))
-              : null;
+          actualInAt && actualOutAt
+            ? Math.max(0, Math.round((actualOutAt.getTime() - actualInAt.getTime()) / 60000))
+            : null;
 
         return {
           ...r,
+          breakCount: breakCount || r.breakCount || 0,
+          breakMinutes: breakMinutes || r.breakMinutes || 0,
+          actualInAt,
+          actualOutAt,
           expectedShiftId: expected.shift?.id ?? r.expectedShiftId ?? null,
           expectedShiftName: expected.shift?.name ?? r.expectedShift?.name ?? null,
           scheduledStartMinutes: expectedStart,
           scheduledEndMinutes: expectedEnd,
           punchesCount: punches.length,
-          breakCount,
-          breakMinutes,
           lateMinutes,
           undertimeMinutes,
           overtimeMinutesRaw,
@@ -151,12 +157,17 @@ export async function GET(req: Request) {
         let count = 0;
         let minutes = 0;
         list.forEach((p) => {
-          if (p.punchType === "BREAK_OUT") {
-            breakStart = p.punchTime;
-          } else if (p.punchType === "BREAK_IN" && breakStart) {
-            count += 1;
-            minutes += Math.max(0, Math.round((p.punchTime.getTime() - breakStart.getTime()) / 60000));
-            breakStart = null;
+          if (p.punchType === "BREAK_OUT" || p.punchType === "BREAK_IN") {
+            if (!breakStart) {
+              breakStart = p.punchTime;
+            } else {
+              count += 1;
+              minutes += Math.max(
+                0,
+                Math.round((p.punchTime.getTime() - breakStart.getTime()) / 60000)
+              );
+              breakStart = null;
+            }
           }
         });
         breakMap.set(empId, { count, minutes });
@@ -187,8 +198,8 @@ export async function GET(req: Request) {
             scheduledEndMinutes: scheduledEnd,
             expectedShiftId,
             expectedShiftName,
-            breakCount: breaks.count,
-            breakMinutes: breaks.minutes,
+            breakCount: breaks.count || existing.breakCount || 0,
+            breakMinutes: breaks.minutes || existing.breakMinutes || 0,
           };
         }
         return {

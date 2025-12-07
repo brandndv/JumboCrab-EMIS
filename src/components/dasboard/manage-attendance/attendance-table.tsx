@@ -278,7 +278,8 @@ export function AttendanceHistoryTable() {
                           className={cn(
                             "uppercase tracking-wide",
                             row.status === "ABSENT" && "border-destructive text-destructive",
-                            row.status === "LATE" && "border-amber-500 text-amber-600"
+                            row.status === "LATE" && "border-amber-500 text-amber-600",
+                            row.status === "INCOMPLETE" && "border-blue-500 text-blue-600"
                           )}
                         >
                           {row.status}

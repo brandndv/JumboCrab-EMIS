@@ -251,6 +251,8 @@ model Attendance {
   actualInAt    DateTime?
   actualOutAt   DateTime?
   workedMinutes Int?
+  breakMinutes  Int @default(0)
+  breakCount    Int @default(0)
 
   // Variances
   lateMinutes             Int @default(0)
@@ -298,14 +300,15 @@ enum ATTENDANCE_STATUS {
   PRESENT
   ABSENT
   LATE
+  INCOMPLETE
   OVERTIME
   HOLIDAY
   REST
 }
 
 enum PUNCH_TYPE {
-  CLOCK_IN
-  CLOCK_OUT
+  TIME_IN
+  TIME_OUT
   BREAK_OUT
   BREAK_IN
 }

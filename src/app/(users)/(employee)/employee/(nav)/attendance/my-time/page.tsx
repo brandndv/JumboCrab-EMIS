@@ -46,7 +46,7 @@ const formatTime = (value?: string | null) => {
   return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 };
 
-const punchOrder = ["CLOCK_IN", "BREAK_OUT", "BREAK_IN", "CLOCK_OUT"] as const;
+const punchOrder = ["TIME_IN", "BREAK_OUT", "BREAK_IN", "TIME_OUT"] as const;
 
 export default function MyTimePage() {
   const [status, setStatus] = useState<StatusPayload | null>(null);
@@ -76,14 +76,14 @@ export default function MyTimePage() {
   const nextActions = useMemo(() => {
     const last = status?.lastPunch?.punchType;
     const actions: { type: Punch["punchType"]; label: string; icon: React.ReactNode }[] = [];
-    if (!last || last === "CLOCK_OUT") {
-      actions.push({ type: "CLOCK_IN", label: "Time in", icon: <LogIn className="h-4 w-4" /> });
-    } else if (last === "CLOCK_IN") {
+    if (!last || last === "TIME_OUT") {
+      actions.push({ type: "TIME_IN", label: "Time in", icon: <LogIn className="h-4 w-4" /> });
+    } else if (last === "TIME_IN") {
       actions.push({ type: "BREAK_IN", label: "Break start", icon: <Coffee className="h-4 w-4" /> });
-      actions.push({ type: "CLOCK_OUT", label: "Time out", icon: <LogOut className="h-4 w-4" /> });
+      actions.push({ type: "TIME_OUT", label: "Time out", icon: <LogOut className="h-4 w-4" /> });
     } else if (last === "BREAK_IN") {
       actions.push({ type: "BREAK_OUT", label: "Break end", icon: <Clock className="h-4 w-4" /> });
-      actions.push({ type: "CLOCK_OUT", label: "Time out", icon: <LogOut className="h-4 w-4" /> });
+      actions.push({ type: "TIME_OUT", label: "Time out", icon: <LogOut className="h-4 w-4" /> });
     }
     return actions;
   }, [status?.lastPunch?.punchType]);

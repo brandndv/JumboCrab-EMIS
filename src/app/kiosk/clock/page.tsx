@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCcw, LogIn, LogOut, Coffee, Clock, Shield, Fingerprint } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatZonedDate, formatZonedTime, zonedNow } from "@/lib/timezone";
+import { formatZonedDate, formatZonedTime, startOfZonedDay, zonedNow } from "@/lib/timezone";
 
 type Punch = {
   punchTime: string;
@@ -52,7 +52,41 @@ const minutesToTime = (mins: number | null) => {
   return `${h12}:${m.toString().padStart(2, "0")} ${suffix}`;
 };
 
-const actionsOrder = ["CLOCK_IN", "BREAK_IN", "BREAK_OUT", "CLOCK_OUT"] as const;
+const actionsOrder = ["TIME_IN", "BREAK_IN", "BREAK_OUT", "TIME_OUT"] as const;
+const reasonMessage = (reason?: string, fallback?: string) => {
+  const map: Record<string, string> = {
+    unauthorized: "You must sign in first.",
+    invalid_date: "Selected date is invalid.",
+    employee_not_found: "Employee record not found for this user.",
+    ip_not_allowed: "This device is not allowed to punch.",
+    invalid_punch_type: "Punch type is invalid.",
+    missing_credentials: "Username and password are required.",
+    user_not_eligible: "User is not eligible to punch.",
+    invalid_credentials: "Incorrect username or password.",
+    wrong_date: "Clock in is only allowed on today's scheduled shift date.",
+    no_shift_today: "No scheduled shift for today.",
+    too_early: "Too early to clock in.",
+    too_late: "Cannot clock in after your scheduled end time.",
+    already_clocked_out: "Already clocked out today.",
+    invalid_sequence: "Wrong punch order. Follow the punch sequence.",
+  };
+  if (reason && map[reason]) return map[reason];
+  return fallback || "Failed to punch";
+};
+const formatPunchLabel = (punchType: Punch["punchType"]) => {
+  switch (punchType) {
+    case "TIME_IN":
+      return "TIME IN";
+    case "TIME_OUT":
+      return "TIME OUT";
+    case "BREAK_IN":
+      return "BREAK START";
+    case "BREAK_OUT":
+      return "BREAK END";
+    default:
+      return punchType.replace("_", " ").toUpperCase();
+  }
+};
 
 export default function KioskClockPage() {
   const [username, setUsername] = useState("");
@@ -132,19 +166,19 @@ export default function KioskClockPage() {
 const nextActions = useMemo(() => {
     const last = status?.lastPunch?.punchType;
     const allowedNext: Record<Punch["punchType"] | "NONE", Punch["punchType"]> = {
-      NONE: "CLOCK_IN",
-      CLOCK_OUT: "CLOCK_IN",
-      CLOCK_IN: "BREAK_IN",
+      NONE: "TIME_IN",
+      TIME_OUT: "TIME_IN",
+      TIME_IN: "BREAK_IN",
       BREAK_IN: "BREAK_OUT",
-      BREAK_OUT: "CLOCK_OUT",
+      BREAK_OUT: "TIME_OUT",
     };
     const key = (last as Punch["punchType"]) ?? "NONE";
     const expected = allowedNext[key as keyof typeof allowedNext];
     const all = [
-      { type: "CLOCK_IN", label: "Time in", icon: <LogIn className="h-5 w-5" /> },
-      { type: "BREAK_IN", label: "Break start", icon: <Coffee className="h-5 w-5" /> },
-      { type: "BREAK_OUT", label: "Break end", icon: <Clock className="h-5 w-5" /> },
-      { type: "CLOCK_OUT", label: "Time out", icon: <LogOut className="h-5 w-5" /> },
+      { type: "TIME_IN", label: "TIME IN", icon: <LogIn className="h-5 w-5" /> },
+      { type: "BREAK_IN", label: "BREAK START", icon: <Coffee className="h-5 w-5" /> },
+      { type: "BREAK_OUT", label: "BREAK END", icon: <Clock className="h-5 w-5" /> },
+      { type: "TIME_OUT", label: "TIME OUT", icon: <LogOut className="h-5 w-5" /> },
     ];
     return all.map((a) => ({ ...a, enabled: a.type === expected }));
   }, [status?.lastPunch?.punchType]);
@@ -159,6 +193,31 @@ const nextActions = useMemo(() => {
         setError("Biometric mode is not available yet.");
         return;
       }
+      // Front-end validation mirrors API reasons for faster feedback
+      const now = zonedNow();
+      const todayISO = new Date(now).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+      const dayStart = startOfZonedDay(now);
+      const minutesSinceStart = Math.round((now.getTime() - dayStart.getTime()) / 60000);
+
+      if (punchType === "TIME_IN") {
+        if (selectedDate && selectedDate !== todayISO) {
+          setError(reasonMessage("wrong_date"));
+          return;
+        }
+        if (status?.expected.start == null) {
+          setError(reasonMessage("no_shift_today"));
+          return;
+        }
+        if (minutesSinceStart < status.expected.start) {
+          setError(reasonMessage("too_early"));
+          return;
+        }
+        if (status.expected.end != null && minutesSinceStart > status.expected.end) {
+          setError(reasonMessage("too_late"));
+          return;
+        }
+      }
+
       setPunching(punchType);
       setError(null);
       setInfo(null);
@@ -167,9 +226,12 @@ const nextActions = useMemo(() => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, punchType }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to punch");
-      setInfo("Punch recorded");
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = reasonMessage(json?.reason, json?.error || res.statusText || "Failed to punch");
+        throw new Error(msg);
+      }
+      setInfo(reasonMessage(json?.reason, "Punch recorded"));
       setPassword("");
       setSuggestions([]);
       setStatusUser(username);
@@ -354,7 +416,7 @@ const nextActions = useMemo(() => {
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Last punch</p>
                   <p className="text-sm font-medium">
-                    {status.lastPunch ? status.lastPunch.punchType.replace("_", " ") : "None"}
+                    {status.lastPunch ? formatPunchLabel(status.lastPunch.punchType) : "None"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {status.lastPunch ? formatZonedTime(status.lastPunch.punchTime, { hour12: true, hour: "2-digit", minute: "2-digit" }) : "—"}
@@ -376,7 +438,7 @@ const nextActions = useMemo(() => {
                     <div className="divide-y">
                       {status.punches.map((p, idx) => (
                         <div key={idx} className="flex items-center justify-between px-3 py-2">
-                          <span className="text-sm font-medium">{p.punchType.replace("_", " ")}</span>
+                          <span className="text-sm font-medium">{formatPunchLabel(p.punchType)}</span>
                           <span className="text-xs text-muted-foreground">
                             {formatZonedTime(p.punchTime, { hour12: true, hour: "2-digit", minute: "2-digit" })}
                           </span>

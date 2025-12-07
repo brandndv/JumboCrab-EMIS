@@ -89,6 +89,8 @@ export async function recomputeAttendanceForDay(
 ) {
   const dayStart = startOfZonedDay(workDate);
   const dayEnd = endOfZonedDay(workDate);
+  const now = new Date();
+  const nowMinutes = minutesBetween(dayStart, now);
 
   const punches = await db.punch.findMany({
     where: {
@@ -98,10 +100,35 @@ export async function recomputeAttendanceForDay(
     orderBy: { punchTime: "asc" },
   });
 
-  const expected = await getExpectedShiftForDate(employeeId, dayStart);
+  // Compute breaks by pairing consecutive break punches (BREAK_IN/OUT in any order)
+  let breakCount = 0;
+  let breakMinutes = 0;
+  let breakStart: Date | null = null;
+  punches.forEach((p) => {
+    if (p.punchType === PUNCH_TYPE.BREAK_IN || p.punchType === PUNCH_TYPE.BREAK_OUT) {
+      if (!breakStart) {
+        breakStart = p.punchTime;
+      } else {
+        breakCount += 1;
+        breakMinutes += Math.max(0, minutesBetween(breakStart, p.punchTime));
+        breakStart = null;
+      }
+    }
+  });
 
-  const actualInAt = punches[0]?.punchTime ?? null;
-  const actualOutAt = punches[punches.length - 1]?.punchTime ?? null;
+  const expected = await getExpectedShiftForDate(employeeId, dayStart);
+  const paidHoursPerDay = expected.shift?.paidHoursPerDay ?? null;
+  // Lock and mark incomplete once we're 5 minutes after scheduled end (clamped to 0).
+  const cutoffMinutes =
+    expected.scheduledEndMinutes != null ? Math.max(0, expected.scheduledEndMinutes + 5) : null;
+  const cutoffPassed = cutoffMinutes != null ? nowMinutes >= cutoffMinutes : false;
+
+  const firstClockIn = punches.find((p) => p.punchType === PUNCH_TYPE.TIME_IN) ?? null;
+  const lastClockOut =
+    [...punches].reverse().find((p) => p.punchType === PUNCH_TYPE.TIME_OUT) ?? null;
+
+  const actualInAt = firstClockIn?.punchTime ?? punches[0]?.punchTime ?? null;
+  const actualOutAt = lastClockOut?.punchTime ?? null;
   const actualInMinutes = actualInAt ? minutesBetween(dayStart, actualInAt) : null;
   const actualOutMinutes = actualOutAt ? minutesBetween(dayStart, actualOutAt) : null;
 
@@ -125,8 +152,14 @@ export async function recomputeAttendanceForDay(
 
   let status: ATTENDANCE_STATUS = ATTENDANCE_STATUS.ABSENT;
   if (actualInAt || actualOutAt) {
-    status = lateMinutes > 0 ? ATTENDANCE_STATUS.LATE : ATTENDANCE_STATUS.PRESENT;
+    if (!actualOutAt && cutoffPassed) {
+      status = ATTENDANCE_STATUS.INCOMPLETE;
+    } else {
+      status = lateMinutes > 0 ? ATTENDANCE_STATUS.LATE : ATTENDANCE_STATUS.PRESENT;
+    }
   }
+
+  const shouldLock = cutoffPassed;
 
   const attendance = await db.attendance.upsert({
     where: { employeeId_workDate: { employeeId, workDate: dayStart } },
@@ -135,12 +168,16 @@ export async function recomputeAttendanceForDay(
       expectedShiftId: expected.shift?.id ?? null,
       scheduledStartMinutes: expected.scheduledStartMinutes,
       scheduledEndMinutes: expected.scheduledEndMinutes,
+      paidHoursPerDay,
       actualInAt,
       actualOutAt,
       workedMinutes,
+      breakMinutes,
+      breakCount,
       lateMinutes,
       undertimeMinutes,
       overtimeMinutesRaw,
+      isLocked: shouldLock,
     },
     create: {
       employeeId,
@@ -149,14 +186,26 @@ export async function recomputeAttendanceForDay(
       expectedShiftId: expected.shift?.id ?? null,
       scheduledStartMinutes: expected.scheduledStartMinutes,
       scheduledEndMinutes: expected.scheduledEndMinutes,
+      paidHoursPerDay,
       actualInAt,
       actualOutAt,
       workedMinutes,
+      breakMinutes,
+      breakCount,
       lateMinutes,
       undertimeMinutes,
       overtimeMinutesRaw,
+      isLocked: shouldLock,
     },
   });
+
+  // Link punches to the attendance record for traceability
+  if (attendance?.id) {
+    await db.punch.updateMany({
+      where: { employeeId, punchTime: { gte: dayStart, lt: dayEnd } },
+      data: { attendanceId: attendance.id },
+    });
+  }
 
   return { attendance, punches };
 }
