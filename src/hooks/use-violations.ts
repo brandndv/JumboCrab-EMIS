@@ -16,6 +16,7 @@ export type violationRow = {
     status: string;
     remarks?: string;
     createdAt: string;
+    updatedAt: string; //test
 }
 
 export function useViolationsState(){
