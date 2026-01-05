@@ -66,16 +66,12 @@ model Employee {
   position                     Position?         @relation(fields: [positionId], references: [positionId])
   supervisorUser               User?             @relation("EmployeeSupervisorUser", fields: [supervisorUserId], references: [userId])
   governmentId                 GovernmentId?     @relation("EmployeeGovernmentId")
-  violations                   Violation[]
-  
   contribution                 EmployeeContribution?
   // Scheduling links
   patternAssignments           EmployeePatternAssignment[]
   shiftOverrides               EmployeeShiftOverride[]
   attendances                  Attendance[]
   punches                      Punch[]
-
-  
 }
 // ======== ORG STRUCTURE ========= //
 
@@ -122,6 +118,7 @@ model GovernmentId {
 model EmployeeContribution {
   id            String   @id @default(cuid())
   employeeId    String   @unique
+  employee      Employee @relation(fields: [employeeId], references: [employeeId])
   sssEe         Decimal  @default(0)
   sssEr         Decimal  @default(0)
   isSssActive   Boolean  @default(true)
@@ -139,8 +136,6 @@ model EmployeeContribution {
   updatedAt     DateTime @updatedAt
   createdById   String?
   updatedById   String?
-  
-  employee      Employee @relation(fields: [employeeId], references: [employeeId])
   createdBy     User?    @relation("EmployeeContributionCreatedBy", fields: [createdById], references: [userId])
   updatedBy     User?    @relation("EmployeeContributionUpdatedBy", fields: [updatedById], references: [userId])
 }
@@ -299,47 +294,6 @@ model Punch {
 
   @@index([employeeId, punchTime])
   @@index([attendanceId])
-}
-
-//VIOLATIONS SCHEMA
-model Violation {
-  id                String @id @default(cuid())
-  employeeId        String
-  violationType     VIOLATION_TYPE
-  violationDate     DateTime
-
-  amount            Decimal? @db.Decimal(10, 2)
-  paidAmount        Decimal  @default(0) @db.Decimal(10, 2)
-  remainingAmount   Decimal  @default(0) @db.Decimal(10, 2)
-  installmentAmount Decimal? @db.Decimal(10, 2)
-
-  status            VIOLATION_STATUS
-  remarks           String?
-
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  employee          Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
-
-  @@index([employeeId])
-  @@index([violationDate])
-}
-
-enum VIOLATION_TYPE {
-  LATE
-  AWOL
-  UNIFORM
-  HARASSMENT
-  HEALTH_AND_SAFETY
-  RETALIATION
-  LEAVE_VIOLATION
-  OTHERS
-}
-
-enum VIOLATION_STATUS {
-  PENDING
-  DEDUCTED
-  WAIVED
 }
 
 enum ATTENDANCE_STATUS {

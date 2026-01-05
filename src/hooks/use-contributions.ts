@@ -10,6 +10,7 @@ export type ContributionRow = {
   department?: string;
   eeTotal: number;
   isSet?: boolean;
+  updatedAt?: string;
   sssEe?: number;
   isSssActive?: boolean;
   philHealthEe?: number;
@@ -23,7 +24,6 @@ export type ContributionRow = {
   philHealthEr?: number;
   pagIbigEr?: number;
   withholdingEr?: number;
-  updatedAt?: string;
 };
 
 export function useContributionsState() {
