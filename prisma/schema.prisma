@@ -8,26 +8,26 @@ datasource db {
 }
 
 model User {
-  userId     String    @id @default(cuid())
-  username   String    @unique
-  email      String    @unique
-  password   String
-  salt       String
-  role       Roles
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  isDisabled Boolean   @default(false)
-  employee   Employee?
+  userId               String                 @id @default(cuid())
+  username             String                 @unique
+  email                String                 @unique
+  password             String
+  salt                 String
+  role                 Roles
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  isDisabled           Boolean                @default(false)
+  employee             Employee?
   // Audit backlinks for contributions
   createdContributions EmployeeContribution[] @relation("EmployeeContributionCreatedBy")
   updatedContributions EmployeeContribution[] @relation("EmployeeContributionUpdatedBy")
   // Users who supervise employees
-  supervisedEmployees Employee[] @relation("EmployeeSupervisorUser")
+  supervisedEmployees  Employee[]             @relation("EmployeeSupervisorUser")
 }
 
 model Employee {
-  employeeId                   String            @id @default(cuid())
-  employeeCode                 String            @unique
+  employeeId                   String                @id @default(cuid())
+  employeeCode                 String                @unique
   firstName                    String
   lastName                     String
   middleName                   String?
@@ -43,7 +43,7 @@ model Employee {
   country                      String?
   img                          String?
   startDate                    DateTime
-  isEnded                      Boolean?          @default(false)
+  isEnded                      Boolean?              @default(false)
   endDate                      DateTime?
   employmentStatus             EMPLOYMENT_STATUS
   currentStatus                CURRENT_STATUS
@@ -54,25 +54,28 @@ model Employee {
   emergencyContactPhone        String?
   emergencyContactEmail        String?
   description                  String?
-  isArchived                   Boolean           @default(false)
-  createdAt                    DateTime          @default(now())
-  updatedAt                    DateTime          @updatedAt
-  userId                       String?           @unique
-  user                         User?             @relation(fields: [userId], references: [userId])
+  isArchived                   Boolean               @default(false)
+  createdAt                    DateTime              @default(now())
+  updatedAt                    DateTime              @updatedAt
+  userId                       String?               @unique
+  user                         User?                 @relation(fields: [userId], references: [userId])
   departmentId                 String?
   positionId                   String?
   supervisorUserId             String?
-  department                   Department?       @relation(fields: [departmentId], references: [departmentId])
-  position                     Position?         @relation(fields: [positionId], references: [positionId])
-  supervisorUser               User?             @relation("EmployeeSupervisorUser", fields: [supervisorUserId], references: [userId])
-  governmentId                 GovernmentId?     @relation("EmployeeGovernmentId")
+  department                   Department?           @relation(fields: [departmentId], references: [departmentId])
+  position                     Position?             @relation(fields: [positionId], references: [positionId])
+  supervisorUser               User?                 @relation("EmployeeSupervisorUser", fields: [supervisorUserId], references: [userId])
+  governmentId                 GovernmentId?         @relation("EmployeeGovernmentId")
   contribution                 EmployeeContribution?
+  violations                   Violation[]
+
   // Scheduling links
-  patternAssignments           EmployeePatternAssignment[]
-  shiftOverrides               EmployeeShiftOverride[]
-  attendances                  Attendance[]
-  punches                      Punch[]
+  patternAssignments EmployeePatternAssignment[]
+  shiftOverrides     EmployeeShiftOverride[]
+  attendances        Attendance[]
+  punches            Punch[]
 }
+
 // ======== ORG STRUCTURE ========= //
 
 /// Department catalog (simple name/description, soft active flag).
@@ -89,74 +92,76 @@ model Department {
 
 /// Positions (job titles) linked to a department.
 model Position {
-  positionId   String     @id @default(cuid())
+  positionId   String   @id @default(cuid())
   name         String
   description  String?
-  isActive     Boolean    @default(true)
+  isActive     Boolean  @default(true)
   departmentId String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   department Department @relation(fields: [departmentId], references: [departmentId])
   employees  Employee[]
 
   @@unique([name, departmentId])
 }
+
 // ======== EMPLOYEE CONTRIBUTION ========= //
 model GovernmentId {
-  governmentId      String   @id @default(cuid())
-  sssNumber         String?
-  philHealthNumber  String?
-  tinNumber         String?
-  pagIbigNumber     String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  employeeId        String   @unique
-  employee          Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
+  governmentId     String   @id @default(cuid())
+  sssNumber        String?
+  philHealthNumber String?
+  tinNumber        String?
+  pagIbigNumber    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  employeeId       String   @unique
+  employee         Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
 }
 
 model EmployeeContribution {
-  id            String   @id @default(cuid())
-  employeeId    String   @unique
-  employee      Employee @relation(fields: [employeeId], references: [employeeId])
-  sssEe         Decimal  @default(0)
-  sssEr         Decimal  @default(0)
-  isSssActive   Boolean  @default(true)
-  philHealthEe  Decimal  @default(0)
-  philHealthEr  Decimal  @default(0)
-  isPhilHealthActive Boolean @default(true)
-  pagIbigEe     Decimal  @default(0)
-  pagIbigEr     Decimal  @default(0)
-  isPagIbigActive Boolean @default(true)
-  withholdingEe Decimal  @default(0)
-  withholdingEr Decimal  @default(0)
-  isWithholdingActive Boolean @default(true)
-  effectiveDate DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  createdById   String?
-  updatedById   String?
-  createdBy     User?    @relation("EmployeeContributionCreatedBy", fields: [createdById], references: [userId])
-  updatedBy     User?    @relation("EmployeeContributionUpdatedBy", fields: [updatedById], references: [userId])
+  id                  String   @id @default(cuid())
+  employeeId          String   @unique
+  employee            Employee @relation(fields: [employeeId], references: [employeeId])
+  sssEe               Decimal  @default(0)
+  sssEr               Decimal  @default(0)
+  isSssActive         Boolean  @default(true)
+  philHealthEe        Decimal  @default(0)
+  philHealthEr        Decimal  @default(0)
+  isPhilHealthActive  Boolean  @default(true)
+  pagIbigEe           Decimal  @default(0)
+  pagIbigEr           Decimal  @default(0)
+  isPagIbigActive     Boolean  @default(true)
+  withholdingEe       Decimal  @default(0)
+  withholdingEr       Decimal  @default(0)
+  isWithholdingActive Boolean  @default(true)
+  effectiveDate       DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  createdById         String?
+  updatedById         String?
+  createdBy           User?    @relation("EmployeeContributionCreatedBy", fields: [createdById], references: [userId])
+  updatedBy           User?    @relation("EmployeeContributionUpdatedBy", fields: [updatedById], references: [userId])
 }
+
 // ======== SCHEDULE AND SHIFTS ========= //
 
 /// A reusable shift template. Keep it small and only add more fields once needed.
 model Shift {
-  id                  Int      @id @default(autoincrement())
-  code                String   @unique
-  name                String
-  startMinutes        Int      // minutes since midnight (e.g., 9:00 AM -> 540)
-  endMinutes          Int      // minutes since midnight (e.g., 6:00 PM -> 1080)
-  spansMidnight       Boolean  @default(false) // true when end wraps past midnight
-  breakStartMinutes   Int?
-  breakEndMinutes     Int?
-  breakMinutesUnpaid  Int      @default(0)
-  paidHoursPerDay     Decimal  @db.Decimal(5, 2) // e.g., 8.00
-  isActive            Boolean  @default(true)
-  notes               String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 Int      @id @default(autoincrement())
+  code               String   @unique
+  name               String
+  startMinutes       Int // minutes since midnight (e.g., 9:00 AM -> 540)
+  endMinutes         Int // minutes since midnight (e.g., 6:00 PM -> 1080)
+  spansMidnight      Boolean  @default(false) // true when end wraps past midnight
+  breakStartMinutes  Int?
+  breakEndMinutes    Int?
+  breakMinutesUnpaid Int      @default(0)
+  paidHoursPerDay    Decimal  @db.Decimal(5, 2) // e.g., 8.00
+  isActive           Boolean  @default(true)
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   // Relations to weekly patterns per day
   weeklyPatternsSun WeeklyPattern[] @relation("wp_sun")
@@ -169,14 +174,14 @@ model Shift {
 
   // Usage
   overrides   EmployeeShiftOverride[]
-  attendances Attendance[] @relation("attendance_expected_shift")
+  attendances Attendance[]            @relation("attendance_expected_shift")
 }
 
 /// Weekly pattern that selects one shift per weekday; null means rest day.
 model WeeklyPattern {
-  id      String @id @default(cuid())
-  code    String @unique
-  name    String
+  id       String  @id @default(cuid())
+  code     String  @unique
+  name     String
   isActive Boolean @default(true)
 
   sunShiftId Int?
@@ -196,21 +201,21 @@ model WeeklyPattern {
   satShift Shift? @relation("wp_sat", fields: [satShiftId], references: [id])
 
   assignments EmployeePatternAssignment[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
 }
 
 /// Assigns a weekly pattern to an employee starting on a date.
 model EmployeePatternAssignment {
-  id           String   @id @default(cuid())
-  employeeId   String
+  id            String   @id @default(cuid())
+  employeeId    String
   effectiveDate DateTime // changeover date; latest <= target date applies
-  patternId    String
-  reason       String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  patternId     String
+  reason        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  employee Employee      @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
   pattern  WeeklyPattern @relation(fields: [patternId], references: [id])
 
   @@index([employeeId, effectiveDate])
@@ -221,8 +226,8 @@ model EmployeeShiftOverride {
   id         String   @id @default(cuid())
   employeeId String
   workDate   DateTime // date anchor (use start day for overnight)
-  shiftId    Int?     // null = mark as rest day
-  source     String   // e.g., "MANUAL", "APPROVED_REQUEST"
+  shiftId    Int? // null = mark as rest day
+  source     String // e.g., "MANUAL", "APPROVED_REQUEST"
   note       String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -251,8 +256,8 @@ model Attendance {
   actualInAt    DateTime?
   actualOutAt   DateTime?
   workedMinutes Int?
-  breakMinutes  Int @default(0)
-  breakCount    Int @default(0)
+  breakMinutes  Int       @default(0)
+  breakCount    Int       @default(0)
 
   // Variances
   lateMinutes             Int @default(0)
@@ -279,21 +284,52 @@ model Attendance {
 
 /// Raw punch events; use them to recompute Attendance in real time.
 model Punch {
-  id           String      @id @default(cuid())
+  id           String     @id @default(cuid())
   employeeId   String
   attendanceId String?
   punchTime    DateTime
   punchType    PUNCH_TYPE
-  source       String?     // e.g., "BIOMETRIC", "WEB"
+  source       String? // e.g., "BIOMETRIC", "WEB"
   deviceId     String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  employee   Employee   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  employee   Employee    @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
   attendance Attendance? @relation(fields: [attendanceId], references: [id])
 
   @@index([employeeId, punchTime])
   @@index([attendanceId])
+}
+
+model Violation {
+  id                String           @id @default(cuid())
+  employeeId        String
+  violationType     VIOLATION_TYPE
+  violationDate     DateTime
+  amount            Decimal?
+  paidAmount        Decimal          @default(0) @db.Decimal(10, 2)
+  remainingAmount   Decimal          @default(0) @db.Decimal(10, 2)
+  installmentAmount Decimal
+  status            VIOLATION_STATUS
+  remarks           String?
+  createdAt         DateTime
+
+  // employee Employee @relation(fields[employeeId], references: [employeeId], onDelete: Cascade);
+
+  employee           Employee? @relation(fields: [employeeEmployeeId], references: [employeeId])
+  employeeEmployeeId String?
+}
+
+enum VIOLATION_STATUS {
+  PENDING
+  DEDUCTED
+  WAIVED
+}
+
+enum VIOLATION_TYPE {
+  AWOL
+  LATE
+  ABSENT
 }
 
 enum ATTENDANCE_STATUS {
@@ -312,7 +348,6 @@ enum PUNCH_TYPE {
   BREAK_OUT
   BREAK_IN
 }
-
 
 enum GENDER {
   MALE

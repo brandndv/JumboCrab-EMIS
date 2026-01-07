@@ -32,7 +32,9 @@ export function useContributionsState() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "set" | "not-set">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "set" | "not-set">(
+    "all"
+  );
   const [departments, setDepartments] = useState<string[]>([]);
 
   // Load the directory from the API; keep it simple for now.
