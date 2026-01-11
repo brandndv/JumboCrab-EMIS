@@ -5,11 +5,14 @@ import { revalidatePath } from "next/cache";
 import { db, checkConnection } from "@/lib/db";
 import {
   EMPLOYEE_CODE_REGEX,
+  Employee,
   SUFFIX,
-  type SUFFIX as SUFFIX_TYPE,
+  createEmployeeSchema, // Imported Zod schema
 } from "@/lib/validations/employees";
 import { generateUniqueEmployeeCode } from "@/lib/employees/employee-code";
-import type { Employee as PrismaEmployee } from "@prisma/client";
+import type { Employee as PrismaEmployee, Prisma } from "@prisma/client";
+
+// ... (getEmployees and getEmployeeById headers omitted as they are unchanged)
 
 // ========== GET EMPLOYEES ========= //
 export async function getEmployees(): Promise<{
@@ -93,7 +96,7 @@ export async function getEmployeeById(id: string | undefined): Promise<{
 }
 
 // ========== CREATE EMPLOYEE ========= //
-export async function createEmployee(employeeData: any): Promise<{
+export async function createEmployee(employeeData: Employee): Promise<{
   success: boolean;
   data?: PrismaEmployee;
   error?: string;
@@ -101,85 +104,73 @@ export async function createEmployee(employeeData: any): Promise<{
   try {
     console.log("Creating new employee with data:", employeeData);
 
-    const parseDate = (date: any): Date => {
-      if (date instanceof Date) return date;
-      if (typeof date === "string") return new Date(date);
-      return new Date();
-    };
-
-    const employeeCode =
+    // 1. Handle Employee Code (Generate if missing or invalid)
+    // Zod expects a string fitting the regex, so we ensure it's present.
+    const code =
       typeof employeeData.employeeCode === "string" &&
       EMPLOYEE_CODE_REGEX.test(employeeData.employeeCode)
         ? employeeData.employeeCode
         : await generateUniqueEmployeeCode();
 
-    const defaults = {
-      employeeCode,
-      firstName: employeeData.firstName || "",
-      lastName: employeeData.lastName || "",
-      sex: employeeData.sex || "",
-      civilStatus: employeeData.civilStatus || "",
-      birthdate: employeeData.birthdate
-        ? parseDate(employeeData.birthdate)
-        : new Date(),
-      startDate: employeeData.startDate
-        ? parseDate(employeeData.startDate)
-        : new Date(),
-      departmentId: employeeData.departmentId || null,
-      positionId: employeeData.positionId || null,
-      employmentStatus: employeeData.employmentStatus || "",
-      currentStatus:
-        typeof (employeeData as any).isEnded === "boolean" &&
-        (employeeData as any).isEnded
-          ? "ENDED"
-          : employeeData.currentStatus || "",
-      nationality: employeeData.nationality || "",
-      middleName: employeeData.middleName || null,
-      address: employeeData.address || null,
-      city: (employeeData as any).city ?? null,
-      state: (employeeData as any).state ?? null,
-      postalCode: (employeeData as any).postalCode ?? null,
-      country: (employeeData as any).country ?? null,
-      img: employeeData.img || null,
-      endDate: employeeData.endDate ? parseDate(employeeData.endDate) : null,
-      isEnded:
-        typeof (employeeData as any).isEnded === "boolean"
-          ? (employeeData as any).isEnded
-          : false,
-      email: employeeData.email || null,
-      phone: employeeData.phone || null,
-      description: employeeData.description || null,
-      suffix:
-        employeeData.suffix && SUFFIX.includes(employeeData.suffix as any)
-          ? (employeeData.suffix as SUFFIX_TYPE)
-          : null,
-      emergencyContactName: employeeData.emergencyContactName || null,
-      emergencyContactRelationship:
-        employeeData.emergencyContactRelationship || null,
-      emergencyContactPhone: employeeData.emergencyContactPhone || null,
-      emergencyContactEmail: employeeData.emergencyContactEmail || null,
+    // 2. Prepare payload for validation
+    // Merge the generated code back into the data object
+    const payloadStart = {
+      ...employeeData,
+      employeeCode: code,
     };
 
-    if (
-      employeeData.suffix &&
-      (SUFFIX as readonly string[]).includes(employeeData.suffix)
-    ) {
-      defaults.suffix = employeeData.suffix as SUFFIX;
+    // 3. Validate and Coerce with Zod
+    // This handles:'
+    // - Date string -> Date object conversion (z.coerce.date)
+    // - Enums (Gender, Civil Status)
+    // - Required fields check
+    // - Suffix validation
+    const parsed = createEmployeeSchema.safeParse(payloadStart);
+
+    if (!parsed.success) {
+      const errorMessage = parsed.error.issues
+        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .join(", ");
+      console.error("Validation failed:", errorMessage);
+      return {
+        success: false,
+        error: `Validation failed: ${errorMessage}`,
+      };
     }
 
-    console.log("Final create data:", defaults);
+    // Extract relational identifiers and drop legacy fields not in Prisma schema
+    const {
+      userId,
+      departmentId,
+      positionId,
+      department: _legacyDepartment,
+      position: _legacyPosition,
+      ...baseData
+    } = parsed.data;
+    void _legacyDepartment;
+    void _legacyPosition;
 
+    const { suffix, ...restBaseData } = baseData;
+    type AllowedSuffix = (typeof SUFFIX)[number];
+    const normalizedSuffix: AllowedSuffix | null =
+      typeof suffix === "string" && SUFFIX.includes(suffix as AllowedSuffix)
+        ? (suffix as AllowedSuffix)
+        : null;
+
+    const employeeCreateData = {
+      ...restBaseData,
+      ...(suffix !== undefined && { suffix: normalizedSuffix }),
+      departmentId: departmentId ?? null,
+      positionId: positionId ?? null,
+      userId: userId ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } satisfies Prisma.EmployeeUncheckedCreateInput;
+    console.log("Final validated create data:", employeeCreateData);
+
+    // 4. Create in Database
     const newEmployee = await db.employee.create({
-      data: {
-        ...defaults,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        user: employeeData.userId
-          ? {
-              connect: { userId: employeeData.userId },
-            }
-          : undefined,
-      },
+      data: employeeCreateData,
       include: {
         user: true,
       },

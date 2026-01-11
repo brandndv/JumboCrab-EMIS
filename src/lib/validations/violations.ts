@@ -4,6 +4,14 @@ import { VIOLATION_TYPE } from "@prisma/client";
 export const violationsSchema = z.object({
   id: z.string(),
   employeeId: z.string(),
+  employee: z.object({
+    firstName: z.string(),
+    lastName: z.string(),
+    employeeCode: z.string(),
+    position: z.object({
+      name: z.string(),
+    }),
+  }),
   violationType: z.enum(VIOLATION_TYPE),
   violationDate: z.date(),
   amount: z.number().optional,
