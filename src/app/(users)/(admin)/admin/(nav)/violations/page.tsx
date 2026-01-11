@@ -1,9 +1,5 @@
 const ViolationsPage = () => {
-  return (
-    <div>
-      <h1>uhu</h1>
-    </div>
-  );
+  return <div>hi</div>;
 };
 
 export default ViolationsPage;

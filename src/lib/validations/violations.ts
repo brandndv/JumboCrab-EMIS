@@ -1,5 +1,5 @@
-import { VIOLATION_TYPE } from "@prisma/client";
 import z from "zod";
+import { VIOLATION_TYPE } from "@prisma/client";
 
 export const violationsSchema = z.object({
   id: z.string(),
