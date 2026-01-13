@@ -199,6 +199,9 @@ export default function KioskPage() {
                     <b>Employee:</b> {lastSuccess.employeeName}
                   </div>
                   <div>
+                    <b>Employee ID:</b> {lastSuccess.employeeId}
+                  </div>
+                  <div>
                     <b>Punch:</b> {lastSuccess.punch}
                   </div>
                   <div>
