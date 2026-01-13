@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "react-qr-code";
-import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
 
 type KioskChallenge = {
   kioskId: string;
@@ -11,14 +10,13 @@ type KioskChallenge = {
   url: string; // full URL encoded in QR
 };
 
-type EmployeePayload = {
+type PunchResult = {
   employeeId: string;
   employeeName: string;
   kioskId: string;
-  nonce: string;
-  exp: number;
-  deviceId: string;
-  ts: number;
+  punch: "TIME_IN" | "TIME_OUT";
+  at: number;
+  historyCount: number;
 };
 
 function makeChallenge(kioskId: string): KioskChallenge {
@@ -33,36 +31,21 @@ function makeChallenge(kioskId: string): KioskChallenge {
   return { kioskId, nonce, exp, url };
 }
 
-function safeParseEmployeePayload(text: string): EmployeePayload | null {
-  try {
-    const obj = JSON.parse(text);
-    if (
-      !obj.employeeId ||
-      !obj.employeeName ||
-      !obj.kioskId ||
-      !obj.nonce ||
-      !obj.exp ||
-      !obj.deviceId
-    ) {
-      return null;
-    }
-    return obj as EmployeePayload;
-  } catch {
-    return null;
-  }
-}
-
 export default function KioskPage() {
   const kioskId = "KIOSK_001";
 
   const [challenge, setChallenge] = useState<KioskChallenge | null>(null);
   const [nowLeft, setNowLeft] = useState<number>(0);
+  const [message, setMessage] = useState<string>("Waiting for employee scan…");
+  const [lastSuccess, setLastSuccess] = useState<PunchResult | null>(null);
+  const lastAtRef = useRef<number | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const reader = useMemo(() => new BrowserMultiFormatReader(), []);
-
-  const [message, setMessage] = useState<string>("Ready.");
-  const [lastSuccess, setLastSuccess] = useState<any>(null);
+  const generateNewScan = () => {
+    setChallenge(makeChallenge(kioskId));
+    setLastSuccess(null);
+    lastAtRef.current = null;
+    setMessage("Waiting for employee scan…");
+  };
 
   // Rotate kiosk QR every 15s
   useEffect(() => {
@@ -87,75 +70,43 @@ export default function KioskPage() {
     return () => clearInterval(id);
   }, [challenge]);
 
-  // Scan employee QR on kiosk
   useEffect(() => {
-    let stopped = false;
-    let controls: IScannerControls | null = null;
+    let cancelled = false;
 
-    (async () => {
+    const poll = async () => {
       try {
-        const video = videoRef.current;
-        if (!video) return;
+        const res = await fetch(`/api/demo/punch?kioskId=${kioskId}`, {
+          cache: "no-store",
+        });
+        const data = await res.json();
+        if (cancelled) return;
 
-        setMessage("Opening camera…");
-
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-        const preferred =
-          devices.find((d) => /back|rear|environment/i.test(d.label))
-            ?.deviceId ?? devices[0]?.deviceId;
-
-        controls = await reader.decodeFromVideoDevice(
-          preferred,
-          video,
-          async (result, _error) => {
-            if (!result || stopped) return;
-
-            const text = result.getText();
-            const payload = safeParseEmployeePayload(text);
-            if (!payload) {
-              setMessage("Scanned QR is not a valid employee payload.");
-              return;
-            }
-
-            // Optional: ensure employee payload was for this kiosk
-            if (payload.kioskId !== kioskId) {
-              setMessage("Wrong kioskId in employee QR.");
-              return;
-            }
-
-            // Call demo API (no DB) to record punch state
-            setMessage("Processing punch…");
-
-            const res = await fetch("/api/demo/punch", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            });
-
-            const data = await res.json();
-            if (!res.ok || !data.ok) {
-              setMessage(`❌ Failed: ${data.error ?? "Unknown error"}`);
-              return;
-            }
-
+        if (res.ok && data?.ok) {
+          if (lastAtRef.current !== data.at) {
+            lastAtRef.current = data.at;
             setLastSuccess(data);
             setMessage("✅ SUCCESS");
           }
-        );
-        if (stopped && controls) {
-          controls.stop();
+          return;
         }
-      } catch (e: any) {
-        setMessage(e?.message ?? "Camera error. Allow permission.");
-        controls?.stop();
-      }
-    })();
 
-    return () => {
-      stopped = true;
-      controls?.stop();
+        if (!lastAtRef.current) {
+          setMessage("Waiting for employee scan…");
+        }
+      } catch {
+        if (!lastAtRef.current) {
+          setMessage("Waiting for employee scan…");
+        }
+      }
     };
-  }, [reader]);
+
+    poll();
+    const id = setInterval(poll, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [kioskId]);
 
   return (
     <div style={{ padding: 16, maxWidth: 720, margin: "0 auto" }}>
@@ -207,17 +158,16 @@ export default function KioskPage() {
                   <div>
                     <b>Time:</b> {new Date(lastSuccess.at).toLocaleTimeString()}
                   </div>
+                  <button onClick={generateNewScan} style={{ marginTop: 8 }}>
+                    Generate new scan
+                  </button>
                 </div>
               )}
             </div>
 
-            <p style={{ marginBottom: 8 }}>Scan the employee QR here:</p>
-            <video
-              ref={videoRef}
-              style={{ width: "100%", borderRadius: 12, background: "#000" }}
-            />
-            <p style={{ fontSize: 12, opacity: 0.75 }}>
-              For real phones, use HTTPS so camera works.
+            <p style={{ marginBottom: 8 }}>
+              Employees scan the kiosk QR on their device. This screen updates
+              automatically.
             </p>
           </div>
         </div>

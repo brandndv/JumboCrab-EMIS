@@ -2,9 +2,16 @@
 
 import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
 import { useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "react-qr-code";
 
 type KioskParsed = { kioskId: string; nonce: string; exp: number; raw: string };
+type PunchResult = {
+  employeeId: string;
+  employeeName: string;
+  kioskId: string;
+  punch: "TIME_IN" | "TIME_OUT";
+  at: number;
+  historyCount: number;
+};
 
 function parseKioskQr(text: string): KioskParsed | null {
   try {
@@ -40,11 +47,12 @@ export default function EmployeeScanPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [employeeName, setEmployeeName] = useState("");
 
-  const [step, setStep] = useState<"FORM" | "SCANNING" | "SHOW_QR" | "ERROR">(
+  const [step, setStep] = useState<"FORM" | "SCANNING" | "RESULT" | "ERROR">(
     "FORM"
   );
   const [error, setError] = useState("");
   const [kiosk, setKiosk] = useState<KioskParsed | null>(null);
+  const [result, setResult] = useState<PunchResult | null>(null);
 
   useEffect(() => {
     // load saved employee info for demo
@@ -60,6 +68,8 @@ export default function EmployeeScanPage() {
     localStorage.setItem("demo_employee_id", employeeId.trim());
     localStorage.setItem("demo_employee_name", employeeName.trim());
     setError("");
+    setResult(null);
+    setKiosk(null);
     setStep("SCANNING");
   };
 
@@ -82,7 +92,7 @@ export default function EmployeeScanPage() {
         controls = await reader.decodeFromVideoDevice(
           preferred,
           video,
-          (result, _error, scannerControls) => {
+          async (result, _error, scannerControls) => {
             if (!result || stopped) return;
 
             const text = result.getText();
@@ -109,7 +119,36 @@ export default function EmployeeScanPage() {
             stopped = true;
             scannerControls.stop();
             setKiosk(parsed);
-            setStep("SHOW_QR");
+
+            const payload = {
+              employeeId: employeeId.trim(),
+              employeeName: employeeName.trim(),
+              kioskId: parsed.kioskId,
+              nonce: parsed.nonce,
+              exp: parsed.exp,
+              deviceId: getOrCreateDeviceId(),
+              ts: Date.now(),
+            };
+
+            try {
+              const res = await fetch("/api/demo/punch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              const data = await res.json();
+              if (!res.ok || !data.ok) {
+                setError(`❌ Failed: ${data.error ?? "Unknown error"}`);
+                setStep("ERROR");
+                return;
+              }
+
+              setResult(data);
+              setStep("RESULT");
+            } catch (e: any) {
+              setError(e?.message ?? "Network error. Please try again.");
+              setStep("ERROR");
+            }
           }
         );
         if (stopped && controls) {
@@ -130,24 +169,10 @@ export default function EmployeeScanPage() {
 
   const reset = () => {
     setKiosk(null);
+    setResult(null);
     setError("");
     setStep("FORM");
   };
-
-  // Build employee payload QR (no DB)
-  const deviceId =
-    typeof window !== "undefined" ? getOrCreateDeviceId() : "unknown";
-  const payload =
-    kiosk &&
-    JSON.stringify({
-      employeeId: employeeId.trim(),
-      employeeName: employeeName.trim(),
-      kioskId: kiosk.kioskId,
-      nonce: kiosk.nonce,
-      exp: kiosk.exp,
-      deviceId,
-      ts: Date.now(),
-    });
 
   return (
     <div style={{ padding: 16, maxWidth: 520, margin: "0 auto" }}>
@@ -195,30 +220,28 @@ export default function EmployeeScanPage() {
         </>
       )}
 
-      {step === "SHOW_QR" && kiosk && payload && (
+      {step === "RESULT" && kiosk && result && (
         <>
-          <p>Show this QR to the kiosk scanner.</p>
-
-          <div
-            style={{
-              background: "white",
-              padding: 16,
-              borderRadius: 12,
-              width: 300,
-            }}
-          >
-            <QRCode value={payload} size={260} />
-          </div>
+          <p>Submitted. The kiosk screen should update.</p>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
+            <div>
+              <b>Employee:</b> {result.employeeName}
+            </div>
+            <div>
+              <b>Employee ID:</b> {result.employeeId}
+            </div>
+            <div>
+              <b>Punch:</b> {result.punch}
+            </div>
+            <div>
+              <b>Time:</b> {new Date(result.at).toLocaleTimeString()}
+            </div>
             <div>
               <b>Kiosk:</b> {kiosk.kioskId}
             </div>
             <div>
               <b>Expires:</b> {new Date(kiosk.exp).toLocaleTimeString()}
-            </div>
-            <div>
-              <b>DeviceId:</b> {deviceId}
             </div>
           </div>
 
