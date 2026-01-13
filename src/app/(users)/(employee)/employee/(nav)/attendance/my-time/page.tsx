@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCcw, Clock, Coffee, LogOut, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  getSelfAttendanceStatus,
+  recordSelfPunch,
+} from "@/actions/attendance/attendance-action";
 
 type Punch = {
   punchTime: string;
@@ -58,10 +62,11 @@ export default function MyTimePage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch("/api/attendance/self");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load status");
-      setStatus(json.data);
+      const result = await getSelfAttendanceStatus();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load status");
+      }
+      setStatus(result.data ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load status");
     } finally {
@@ -92,13 +97,10 @@ export default function MyTimePage() {
     try {
       setPunching(punchType);
       setError(null);
-      const res = await fetch("/api/attendance/self", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ punchType }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to punch");
+      const result = await recordSelfPunch({ punchType });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to punch");
+      }
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to punch");

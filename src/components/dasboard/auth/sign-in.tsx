@@ -13,16 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Mail, Lock } from "lucide-react";
-
-type SignInResponse = {
-  success: boolean;
-  user?: {
-    id: string;
-    role: string;
-    username: string;
-  };
-  error?: string;
-};
+import { signInUser } from "@/actions/auth/auth-action";
 
 const SignInForm = () => {
   const [username, setUsername] = useState("");
@@ -37,24 +28,17 @@ const SignInForm = () => {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth/users/sign-in", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username, password }),
-        credentials: "include",
-      });
+      const result = await signInUser({ username, password });
 
-      const data: SignInResponse = await response.json();
-
-      if (data.success && data.user) {
+      if (result.success && result.user) {
         // Use the role from the sign-in response
-        const userRole = data.user.role.toLowerCase();
+        const userRole = result.user.role.toLowerCase();
         router.push(`/${userRole}/dashboard`);
         router.refresh(); // Ensure the page updates with the new auth state
       } else {
-        setError(data.error || "Sign in failed. Please check your credentials.");
+        setError(
+          result.error || "Sign in failed. Please check your credentials."
+        );
       }
     } catch (error) {
       setError("An error occurred. Please try again");

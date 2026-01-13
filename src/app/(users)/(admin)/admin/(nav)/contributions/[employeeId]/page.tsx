@@ -1,12 +1,19 @@
 "use client";
 
+import {
+  getEmployeeContribution,
+  upsertEmployeeContribution,
+} from "@/actions/contributions/contributions-action";
+import {
+  getGovernmentIdByEmployee,
+  type GovernmentIdRecord,
+} from "@/actions/contributions/government-ids-action";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import type { GovernmentId } from "@prisma/client";
 
 type ContributionForm = {
   sssEe: number;
@@ -50,20 +57,20 @@ export default function ContributionEditPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [governmentId, setGovernmentId] = useState<GovernmentId | null>(null);
+  const [governmentId, setGovernmentId] = useState<GovernmentIdRecord | null>(
+    null
+  );
 
   // Load existing contribution data for this employee
   useEffect(() => {
     const load = async () => {
       try {
         setError(null);
-        // Fetch contribution
-        const res = await fetch(`/api/contributions/${params.employeeId}`);
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data?.error || "Failed to load contribution");
+        const result = await getEmployeeContribution(params.employeeId);
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load contribution");
         }
-        const c = data?.data;
+        const c = result.data;
         setForm({
           sssEe: Number(c?.sssEe ?? 0),
           sssEr: Number(c?.sssEr ?? 0),
@@ -80,10 +87,9 @@ export default function ContributionEditPage({
         });
 
         // Fetch government IDs to display alongside contributions
-        const govRes = await fetch(`/api/government-ids/${params.employeeId}`);
-        const govData = await govRes.json();
-        if (govRes.ok) {
-          setGovernmentId(govData?.data || null);
+        const govResult = await getGovernmentIdByEmployee(params.employeeId);
+        if (govResult.success) {
+          setGovernmentId(govResult.data || null);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load contribution");
@@ -98,14 +104,12 @@ export default function ContributionEditPage({
     try {
       setSaving(true);
       setError(null);
-      const res = await fetch(`/api/contributions/${params.employeeId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+      const result = await upsertEmployeeContribution({
+        employeeId: params.employeeId,
+        ...form,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to save contribution");
+      if (!result.success) {
+        throw new Error(result.error || "Failed to save contribution");
       }
       router.push("/admin/contributions");
     } catch (err) {

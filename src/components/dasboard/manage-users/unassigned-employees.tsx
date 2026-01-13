@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getEmployeesWithoutUser } from "@/actions/employees-action";
+import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { notFound } from "next/navigation";
-import { getEmployeeById } from "@/actions/employees-action";
+import { getEmployeeById } from "@/actions/employees/employees-action";
 import EmployeeForm from "@/components/dasboard/manage-empoyees/employee-form";
 import { useEffect, useState } from "react";
 import { Employee } from "@/lib/validations/employees";

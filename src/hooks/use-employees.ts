@@ -6,7 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { getEmployees } from "@/actions/employees-action";
+import { getEmployees } from "@/actions/employees/employees-action";
 import { Employee, validateEmployee } from "@/lib/validations/employees";
 
 export function useEmployeesState() {

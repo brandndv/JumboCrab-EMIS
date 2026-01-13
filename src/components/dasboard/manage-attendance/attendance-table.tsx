@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { RefreshCcw, RotateCcw, Clock4 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TZ } from "@/lib/timezone";
+import { listAttendance } from "@/actions/attendance/attendance-action";
 
 type AttendanceRow = {
   id: string;
@@ -124,14 +125,15 @@ export function AttendanceHistoryTable() {
     try {
       setLoading(true);
       setError(null);
-      const params = new URLSearchParams();
-      if (startDate) params.set("start", startDate);
-      if (endDate) params.set("end", endDate);
-      if (statusFilter) params.set("status", statusFilter);
-      const res = await fetch(`/api/attendance?${params.toString()}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load attendance");
-      setRows(json?.data ?? []);
+      const result = await listAttendance({
+        start: startDate,
+        end: endDate,
+        status: statusFilter || undefined,
+      });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load attendance");
+      }
+      setRows(result.data ?? []);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load attendance"

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { RefreshCcw, RotateCcw, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TZ } from "@/lib/timezone";
+import { updatePunch } from "@/actions/attendance/attendance-action";
 import {
   Dialog,
   DialogContent,
@@ -148,14 +149,15 @@ export function DailyAttendance() {
     if (!punchEdit) return;
     try {
       setPunchSaving(true);
-      await fetch("/api/attendance/punches", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: punchEdit.id,
-          punchTime: punchEditTime ? new Date(punchEditTime).toISOString() : punchEdit.punchTime,
-        }),
+      const result = await updatePunch({
+        id: punchEdit.id,
+        punchTime: punchEditTime
+          ? new Date(punchEditTime).toISOString()
+          : punchEdit.punchTime,
       });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update punch");
+      }
       await load();
       setPunchEdit(null);
     } catch (err) {

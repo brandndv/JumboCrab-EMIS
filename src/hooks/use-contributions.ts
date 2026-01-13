@@ -1,5 +1,6 @@
 "use client";
 
+import { listContributionDirectory } from "@/actions/contributions/contributions-action";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type ContributionRow = {
@@ -63,12 +64,11 @@ export function useContributionsState() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/contributions");
-      if (!res.ok) {
-        throw new Error("Failed to fetch contributions");
+      const result = await listContributionDirectory();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to fetch contributions");
       }
-      const data = await res.json();
-      const rows: ContributionRow[] = (data?.data || []).map((row: any) => ({
+      const rows: ContributionRow[] = (result.data || []).map((row: any) => ({
         employeeId: row.employeeId,
         employeeName: row.employeeName,
         employeeCode: row.employeeCode,

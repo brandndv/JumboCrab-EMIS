@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { TZ } from "@/lib/timezone";
+import {
+  autoLockAttendance,
+  listAttendance,
+  listAttendancePunches,
+} from "@/actions/attendance/attendance-action";
 
 export type AttendanceRow = {
   id: string;
@@ -61,19 +66,18 @@ export function useAttendanceState(initialDate = todayISO()) {
       setError(null);
       setPunchError(null);
       setLockMessage(null);
-      const params = new URLSearchParams({
-        start: date,
-        end: date,
-        includeAll: "true",
-      });
-      const res = await fetch(`/api/attendance?${params.toString()}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load attendance");
-      setRows(json?.data ?? []);
-      const punchRes = await fetch(`/api/attendance/punches?start=${date}`);
-      const punchJson = await punchRes.json();
-      if (!punchRes.ok) throw new Error(punchJson?.error || "Failed to load punches");
-      setPunches(punchJson?.data ?? []);
+      const [attendanceResult, punchesResult] = await Promise.all([
+        listAttendance({ start: date, end: date, includeAll: true }),
+        listAttendancePunches({ start: date }),
+      ]);
+      if (!attendanceResult.success) {
+        throw new Error(attendanceResult.error || "Failed to load attendance");
+      }
+      if (!punchesResult.success) {
+        throw new Error(punchesResult.error || "Failed to load punches");
+      }
+      setRows(attendanceResult.data ?? []);
+      setPunches(punchesResult.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load attendance");
       setPunchError(err instanceof Error ? err.message : "Failed to load punches");
@@ -87,15 +91,12 @@ export function useAttendanceState(initialDate = todayISO()) {
     try {
       setLockLoading(true);
       setLockMessage(null);
-      const res = await fetch("/api/attendance/auto-lock", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to lock attendance");
+      const result = await autoLockAttendance({ date });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to lock attendance");
+      }
       setLockMessage(
-        `Locked ${json?.lockedCount ?? 0} attendance row(s) for ${date}.`
+        `Locked ${result.data?.lockedCount ?? 0} attendance row(s) for ${date}.`
       );
       await load();
     } catch (err) {

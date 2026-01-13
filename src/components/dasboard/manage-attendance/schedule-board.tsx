@@ -3,6 +3,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { DateRange } from "react-day-picker";
 import { TZ } from "@/lib/timezone";
+import {
+  createPattern,
+  deletePattern as deletePatternAction,
+  deletePatternAssignment,
+  listPatternAssignments,
+  updatePattern,
+} from "@/actions/schedule/patterns-action";
+import {
+  assignPatternToEmployee,
+  deleteScheduleOverride,
+  getScheduleSnapshot,
+  listScheduleOverrides,
+  upsertScheduleOverride,
+} from "@/actions/schedule/schedule-action";
+import {
+  createShift,
+  deleteShift,
+  updateShift,
+} from "@/actions/schedule/shifts-action";
 import { DailyScheduleCard } from "./daily-schedule-card";
 import { PatternEditState, PatternsSection } from "./patterns-section";
 import { OverridesSection } from "./overrides-section";
@@ -22,43 +41,6 @@ import {
   toDateInputValue,
   makeDate,
 } from "../../../types/schedule-types";
-
-const parseTimeToMinutes = (value?: string | null) => {
-  if (!value) return null;
-  const [h, m] = value.split(":").map((v) => Number(v));
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-  return h * 60 + m;
-};
-
-const deriveShiftCalcs = (
-  startTime?: string,
-  endTime?: string,
-  spansMidnight?: boolean,
-  breakStartTime?: string,
-  breakEndTime?: string
-) => {
-  const start = parseTimeToMinutes(startTime);
-  const end = parseTimeToMinutes(endTime);
-  if (start == null || end == null)
-    return { breakMinutes: 0, paidHours: 0, totalMinutes: 0 };
-  let totalMinutes =
-    spansMidnight && end <= start ? end + 24 * 60 - start : end - start;
-  if (totalMinutes < 0) totalMinutes = 0;
-  const bStart = parseTimeToMinutes(breakStartTime);
-  const bEnd = parseTimeToMinutes(breakEndTime);
-  let breakMinutes = 0;
-  if (bStart != null && bEnd != null) {
-    let endVal = bEnd;
-    if (spansMidnight && bEnd <= bStart) endVal += 24 * 60;
-    breakMinutes = Math.max(0, Math.min(totalMinutes, endVal - bStart));
-  }
-  const paidHours =
-    totalMinutes > 0
-      ? Number(((totalMinutes - breakMinutes) / 60).toFixed(2))
-      : 0;
-  return { breakMinutes, paidHours, totalMinutes };
-};
 
 type ScheduleBoardProps = {
   mode?: "full" | "overrides" | "patterns";
@@ -169,38 +151,39 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       setError(null);
       setShiftEditError(null);
       setPatternEditError(null);
-      const [scheduleRes, overrideRes, assignmentsRes] = await Promise.all([
-        fetch(`/api/schedule?date=${date}`),
-        fetch(`/api/schedule/override?start=${date}`),
-        fetch("/api/patterns/assignments"),
-      ]);
-      const [scheduleJson, overrideJson, assignmentsJson] = await Promise.all([
-        scheduleRes.json(),
-        overrideRes.json(),
-        assignmentsRes.json(),
-      ]);
-      if (!scheduleRes.ok)
-        throw new Error(scheduleJson?.error || "Failed to load schedule");
-      if (!overrideRes.ok)
-        throw new Error(overrideJson?.error || "Failed to load overrides");
+      const [scheduleResult, overrideResult, assignmentsResult] =
+        await Promise.all([
+          getScheduleSnapshot(date),
+          listScheduleOverrides({ start: date }),
+          listPatternAssignments(),
+        ]);
+      if (!scheduleResult.success) {
+        throw new Error(scheduleResult.error || "Failed to load schedule");
+      }
+      if (!overrideResult.success) {
+        throw new Error(overrideResult.error || "Failed to load overrides");
+      }
 
       setEntries(
-        (scheduleJson?.schedule ?? []).map((entry: any) => ({
+        (scheduleResult.schedule ?? []).map((entry: any) => ({
           ...entry,
           shift: entry.shift ? normalizeShift(entry.shift) : null,
         }))
       );
-      setPatterns((scheduleJson?.patterns ?? []).map(normalizePattern));
-      setShifts((scheduleJson?.shifts ?? []).map(normalizeShift));
-      setOverrides((overrideJson?.data ?? []).map(normalizeOverride));
-      if (Array.isArray(assignmentsJson?.data)) {
+      setPatterns((scheduleResult.patterns ?? []).map(normalizePattern));
+      setShifts((scheduleResult.shifts ?? []).map(normalizeShift));
+      setOverrides((overrideResult.data ?? []).map(normalizeOverride));
+
+      if (assignmentsResult.success && Array.isArray(assignmentsResult.data)) {
         setPatternAssignments(
-          assignmentsJson.data.map((a: any) => ({
+          assignmentsResult.data.map((a: any) => ({
             ...a,
             pattern: a.pattern ? normalizePattern(a.pattern) : null,
             isLatest: a.isLatest,
           }))
         );
+      } else {
+        setPatternAssignments([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load schedule");
@@ -261,32 +244,20 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
     try {
       setShiftEditSaving(true);
       setShiftEditError(null);
-      const derived = deriveShiftCalcs(
-        shiftEdit.startTime,
-        shiftEdit.endTime,
-        shiftEdit.spansMidnight,
-        shiftEdit.breakStartTime,
-        shiftEdit.breakEndTime
-      );
-      const res = await fetch("/api/shifts", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingShiftId,
-          code: shiftEdit.code,
-          name: shiftEdit.name,
-          startTime: shiftEdit.startTime,
-          endTime: shiftEdit.endTime,
-          spansMidnight: shiftEdit.spansMidnight,
-          breakStartTime: shiftEdit.breakStartTime ?? null,
-          breakEndTime: shiftEdit.breakEndTime ?? null,
-          breakMinutesUnpaid: derived.breakMinutes,
-          paidHoursPerDay: derived.paidHours,
-          notes: shiftEdit.notes,
-        }),
+      const result = await updateShift({
+        id: editingShiftId,
+        code: shiftEdit.code,
+        name: shiftEdit.name,
+        startTime: shiftEdit.startTime,
+        endTime: shiftEdit.endTime,
+        spansMidnight: shiftEdit.spansMidnight,
+        breakStartTime: shiftEdit.breakStartTime ?? null,
+        breakEndTime: shiftEdit.breakEndTime ?? null,
+        notes: shiftEdit.notes,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to update shift");
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update shift");
+      }
       cancelShiftEdit();
       await load();
     } catch (err) {
@@ -344,13 +315,10 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       Object.entries(patternEdit.dayShifts).forEach(([key, val]) => {
         payload[key] = val ? Number(val) : null;
       });
-      const res = await fetch("/api/patterns", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to update pattern");
+      const result = await updatePattern(payload as any);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update pattern");
+      }
       cancelPatternEdit();
       await load();
     } catch (err) {
@@ -362,9 +330,12 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
     }
   };
 
-  const deletePattern = async (id: string) => {
+  const handleDeletePattern = async (id: string) => {
     try {
-      await fetch(`/api/patterns?id=${id}`, { method: "DELETE" });
+      const result = await deletePatternAction(id);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to delete pattern");
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -386,17 +357,14 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       setAssignSaving(true);
       setAssignError(null);
       setAssignSuccess(null);
-      const res = await fetch("/api/schedule/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: assignEmployeeId,
-          patternId: assignPatternId,
-          effectiveDate: assignEffective,
-        }),
+      const result = await assignPatternToEmployee({
+        employeeId: assignEmployeeId,
+        patternId: assignPatternId,
+        effectiveDate: assignEffective,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to assign pattern");
+      if (!result.success) {
+        throw new Error(result.error || "Failed to assign pattern");
+      }
       const emp = employees.find((e) => e.employeeId === assignEmployeeId);
       const pat = patterns.find((p) => p.id === assignPatternId);
       if (emp && pat) {
@@ -452,19 +420,16 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       })();
 
       for (const day of dates) {
-        const res = await fetch("/api/schedule/override", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            employeeId: overrideEmployeeId,
-            shiftId: overrideShiftId ? Number(overrideShiftId) : null,
-            workDate: day,
-            source: overrideSource,
-          }),
+        const result = await upsertScheduleOverride({
+          employeeId: overrideEmployeeId,
+          shiftId: overrideShiftId ? Number(overrideShiftId) : null,
+          workDate: day,
+          source: overrideSource,
         });
-        const json = await res.json();
-        if (!res.ok) {
-          throw new Error(json?.error || `Failed to save override for ${day}`);
+        if (!result.success) {
+          throw new Error(
+            result.error || `Failed to save override for ${day}`
+          );
         }
       }
       await load();
@@ -500,13 +465,10 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       Object.entries(dayShifts).forEach(([key, val]) => {
         payload[key] = val ? Number(val) : null;
       });
-      const res = await fetch("/api/patterns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to create pattern");
+      const result = await createPattern(payload as any);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to create pattern");
+      }
       setPatternCode("");
       setPatternName("");
       setDayShifts({
@@ -536,31 +498,19 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
     try {
       setShiftSaving(true);
       setShiftError(null);
-      const derived = deriveShiftCalcs(
-        shiftStart,
-        shiftEnd,
-        shiftSpansMidnight,
-        shiftBreakStart,
-        shiftBreakEnd
-      );
-      const res = await fetch("/api/shifts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          code: shiftCode,
-          name: shiftName,
-          startTime: shiftStart,
-          endTime: shiftEnd,
-          spansMidnight: shiftSpansMidnight,
-          breakStartTime: shiftBreakStart || null,
-          breakEndTime: shiftBreakEnd || null,
-          breakMinutesUnpaid: derived.breakMinutes,
-          paidHoursPerDay: derived.paidHours,
-          notes: shiftNotes,
-        }),
+      const result = await createShift({
+        code: shiftCode,
+        name: shiftName,
+        startTime: shiftStart,
+        endTime: shiftEnd,
+        spansMidnight: shiftSpansMidnight,
+        breakStartTime: shiftBreakStart || null,
+        breakEndTime: shiftBreakEnd || null,
+        notes: shiftNotes,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to create shift");
+      if (!result.success) {
+        throw new Error(result.error || "Failed to create shift");
+      }
       setShiftCode("");
       setShiftName("");
       setShiftNotes("");
@@ -614,9 +564,11 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
   };
 
   const deleteOverride = async (id: string) => {
-    await fetch(`/api/schedule/override?id=${id}`, {
-      method: "DELETE",
-    });
+    const result = await deleteScheduleOverride(id);
+    if (!result.success) {
+      setOverrideError(result.error || "Failed to delete override");
+      return;
+    }
     await load();
   };
 
@@ -709,7 +661,7 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
             setDayShifts((prev) => ({ ...prev, [key]: value }))
           }
           onCreatePattern={handleCreatePattern}
-          onDeletePattern={deletePattern}
+          onDeletePattern={handleDeletePattern}
           onStartEditPattern={startPatternEdit}
           patternEditOpen={patternEditOpen}
           onPatternEditOpenChange={handlePatternEditOpenChange}
@@ -727,9 +679,11 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
             setAssignSuccess(null);
           }}
           onDeleteAssignment={async (id) => {
-            await fetch(`/api/patterns/assignments?id=${id}`, {
-              method: "DELETE",
-            });
+            const result = await deletePatternAssignment(id);
+            if (!result.success) {
+              setAssignError(result.error || "Failed to delete assignment");
+              return;
+            }
             await load();
           }}
         />
@@ -791,7 +745,11 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
         onSaveEdit={saveShiftEdit}
         onCancelEdit={cancelShiftEdit}
         onDeleteShift={async (id) => {
-          await fetch(`/api/shifts?id=${id}`, { method: "DELETE" });
+          const result = await deleteShift(id);
+          if (!result.success) {
+            setShiftEditError(result.error || "Failed to delete shift");
+            return;
+          }
           await load();
         }}
         onCreateShift={handleCreateShift}

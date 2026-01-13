@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import Link from "next/link";
-import { getEmployeeById } from "@/actions/employees-action";
+import { getEmployeeById } from "@/actions/employees/employees-action";
 import EmployeeProfileTabs from "@/components/dasboard/manage-empoyees/employee-profile-tabs";
 
 export default async function EmployeeViewPage({

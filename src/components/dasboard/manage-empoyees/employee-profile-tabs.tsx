@@ -1,5 +1,11 @@
 "use client";
 
+import { getEmployeeContribution } from "@/actions/contributions/contributions-action";
+import {
+  getGovernmentIdByEmployee,
+  upsertGovernmentId,
+  type GovernmentIdRecord,
+} from "@/actions/contributions/government-ids-action";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import type { Employee as PrismaEmployee, GovernmentId } from "@prisma/client";
+import type { Employee as PrismaEmployee } from "@prisma/client";
 import { IdCard, Loader2, Plus } from "lucide-react";
 import EmployeeForm from "./employee-form";
 
@@ -37,7 +43,7 @@ const tabs: { key: TabKey; label: string }[] = [
 
 const govIdFields: {
   key: keyof Pick<
-    GovernmentId,
+    GovernmentIdRecord,
     "tinNumber" | "sssNumber" | "philHealthNumber" | "pagIbigNumber"
   >;
   label: string;
@@ -78,7 +84,9 @@ export function EmployeeProfileTabs({
   employee: PrismaEmployee;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
-  const [governmentId, setGovernmentId] = useState<GovernmentId | null>(null);
+  const [governmentId, setGovernmentId] = useState<GovernmentIdRecord | null>(
+    null
+  );
   const [loadingGovId, setLoadingGovId] = useState<boolean>(true);
   const [govIdError, setGovIdError] = useState<string | null>(null);
   const [contribution, setContribution] = useState<{
@@ -96,7 +104,10 @@ export function EmployeeProfileTabs({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formState, setFormState] = useState<
-    Pick<GovernmentId, "tinNumber" | "sssNumber" | "philHealthNumber" | "pagIbigNumber">
+    Pick<
+      GovernmentIdRecord,
+      "tinNumber" | "sssNumber" | "philHealthNumber" | "pagIbigNumber"
+    >
   >({
     tinNumber: "",
     sssNumber: "",
@@ -113,21 +124,13 @@ export function EmployeeProfileTabs({
     const fetchGovId = async () => {
       try {
         setLoadingGovId(true);
-        const res = await fetch(
-          `/api/government-ids/${employee.employeeId}`,
-          {
-            method: "GET",
-          }
-        );
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setGovIdError(data?.error || "Failed to load government IDs");
+        const result = await getGovernmentIdByEmployee(employee.employeeId);
+        if (!result.success) {
+          setGovIdError(result.error || "Failed to load government IDs");
           return;
         }
 
-        const data = await res.json();
-        const record: GovernmentId | null = data?.data || null;
+        const record = result.data ?? null;
         setGovernmentId(record);
         setFormState({
           tinNumber: record?.tinNumber ?? "",
@@ -152,12 +155,11 @@ export function EmployeeProfileTabs({
       try {
         setLoadingContribution(true);
         setContributionError(null);
-        const res = await fetch(`/api/contributions/${employee.employeeId}`);
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data?.error || "Failed to load contribution");
+        const result = await getEmployeeContribution(employee.employeeId);
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load contribution");
         }
-        setContribution(data?.data ?? null);
+        setContribution(result.data ?? null);
       } catch (error) {
         console.error("Error loading contribution:", error);
         setContributionError("Failed to load contribution");
@@ -172,22 +174,17 @@ export function EmployeeProfileTabs({
     try {
       setIsSaving(true);
       setGovIdError(null);
-      const res = await fetch(`/api/government-ids/${employee.employeeId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formState,
-        }),
+      const result = await upsertGovernmentId({
+        employeeId: employee.employeeId,
+        ...formState,
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setGovIdError(data?.error || "Failed to save government IDs");
+      if (!result.success) {
+        setGovIdError(result.error || "Failed to save government IDs");
         return;
       }
 
-      setGovernmentId(data?.data || null);
+      setGovernmentId(result.data || null);
       setIsModalOpen(false);
     } catch (error) {
       console.error("Error saving government IDs:", error);

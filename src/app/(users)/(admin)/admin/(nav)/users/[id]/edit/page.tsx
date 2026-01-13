@@ -24,12 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, ArrowLeft, Save } from "lucide-react";
 import type { UserWithEmployee } from "@/lib/validations/users";
-
-type ApiUserResponse = {
-  success: boolean;
-  data?: UserWithEmployee;
-  error?: string;
-};
+import { getUserById, updateUser } from "@/actions/users/users-action";
 
 const roles: string[] = [
   "admin",
@@ -130,16 +125,15 @@ export default function UserEditPage({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/users/${userId}`);
-        const data: ApiUserResponse = await res.json();
-        if (!res.ok || !data.success || !data.data) {
-          throw new Error(data.error || "Failed to load user");
+        const result = await getUserById(userId);
+        if (!result.success || !result.data) {
+          throw new Error(result.error || "Failed to load user");
         }
-        setUser(data.data);
-        setUsername(data.data.username ?? "");
-        setEmail(data.data.email ?? "");
-        setRole(data.data.role ?? "");
-        setIsDisabled(Boolean(data.data.isDisabled));
+        setUser(result.data);
+        setUsername(result.data.username ?? "");
+        setEmail(result.data.email ?? "");
+        setRole(result.data.role ?? "");
+        setIsDisabled(Boolean(result.data.isDisabled));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load user");
       } finally {
@@ -167,15 +161,16 @@ export default function UserEditPage({
         payload.password = password.trim();
       }
 
-      const res = await fetch(`/api/users/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const result = await updateUser({
+        userId,
+        username: payload.username as string,
+        email: payload.email as string,
+        role: payload.role as string,
+        password: payload.password as string | undefined,
+        isDisabled: payload.isDisabled as boolean,
       });
-
-      const data: ApiUserResponse = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to update user");
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update user");
       }
 
       router.push(`/admin/users/${userId}/view`);

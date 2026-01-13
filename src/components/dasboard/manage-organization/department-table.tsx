@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  createDepartment,
+  listDepartments,
+  updateDepartment,
+} from "@/actions/organization/departments-action";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,10 +42,11 @@ export function DepartmentTable() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch("/api/departments");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load departments");
-      setDepartments(data?.data ?? []);
+      const result = await listDepartments();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load departments");
+      }
+      setDepartments(result.data ?? []);
     } catch (err) {
       console.error("Departments fetch failed", err);
       setError(err instanceof Error ? err.message : "Failed to load departments");
@@ -57,18 +63,18 @@ export function DepartmentTable() {
     try {
       setSaving(true);
       setFormError(null);
-      const res = await fetch("/api/departments", {
-        method: editingId ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          departmentId: editingId || undefined,
-          name: name.trim(),
-          description: description.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to save department");
+      const result = editingId
+        ? await updateDepartment({
+            departmentId: editingId,
+            name: name.trim(),
+            description: description.trim() || null,
+          })
+        : await createDepartment({
+            name: name.trim(),
+            description: description.trim() || null,
+          });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to save department");
       }
       await load();
       setOpen(false);

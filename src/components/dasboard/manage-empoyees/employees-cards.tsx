@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  deleteEmployee,
+  setEmployeeArchiveStatus,
+} from "@/actions/employees/employees-action";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -53,15 +57,10 @@ export default function EmployeesCards({
     );
     if (!confirmed) return;
 
-    fetch(`/api/employees/${employee.employeeId}/archive`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isArchived: true }),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to archive employee");
+    setEmployeeArchiveStatus(employee.employeeId, true)
+      .then(async (result) => {
+        if (!result.success) {
+          throw new Error(result.error || "Failed to archive employee");
         }
         await refreshEmployees();
       })
@@ -75,15 +74,10 @@ export default function EmployeesCards({
 
   const handleUnarchiveClick = (employee: Employee) => {
     if (!employee.employeeId) return;
-    fetch(`/api/employees/${employee.employeeId}/archive`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isArchived: false }),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to unarchive employee");
+    setEmployeeArchiveStatus(employee.employeeId, false)
+      .then(async (result) => {
+        if (!result.success) {
+          throw new Error(result.error || "Failed to unarchive employee");
         }
         await refreshEmployees();
       })
@@ -104,11 +98,10 @@ export default function EmployeesCards({
     );
     if (!confirmed) return;
 
-    fetch(`/api/employees/${employee.employeeId}`, { method: "DELETE" })
-      .then(async (res) => {
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to delete employee");
+    deleteEmployee(employee.employeeId)
+      .then(async (result) => {
+        if (!result.success) {
+          throw new Error(result.error || "Failed to delete employee");
         }
         await refreshEmployees();
       })

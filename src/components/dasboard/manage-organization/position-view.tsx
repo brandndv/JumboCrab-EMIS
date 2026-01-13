@@ -1,5 +1,6 @@
 "use client";
 
+import { listPositions } from "@/actions/organization/positions-action";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,13 +20,13 @@ type PositionRow = {
   positionId: string;
   name: string;
   description?: string | null;
-  department?: { departmentId: string; name: string };
+  department?: { departmentId: string; name: string } | null;
   employees: {
     employeeId: string;
     employeeCode: string;
     firstName: string;
     lastName: string;
-    department?: { name: string | null };
+    department?: { name: string | null } | null;
   }[];
 };
 
@@ -41,10 +42,11 @@ export function PositionView() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch("/api/positions");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load positions");
-      setPositions(json?.data ?? []);
+      const result = await listPositions();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load positions");
+      }
+      setPositions(result.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load positions");
     } finally {
