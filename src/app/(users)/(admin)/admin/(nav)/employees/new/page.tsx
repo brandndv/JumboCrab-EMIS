@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import EmployeeForm from "@/components/dasboard/manage-empoyees/employee-form";
@@ -23,7 +24,11 @@ export default function AddEmployeePage() {
         </Button>
       </div>
       
-      <EmployeeForm employeeId={null} mode="create" />
+      <Card className="border-border shadow-sm">
+        <CardContent className="p-6">
+          <EmployeeForm employeeId={null} mode="create" />
+        </CardContent>
+      </Card>
     </div>
   );
 }

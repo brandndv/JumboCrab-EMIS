@@ -603,7 +603,7 @@ export default function EmployeeForm({
                             errors.suffix
                               ? "border-destructive"
                               : "border-border"
-                          } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                          } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                         >
                           <option value="">-</option>
                           <option value="JR">Jr.</option>
@@ -704,7 +704,7 @@ export default function EmployeeForm({
                               errors.sex
                                 ? "border-destructive"
                                 : "border-border"
-                            } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                            } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                             required
                           >
                             <option value="">-</option>
@@ -737,7 +737,7 @@ export default function EmployeeForm({
                             errors.civilStatus
                               ? "border-destructive"
                               : "border-border"
-                          } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                          } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                           required
                         >
                           <option value="">Select Status</option>
@@ -771,7 +771,7 @@ export default function EmployeeForm({
                             errors.nationality
                               ? "border-destructive"
                               : "border-border"
-                          } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                          } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                           required
                         >
                           <option value="">Select nationality</option>
@@ -863,7 +863,7 @@ export default function EmployeeForm({
               name="description"
               value={formData.description || ""}
               onChange={handleChange}
-              className="flex rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-h-[100px] w-full"
+              className="flex rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-h-[100px] w-full"
             />
           )}
         </div>
@@ -1020,7 +1020,7 @@ export default function EmployeeForm({
                     onChange={(e) => handleDepartmentChange(e.target.value || "")}
                     className={`w-full h-10 px-3 py-2 rounded-md border ${
                       errors.departmentId ? "border-destructive" : "border-border"
-                    } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                    } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                   >
                     <option value="">Select department</option>
                     {departments.map((department) => (
@@ -1056,7 +1056,7 @@ export default function EmployeeForm({
                     }
                     className={`w-full h-10 px-3 py-2 rounded-md border ${
                       errors.positionId ? "border-destructive" : "border-border"
-                    } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                    } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                     disabled={!filteredPositions.length && !!formData.departmentId}
                   >
                     <option value="">Select position</option>
@@ -1146,7 +1146,7 @@ export default function EmployeeForm({
                   onChange={(e) =>
                     handleSelectChange("employmentStatus", e.target.value)
                   }
-                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
+                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 >
                   <option value="">Select employment status</option>
                   {EMPLOYMENT_STATUS.map((status) => (
@@ -1173,7 +1173,7 @@ export default function EmployeeForm({
                   onChange={(e) =>
                     handleSelectChange("currentStatus", e.target.value)
                   }
-                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
+                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 >
                   <option value="">Select current status</option>
                   {CURRENT_STATUS.map((status) => (
@@ -1247,7 +1247,7 @@ export default function EmployeeForm({
                       errors.emergencyContactRelationship
                         ? "border-destructive"
                         : "border-border"
-                    } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                    } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                   >
                     <option value="">Select relationship</option>
                     {emergencyRelationshipOptions.map((relationship) => (

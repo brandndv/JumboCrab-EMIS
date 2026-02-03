@@ -128,7 +128,7 @@ export default function UsersPageContent() {
       </div>
 
       <div className="space-y-8 mt-6">
-        <section className="rounded-2xl border border-border bg-card/40 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">
@@ -169,7 +169,7 @@ export default function UsersPageContent() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card/40 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">
@@ -210,7 +210,7 @@ export default function UsersPageContent() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card/30 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">
@@ -256,7 +256,7 @@ export default function UsersPageContent() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card/40 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <UnassignedEmployees />
         </section>
       </div>

@@ -23,6 +23,10 @@ model User {
   updatedContributions EmployeeContribution[] @relation("EmployeeContributionUpdatedBy")
   // Users who supervise employees
   supervisedEmployees  Employee[]             @relation("EmployeeSupervisorUser")
+
+  @@index([createdAt])
+  @@index([role, username])
+  @@index([isDisabled, username])
 }
 
 model Employee {
@@ -74,6 +78,10 @@ model Employee {
   shiftOverrides     EmployeeShiftOverride[]
   attendances        Attendance[]
   punches            Punch[]
+
+  @@index([isArchived, employeeCode])
+  @@index([departmentId])
+  @@index([positionId])
 }
 
 // ======== ORG STRUCTURE ========= //
@@ -88,6 +96,8 @@ model Department {
   updatedAt    DateTime   @updatedAt
   positions    Position[]
   employees    Employee[]
+
+  @@index([isActive, name])
 }
 
 /// Positions (job titles) linked to a department.
@@ -104,6 +114,7 @@ model Position {
   employees  Employee[]
 
   @@unique([name, departmentId])
+  @@index([isActive, departmentId, name])
 }
 
 // ======== EMPLOYEE CONTRIBUTION ========= //
@@ -175,6 +186,8 @@ model Shift {
   // Usage
   overrides   EmployeeShiftOverride[]
   attendances Attendance[]            @relation("attendance_expected_shift")
+
+  @@index([name])
 }
 
 /// Weekly pattern that selects one shift per weekday; null means rest day.
@@ -203,6 +216,8 @@ model WeeklyPattern {
   assignments EmployeePatternAssignment[]
   createdAt   DateTime                    @default(now())
   updatedAt   DateTime                    @updatedAt
+
+  @@index([name])
 }
 
 /// Assigns a weekly pattern to an employee starting on a date.
@@ -280,6 +295,8 @@ model Attendance {
   @@unique([employeeId, workDate])
   @@index([employeeId, workDate])
   @@index([workDate])
+  @@index([status, workDate])
+  @@index([isLocked, workDate])
 }
 
 /// Raw punch events; use them to recompute Attendance in real time.
@@ -298,6 +315,7 @@ model Punch {
   attendance Attendance? @relation(fields: [attendanceId], references: [id])
 
   @@index([employeeId, punchTime])
+  @@index([punchTime])
   @@index([attendanceId])
 }
 
@@ -318,6 +336,8 @@ model Violation {
 
   employee           Employee? @relation(fields: [employeeEmployeeId], references: [employeeId])
   employeeEmployeeId String?
+
+  @@index([createdAt])
 }
 
 enum VIOLATION_STATUS {
