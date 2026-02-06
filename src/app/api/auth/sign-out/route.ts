@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
-import { sessionOptions } from "@/lib/session-options";
+import { sessionOptions } from "@/lib/auth";
 
 export async function POST() {
   try {
@@ -14,7 +14,7 @@ export async function POST() {
     console.error("Sign out error:", error);
     return NextResponse.json(
       { success: false, error: "Failed to sign out" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
