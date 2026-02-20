@@ -16,7 +16,11 @@ type SessionPayload = {
 const SESSION_COOKIE_NAME = "jumbo-auth";
 
 function isPublicPath(pathname: string) {
-  return pathname === "/" || pathname.startsWith("/sign-in");
+  return (
+    pathname === "/" ||
+    pathname === "/offline" ||
+    pathname.startsWith("/sign-in")
+  );
 }
 
 function createRedirect(request: NextRequest, path: string) {

@@ -1,6 +1,8 @@
 import { ThemeProvider } from "@/components/theme-provider/theme-provider";
+import { OnlineStatus } from "@/components/pwa/online-status";
+import { RegisterSW } from "@/components/pwa/register-sw";
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,8 +17,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  applicationName: "Jumbo Crab EMIS",
   title: "Jumbo Crab EMIS",
   description: "Jumbo Crab EMIS",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Jumbo Crab EMIS",
+  },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/pwa-192.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f97316",
 };
 
 export default function RootLayout({
@@ -35,6 +52,8 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <RegisterSW />
+          <OnlineStatus />
           {children}
         </ThemeProvider>
       </body>
