@@ -45,6 +45,7 @@ const AppSidebar = () => {
                 : "User",
             email: user?.email || "",
             avatar: employee?.img || null,
+            role: role,
           }}
         />
       </SidebarFooter>

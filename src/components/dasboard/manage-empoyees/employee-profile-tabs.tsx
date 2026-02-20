@@ -6,7 +6,7 @@ import {
   upsertGovernmentId,
   type GovernmentIdRecord,
 } from "@/actions/contributions/government-ids-action";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,18 +27,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import type { Employee as PrismaEmployee } from "@prisma/client";
 import { IdCard, Loader2, Plus } from "lucide-react";
 import EmployeeForm from "./employee-form";
 
-type TabKey = "profile" | "govIds" | "checklists" | "notes";
+type TabKey = "profile" | "govIds";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "profile", label: "Profile" },
   { key: "govIds", label: "Government IDs" },
-  { key: "checklists", label: "Onboarding" },
-  { key: "notes", label: "Notes" },
 ];
 
 const govIdFields: {
@@ -69,13 +66,6 @@ const govIdFields: {
     label: "Pag-IBIG",
     helper: "Track Pag-IBIG number; dependents can follow later.",
   },
-];
-
-const onboardingChecklist = [
-  "Collect IDs (TIN, SSS, PhilHealth, Pag-IBIG) once models exist.",
-  "Gather bank details and preferred payout timing.",
-  "Upload signed contract and job offer.",
-  "Log emergency contact and approvers.",
 ];
 
 export function EmployeeProfileTabs({
@@ -114,11 +104,6 @@ export function EmployeeProfileTabs({
     philHealthNumber: "",
     pagIbigNumber: "",
   });
-
-  const displayName = useMemo(() => {
-    const parts = [employee.firstName, employee.lastName].filter(Boolean);
-    return parts.length ? parts.join(" ") : "Employee";
-  }, [employee.firstName, employee.lastName]);
 
   useEffect(() => {
     const fetchGovId = async () => {
@@ -376,67 +361,6 @@ export function EmployeeProfileTabs({
           </div>
         )}
 
-        {activeTab === "checklists" && (
-          <div className="space-y-4">
-            <div className="flex flex-col gap-1">
-              <p className="text-lg font-semibold">Onboarding</p>
-              <p className="text-sm text-muted-foreground">
-                Track what you need for {displayName}. This is UI-only for now.
-              </p>
-            </div>
-            <Card className="border-dashed">
-              <CardContent className="space-y-3 px-4 py-5">
-                {onboardingChecklist.map((item) => (
-                  <div
-                    key={item}
-                    className="flex items-start gap-3 rounded-lg border border-dashed bg-muted/20 p-3"
-                  >
-                    <span className="mt-1 size-2 rounded-full bg-primary" />
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium leading-5">{item}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Add real data sources later (files, status toggles, dates).
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {activeTab === "notes" && (
-          <div className="space-y-3">
-            <div className="flex flex-col gap-1">
-              <p className="text-lg font-semibold">Notes</p>
-              <p className="text-sm text-muted-foreground">
-                Stub for future freeform notes, tags, and attachments.
-              </p>
-            </div>
-            <Card className="border-dashed">
-              <CardContent className="space-y-3 px-4 py-5">
-                <div className="rounded-lg border bg-background p-3 shadow-inner">
-                  <p className="text-sm font-medium">Draft note</p>
-                  <p className="text-xs text-muted-foreground">
-                    Keep upcoming notes here. Hook into persistence once the table
-                    is created.
-                  </p>
-                  <Separator className="my-3" />
-                  <textarea
-                    rows={4}
-                    className="w-full resize-none rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground"
-                    placeholder="Notes will sync once the model exists."
-                    disabled
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Idea: add activity timeline, approver comments, and attachments
-                  tied to this employee.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
     </div>
   );

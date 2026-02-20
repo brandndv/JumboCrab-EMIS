@@ -528,9 +528,10 @@ export default function EmployeeForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 p-6">
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* ========== PROFILE & PERSONAL INFO SECTION ========== */}
-        <div className="flex flex-col md:flex-row gap-8">
+        <section className="space-y-6 rounded-xl border border-border/70 bg-muted/10 p-4 md:p-6">
+          <div className="flex flex-col md:flex-row gap-8">
           {/* ========== PROFILE IMAGE SECTION ========== */}
           <div className="w-full md:w-48 space-y-4">
             <h4 className="font-medium text-sm text-foreground">
@@ -648,7 +649,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-5 space-y-2">
                     <Label htmlFor="firstName">First Name *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                         {formData.firstName || "-"}
                       </div>
                     ) : (
@@ -675,7 +676,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-5 space-y-2">
                     <Label htmlFor="lastName">Last Name *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                         {formData.lastName || "-"}
                       </div>
                     ) : (
@@ -702,7 +703,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-2 space-y-2">
                     <Label htmlFor="suffix">Suffix</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-24">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-24">
                         {formData.suffix || "-"}
                       </div>
                     ) : (
@@ -739,7 +740,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-5 space-y-2">
                     <Label htmlFor="middleName">Middle Name</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                         {formData.middleName || "-"}
                       </div>
                     ) : (
@@ -764,7 +765,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-5 space-y-2">
                     <Label htmlFor="birthdate">Date of Birth *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                         {formData.birthdate
                           ? new Date(formData.birthdate).toLocaleDateString()
                           : "-"}
@@ -803,7 +804,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-2 space-y-2">
                     <Label>Gender *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-24">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-24">
                         {formData.sex || "-"}
                       </div>
                     ) : (
@@ -836,7 +837,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-3 space-y-2">
                     <Label htmlFor="civilStatus">Civil Status *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                         {formData.civilStatus || "-"}
                       </div>
                     ) : (
@@ -870,7 +871,7 @@ export default function EmployeeForm({
                   <div className="sm:col-span-4 space-y-2">
                     <Label htmlFor="nationality">Nationality *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                         {formData.nationality || "-"}
                       </div>
                     ) : (
@@ -908,7 +909,7 @@ export default function EmployeeForm({
                   <div className="col-span-full sm:col-span-6 space-y-2">
                     <Label htmlFor="phone">Phone Number *</Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                         {formData.phone || "-"}
                       </div>
                     ) : (
@@ -937,7 +938,7 @@ export default function EmployeeForm({
                       Email Address {!formData.email && "*"}
                     </Label>
                     {mode === "view" ? (
-                      <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                      <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                         {formData.email || "-"}
                       </div>
                     ) : (
@@ -959,17 +960,18 @@ export default function EmployeeForm({
                     )}
                   </div>
                 </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
         {/* ========== EMPLOYEE DESCRIPTION SECTION ========== */}
-        <div className="space-y-2 pt-4">
+        <section className="space-y-2 rounded-xl border border-border/70 bg-muted/10 p-4 md:p-6">
           <Label htmlFor="description" className="mb-1 block">
             Description
           </Label>
           {mode === "view" ? (
-            <div className="min-h-[100px] px-3 py-2 bg-muted rounded-md border border-border text-sm text-foreground w-full">
+            <div className="min-h-[100px] px-3 py-2 bg-muted/30 rounded-lg border border-border text-sm text-foreground w-full">
               {formData.description || "-"}
             </div>
           ) : (
@@ -981,10 +983,10 @@ export default function EmployeeForm({
               className="flex rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-h-[100px] w-full"
             />
           )}
-        </div>
+        </section>
 
         {/* ========== CONTACT INFORMATION SECTION ========== */}
-        <div className="space-y-4 pt-4">
+        <section className="space-y-4 rounded-xl border border-border/70 bg-muted/10 p-4 md:p-6">
           <h4 className="font-medium">Contact Information</h4>
           <div className="space-y-4">
             {/* Address */}
@@ -993,7 +995,7 @@ export default function EmployeeForm({
                 Address
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {formData.address || "-"}
                 </div>
               ) : (
@@ -1014,7 +1016,7 @@ export default function EmployeeForm({
                   City
                 </Label>
                 {mode === "view" ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                  <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                     {formData.city || "-"}
                   </div>
                 ) : (
@@ -1032,7 +1034,7 @@ export default function EmployeeForm({
                   State/Province
                 </Label>
                 {mode === "view" ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                  <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                     {formData.state || "-"}
                   </div>
                 ) : (
@@ -1054,7 +1056,7 @@ export default function EmployeeForm({
                   Postal Code
                 </Label>
                 {mode === "view" ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                  <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                     {formData.postalCode || "-"}
                   </div>
                 ) : (
@@ -1072,7 +1074,7 @@ export default function EmployeeForm({
                   Country
                 </Label>
                 {mode === "view" ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                  <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                     {formData.country || "-"}
                   </div>
                 ) : (
@@ -1087,9 +1089,9 @@ export default function EmployeeForm({
               </div>
             </div>
           </div>
-        </div>
+        </section>
         {/* ========== EMPLOYEMENT INFORMATION SECTION ========== */}
-        <div className="space-y-4 pt-4">
+        <section className="space-y-4 rounded-xl border border-border/70 bg-muted/10 p-4 md:p-6">
           <h4 className="font-medium">Employment Information</h4>
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
             <div className="md:col-span-3">
@@ -1097,7 +1099,7 @@ export default function EmployeeForm({
                 Employee Code
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {formData.employeeCode || "-"}
                 </div>
               ) : (
@@ -1122,7 +1124,7 @@ export default function EmployeeForm({
                 Department
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {departments.find(
                     (d) => d.departmentId === formData.departmentId,
                   )?.name || "-"}
@@ -1161,7 +1163,7 @@ export default function EmployeeForm({
                 Position
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {positions.find((p) => p.positionId === formData.positionId)
                     ?.name || "-"}
                 </div>
@@ -1202,7 +1204,7 @@ export default function EmployeeForm({
                 Start Date
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {formData.startDate
                     ? new Date(formData.startDate).toLocaleDateString()
                     : "-"}
@@ -1227,7 +1229,7 @@ export default function EmployeeForm({
               </Label>
               {mode === "view" ? (
                 formData.endDate && shouldShowEndDateField ? (
-                  <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                  <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                     {new Date(formData.endDate).toLocaleDateString()}
                   </div>
                 ) : (
@@ -1260,7 +1262,7 @@ export default function EmployeeForm({
                 Employment Status
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {formData.employmentStatus || "-"}
                 </div>
               ) : (
@@ -1287,7 +1289,7 @@ export default function EmployeeForm({
                 Current Status
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {formData.currentStatus || "-"}
                 </div>
               ) : (
@@ -1316,10 +1318,10 @@ export default function EmployeeForm({
               )}
             </div>
           </div>
-        </div>
+        </section>
 
         {/* ========== EMERGENCY CONTACT SECTION ========== */}
-        <div className="space-y-4 pt-4">
+        <section className="space-y-4 rounded-xl border border-border/70 bg-muted/10 p-4 md:p-6">
           <h4 className="font-medium">Emergency Contact</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -1327,7 +1329,7 @@ export default function EmployeeForm({
                 Full Name
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {formData.emergencyContactName || "-"}
                 </div>
               ) : (
@@ -1354,7 +1356,7 @@ export default function EmployeeForm({
                 Relationship
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {formData.emergencyContactRelationship || "-"}
                 </div>
               ) : (
@@ -1391,7 +1393,7 @@ export default function EmployeeForm({
                 Phone Number
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {formData.emergencyContactPhone || "-"}
                 </div>
               ) : (
@@ -1415,7 +1417,7 @@ export default function EmployeeForm({
                 Email
               </Label>
               {mode === "view" ? (
-                <div className="min-h-[40px] px-3 py-2 bg-muted rounded-md border border-border flex items-center text-sm text-foreground w-full">
+                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
                   {formData.emergencyContactEmail || "-"}
                 </div>
               ) : (
@@ -1436,7 +1438,7 @@ export default function EmployeeForm({
               )}
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
       <div className="flex justify-end gap-4 pt-6">
