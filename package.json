@@ -44,7 +44,6 @@
     "react-day-picker": "^9.11.3",
     "react-dom": "19.2.0",
     "react-hook-form": "^7.66.0",
-    "react-native-svg": "^15.15.1",
     "react-qr-code": "^2.0.18",
     "tailwind-merge": "^3.3.1",
     "zod": "^4.1.12"
@@ -55,7 +54,7 @@
     "@types/node": "^20.19.25",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
-    "baseline-browser-mapping": "^2.8.32",
+    "baseline-browser-mapping": "^2.9.19",
     "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",

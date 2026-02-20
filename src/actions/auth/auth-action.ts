@@ -1,12 +1,11 @@
 "use server";
 
 import { Roles } from "@prisma/client";
-import { getSession, hashPassword, signIn } from "@/lib/auth";
+import { getSession, hashPassword, sessionOptions, signIn } from "@/lib/auth";
 import { getRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
-import { sessionOptions } from "@/lib/session-options";
 
 export async function signInUser(input: {
   username: string;

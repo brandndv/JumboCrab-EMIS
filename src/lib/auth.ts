@@ -9,7 +9,7 @@ export async function createUserAccount(
   username: string,
   email: string,
   password: string,
-  role: Roles
+  role: Roles,
 ) {
   try {
     const existingUser = await db.user.findUnique({ where: { username } });
@@ -55,7 +55,7 @@ export type sessionData = {
 export const sessionOptions = {
   password: process.env.SESSION_PASSWORD!,
   cookieName: "jumbo-auth",
-  cookieOption: {
+  cookieOptions: {
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
     sameSite: "lax",
@@ -67,7 +67,7 @@ export async function getSession() {
   const cookieStore = await cookies();
   const session = await getIronSession<sessionData>(
     cookieStore,
-    sessionOptions
+    sessionOptions,
   );
 
   if (!session.isLoggedIn) {
@@ -128,7 +128,7 @@ export async function signIn(username: string, password: string) {
 export async function verifyPassword(
   password: string,
   hash: string,
-  salt: string
+  salt: string,
 ) {
   const derivedKey = (await scyrptAsync(password, salt, KEY_LENGTH)) as Buffer;
   return crypto.timingSafeEqual(Buffer.from(hash, "hex"), derivedKey);

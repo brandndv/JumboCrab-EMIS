@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { ArrowUpRight } from "lucide-react";
 
@@ -30,7 +30,7 @@ const HomeHeader = () => {
           className="flex items-center gap-3 font-semibold tracking-tight"
         >
           <Image
-            src="/logo-icon.png"
+            src="/logo.svg"
             alt="JumboCrab logo"
             width={48}
             height={48}

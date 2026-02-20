@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RefreshCcw, RotateCcw, Pencil } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { TZ } from "@/lib/timezone";
 import { updatePunch } from "@/actions/attendance/attendance-action";
 import {
@@ -259,13 +258,18 @@ export function DailyAttendance() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={row.status === "PRESENT" ? "secondary" : "outline"}
-                        className={cn(
-                          "uppercase tracking-wide",
-                          row.status === "ABSENT" && "border-destructive text-destructive",
-                          row.status === "LATE" && "border-amber-500 text-amber-600",
-                          row.status === "INCOMPLETE" && "border-blue-500 text-blue-600"
-                        )}
+                        variant={
+                          row.status === "PRESENT"
+                            ? "success"
+                            : row.status === "LATE"
+                            ? "warning"
+                            : row.status === "INCOMPLETE"
+                            ? "info"
+                            : row.status === "ABSENT"
+                            ? "destructive"
+                            : "outline"
+                        }
+                        className="uppercase tracking-wide"
                       >
                         {row.status}
                       </Badge>

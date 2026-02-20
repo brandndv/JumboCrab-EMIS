@@ -5,7 +5,7 @@ import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Roles } from "@prisma/client";
-import { sessionOptions } from "./session-options";
+import { sessionOptions } from "./auth";
 
 interface UserSession {
   id?: string;

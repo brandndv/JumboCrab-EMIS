@@ -14,7 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RefreshCcw, RotateCcw, Clock4 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { TZ } from "@/lib/timezone";
 import { listAttendance } from "@/actions/attendance/attendance-action";
 
@@ -319,22 +318,22 @@ export function AttendanceHistoryTable() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            row.status === "PRESENT" ? "secondary" : "outline"
-                          }
-                          className={cn(
-                            "uppercase tracking-wide",
-                            row.status === "ABSENT" &&
-                              "border-destructive text-destructive",
-                            row.status === "LATE" &&
-                              "border-amber-500 text-amber-600",
-                            row.status === "INCOMPLETE" &&
-                              "border-blue-500 text-blue-600"
-                          )}
-                        >
-                          {row.status}
-                        </Badge>
+                      <Badge
+                        variant={
+                          row.status === "PRESENT"
+                            ? "success"
+                            : row.status === "LATE"
+                            ? "warning"
+                            : row.status === "INCOMPLETE"
+                            ? "info"
+                            : row.status === "ABSENT"
+                            ? "destructive"
+                            : "outline"
+                        }
+                        className="uppercase tracking-wide"
+                      >
+                        {row.status}
+                      </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {row.scheduledStartMinutes != null &&

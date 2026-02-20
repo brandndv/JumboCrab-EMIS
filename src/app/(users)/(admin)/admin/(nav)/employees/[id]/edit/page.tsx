@@ -6,6 +6,7 @@ import EmployeeForm from "@/components/dasboard/manage-empoyees/employee-form";
 import { useEffect, useState } from "react";
 import { Employee } from "@/lib/validations/employees";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
@@ -103,11 +104,15 @@ function EmployeeEditPageContent({
         </Button>
       </div>
       {employee?.employeeId && (
-        <EmployeeForm
-          employeeId={employee.employeeId}
-          mode="edit"
-          initialData={employee}
-        />
+        <Card className="border-border shadow-sm">
+          <CardContent className="p-6">
+            <EmployeeForm
+              employeeId={employee.employeeId}
+              mode="edit"
+              initialData={employee}
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );
