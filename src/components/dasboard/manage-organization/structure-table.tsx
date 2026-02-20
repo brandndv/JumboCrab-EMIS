@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  getOrganizationStructure,
+  updateEmployeeSupervisor,
+} from "@/actions/organization/organization-structure-action";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,8 +27,8 @@ type StructureRow = {
   lastName: string;
   supervisorUserId?: string | null;
   role?: string | null;
-  department?: { departmentId: string; name: string };
-  position?: { positionId: string; name: string };
+  department?: { departmentId: string; name: string } | null;
+  position?: { positionId: string; name: string } | null;
 };
 
 export function StructureTable() {
@@ -48,11 +52,12 @@ export function StructureTable() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch("/api/organization/structure");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load structure");
-      setRows(data?.data ?? []);
-      setSupervisors(data?.supervisors ?? []);
+      const result = await getOrganizationStructure();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load structure");
+      }
+      setRows(result.data ?? []);
+      setSupervisors(result.supervisors ?? []);
     } catch (err) {
       console.error("Structure fetch failed", err);
       setError(err instanceof Error ? err.message : "Failed to load structure");
@@ -117,16 +122,13 @@ export function StructureTable() {
     try {
       setSaving(true);
       setFormError(null);
-      const res = await fetch("/api/organization/structure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: target.employeeId,
-          supervisorUserId: selectedSupervisor || null,
-        }),
+      const result = await updateEmployeeSupervisor({
+        employeeId: target.employeeId,
+        supervisorUserId: selectedSupervisor || null,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to update supervisor");
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update supervisor");
+      }
       await load();
       setAssignOpen(false);
     } catch (err) {

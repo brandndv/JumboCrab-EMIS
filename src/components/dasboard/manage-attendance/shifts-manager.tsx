@@ -1,8 +1,22 @@
 "use client";
 
+import {
+  createShift,
+  deleteShift,
+  deleteShift as deleteShiftAction,
+  listShifts,
+  updateShift,
+} from "@/actions/schedule/shifts-action";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RefreshCcw, Plus, Pencil, Trash2 } from "lucide-react";
@@ -63,7 +77,8 @@ const computeDerived = (
 ) => {
   const start = inputToMinutes(startTime);
   const end = inputToMinutes(endTime);
-  if (start == null || end == null) return { breakMinutes: 0, paidHours: 0, totalMinutes: 0 };
+  if (start == null || end == null)
+    return { breakMinutes: 0, paidHours: 0, totalMinutes: 0 };
 
   let totalMinutes =
     spansMidnight && end <= start ? end + 24 * 60 - start : end - start;
@@ -80,9 +95,10 @@ const computeDerived = (
     breakMinutes = Math.max(0, Math.min(totalMinutes, endVal - bStart));
   }
 
-  const paidHours = totalMinutes > 0
-    ? Number(((totalMinutes - breakMinutes) / 60).toFixed(2))
-    : 0;
+  const paidHours =
+    totalMinutes > 0
+      ? Number(((totalMinutes - breakMinutes) / 60).toFixed(2))
+      : 0;
 
   return { breakMinutes, paidHours, totalMinutes };
 };
@@ -136,10 +152,11 @@ export function ShiftsManager() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch("/api/shifts");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load shifts");
-      setRows(json?.data ?? []);
+      const result = await listShifts();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load shifts");
+      }
+      setRows(result.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load shifts");
     } finally {
@@ -168,7 +185,6 @@ export function ShiftsManager() {
       setFormError("Code and name are required");
       return;
     }
-    const { breakMinutes, paidHours } = derivedCreate;
     try {
       setSaving(true);
       setFormError(null);
@@ -180,17 +196,12 @@ export function ShiftsManager() {
         breakStartTime,
         breakEndTime,
         spansMidnight,
-        breakMinutesUnpaid: breakMinutes,
-        paidHoursPerDay: paidHours,
         notes,
       };
-      const res = await fetch("/api/shifts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to save shift");
+      const result = await createShift(payload);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to save shift");
+      }
       resetForm();
       await load();
     } catch (err) {
@@ -251,29 +262,30 @@ export function ShiftsManager() {
     try {
       setEditSaving(true);
       setEditError(null);
-      const res = await fetch("/api/shifts", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingId,
-          ...editForm,
-          breakMinutesUnpaid: derived.breakMinutes,
-          paidHoursPerDay: derived.paidHours,
-        }),
+      const result = await updateShift({
+        id: editingId,
+        ...editForm,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to update shift");
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update shift");
+      }
       resetEdit();
       await load();
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : "Failed to update shift");
+      setEditError(
+        err instanceof Error ? err.message : "Failed to update shift"
+      );
     } finally {
       setEditSaving(false);
     }
   };
 
-  const deleteShift = async (id: number) => {
-    await fetch(`/api/shifts?id=${id}`, { method: "DELETE" });
+  const handleDeleteShift = async (id: number) => {
+    const result = await deleteShiftAction(id);
+    if (!result.success) {
+      setError(result.error || "Failed to delete shift");
+      return;
+    }
     if (editingId === id) resetEdit();
     await load();
   };
@@ -284,9 +296,16 @@ export function ShiftsManager() {
         <CardHeader className="flex items-center justify-between">
           <div>
             <CardTitle className="text-lg">Available Shifts</CardTitle>
-            <p className="text-sm text-muted-foreground">View all shifts you can assign or use in patterns.</p>
+            <p className="text-sm text-muted-foreground">
+              View all shifts you can assign or use in patterns.
+            </p>
           </div>
-          <Button variant="ghost" size="icon" onClick={load} aria-label="Reload">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={load}
+            aria-label="Reload"
+          >
             <RefreshCcw className="h-4 w-4" />
           </Button>
         </CardHeader>
@@ -299,72 +318,81 @@ export function ShiftsManager() {
             <p className="text-sm text-muted-foreground">No shifts yet.</p>
           ) : (
             <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[14%]">Code</TableHead>
-                      <TableHead className="w-[20%]">Name</TableHead>
-                      <TableHead className="w-[20%]">Time</TableHead>
-                      <TableHead className="w-[18%]">Break window</TableHead>
-                      <TableHead className="w-[12%]">Paid hours</TableHead>
-                      <TableHead className="w-[18%]">Notes</TableHead>
-                      <TableHead className="w-[14%] text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell className="font-medium">{row.code}</TableCell>
-                        <TableCell>{row.name}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {minutesToTime(row.startMinutes)} - {minutesToTime(row.endMinutes)}
-                          {row.spansMidnight && <Badge variant="outline" className="ml-2">Next day</Badge>}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {row.breakStartMinutes != null && row.breakEndMinutes != null ? (
-                            <div className="space-y-0.5">
-                              <div>
-                                {minutesToTime(row.breakStartMinutes)} – {minutesToTime(row.breakEndMinutes)}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Unpaid {row.breakMinutesUnpaid} mins
-                              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[14%]">Code</TableHead>
+                    <TableHead className="w-[20%]">Name</TableHead>
+                    <TableHead className="w-[20%]">Time</TableHead>
+                    <TableHead className="w-[18%]">Break window</TableHead>
+                    <TableHead className="w-[12%]">Paid hours</TableHead>
+                    <TableHead className="w-[18%]">Notes</TableHead>
+                    <TableHead className="w-[14%] text-right">
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="font-medium">{row.code}</TableCell>
+                      <TableCell>{row.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {minutesToTime(row.startMinutes)} -{" "}
+                        {minutesToTime(row.endMinutes)}
+                        {row.spansMidnight && (
+                          <Badge variant="outline" className="ml-2">
+                            Next day
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.breakStartMinutes != null &&
+                        row.breakEndMinutes != null ? (
+                          <div className="space-y-0.5">
+                            <div>
+                              {minutesToTime(row.breakStartMinutes)} –{" "}
+                              {minutesToTime(row.breakEndMinutes)}
                             </div>
-                          ) : (
-                            `${row.breakMinutesUnpaid} mins`
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {row.paidHoursPerDay} hrs
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {row.notes || "—"}
-                        </TableCell>
-                        <TableCell className="text-right text-sm">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="gap-2"
-                              onClick={() => openEdit(row)}
-                            >
-                              <Pencil className="h-4 w-4" /> Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="gap-2 text-destructive"
-                              onClick={async () => deleteShift(row.id)}
-                            >
-                              <Trash2 className="h-4 w-4" /> Delete
-                            </Button>
+                            <div className="text-xs text-muted-foreground">
+                              Unpaid {row.breakMinutesUnpaid} mins
+                            </div>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                        ) : (
+                          `${row.breakMinutesUnpaid} mins`
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.paidHoursPerDay} hrs
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.notes || "—"}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-2"
+                            onClick={() => openEdit(row)}
+                          >
+                            <Pencil className="h-4 w-4" /> Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-2 text-destructive"
+                            onClick={async () => handleDeleteShift(row.id)}
+                          >
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -372,25 +400,43 @@ export function ShiftsManager() {
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Create Shift</CardTitle>
-          <p className="text-sm text-muted-foreground">Define a reusable shift.</p>
+          <p className="text-sm text-muted-foreground">
+            Define a reusable shift.
+          </p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">Code</label>
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="DAY-9-6" />
+              <Input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="DAY-9-6"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Name</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Day Shift" />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Day Shift"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Start time</label>
-              <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+              <Input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">End time</label>
-              <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+              <Input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Break start</label>
@@ -412,15 +458,24 @@ export function ShiftsManager() {
             </div>
             <div className="space-y-2 sm:col-span-2">
               <div className="text-sm text-muted-foreground">
-                Unpaid break: <span className="font-medium text-foreground">{derivedCreate.breakMinutes} mins</span>{" "}
+                Unpaid break:{" "}
+                <span className="font-medium text-foreground">
+                  {derivedCreate.breakMinutes} mins
+                </span>{" "}
                 • Paid hours per day:{" "}
-                <span className="font-medium text-foreground">{derivedCreate.paidHours}</span>{" "}
+                <span className="font-medium text-foreground">
+                  {derivedCreate.paidHours}
+                </span>{" "}
                 (auto-calculated)
               </div>
             </div>
             <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-medium">Notes</label>
-              <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+              <Input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Spans midnight</label>
@@ -432,7 +487,10 @@ export function ShiftsManager() {
                   onChange={(e) => setSpansMidnight(e.target.checked)}
                   className="h-4 w-4"
                 />
-                <label htmlFor="spans-midnight-shift" className="text-sm text-muted-foreground">
+                <label
+                  htmlFor="spans-midnight-shift"
+                  className="text-sm text-muted-foreground"
+                >
                   Ends next day
                 </label>
               </div>
@@ -464,7 +522,9 @@ export function ShiftsManager() {
               <label className="text-sm font-medium">Code</label>
               <Input
                 value={editForm.code}
-                onChange={(e) => setEditForm((f) => ({ ...f, code: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, code: e.target.value }))
+                }
                 placeholder="DAY-9-6"
               />
             </div>
@@ -472,7 +532,9 @@ export function ShiftsManager() {
               <label className="text-sm font-medium">Name</label>
               <Input
                 value={editForm.name}
-                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, name: e.target.value }))
+                }
                 placeholder="Day Shift"
               />
             </div>
@@ -481,7 +543,9 @@ export function ShiftsManager() {
               <Input
                 type="time"
                 value={editForm.startTime}
-                onChange={(e) => setEditForm((f) => ({ ...f, startTime: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, startTime: e.target.value }))
+                }
               />
             </div>
             <div className="space-y-2">
@@ -489,7 +553,9 @@ export function ShiftsManager() {
               <Input
                 type="time"
                 value={editForm.endTime}
-                onChange={(e) => setEditForm((f) => ({ ...f, endTime: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, endTime: e.target.value }))
+                }
               />
             </div>
             <div className="space-y-2">
@@ -497,7 +563,9 @@ export function ShiftsManager() {
               <Input
                 type="time"
                 value={editForm.breakStartTime}
-                onChange={(e) => setEditForm((f) => ({ ...f, breakStartTime: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, breakStartTime: e.target.value }))
+                }
                 placeholder="14:00"
               />
             </div>
@@ -506,15 +574,22 @@ export function ShiftsManager() {
               <Input
                 type="time"
                 value={editForm.breakEndTime}
-                onChange={(e) => setEditForm((f) => ({ ...f, breakEndTime: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, breakEndTime: e.target.value }))
+                }
                 placeholder="15:00"
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <div className="text-sm text-muted-foreground">
-                Unpaid break: <span className="font-medium text-foreground">{derivedEdit.breakMinutes} mins</span>{" "}
+                Unpaid break:{" "}
+                <span className="font-medium text-foreground">
+                  {derivedEdit.breakMinutes} mins
+                </span>{" "}
                 • Paid hours per day:{" "}
-                <span className="font-medium text-foreground">{derivedEdit.paidHours}</span>{" "}
+                <span className="font-medium text-foreground">
+                  {derivedEdit.paidHours}
+                </span>{" "}
                 (auto-calculated)
               </div>
             </div>
@@ -522,7 +597,9 @@ export function ShiftsManager() {
               <label className="text-sm font-medium">Notes</label>
               <Input
                 value={editForm.notes}
-                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, notes: e.target.value }))
+                }
                 placeholder="Optional"
               />
             </div>
@@ -533,10 +610,18 @@ export function ShiftsManager() {
                   id="edit-spans-midnight"
                   type="checkbox"
                   checked={editForm.spansMidnight}
-                  onChange={(e) => setEditForm((f) => ({ ...f, spansMidnight: e.target.checked }))}
+                  onChange={(e) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      spansMidnight: e.target.checked,
+                    }))
+                  }
                   className="h-4 w-4"
                 />
-                <label htmlFor="edit-spans-midnight" className="text-sm text-muted-foreground">
+                <label
+                  htmlFor="edit-spans-midnight"
+                  className="text-sm text-muted-foreground"
+                >
                   Ends next day
                 </label>
               </div>

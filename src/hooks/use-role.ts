@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getAuthRole } from "@/actions/auth/auth-action";
 
 export function useRole() {
   const [role, setRole] = useState<string | null>(null);
@@ -10,10 +11,9 @@ export function useRole() {
   useEffect(() => {
     const fetchRole = async () => {
       try {
-        const response = await fetch("/api/auth/role");
-        if (response.ok) {
-          const { role } = await response.json();
-          setRole(role);
+        const result = await getAuthRole();
+        if (result.success) {
+          setRole(result.role);
         }
       } catch (error) {
         console.error("Failed to fetch role:", error);

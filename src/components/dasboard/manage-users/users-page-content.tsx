@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { usePathname, useRouter } from "next/navigation"; // Note: Use 'next/navigation' instead of 'next/router'
 import { Search } from "lucide-react";
 import { UnassignedEmployees } from "@/components/dasboard/manage-users/unassigned-employees";
+import { deleteUser, updateUser } from "@/actions/users/users-action";
 
 export default function UsersPageContent() {
   const { users, loading, error, refreshUsers } = useUsers();
@@ -39,14 +40,9 @@ export default function UsersPageContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`/api/users/${user.userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isDisabled }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to update user status");
+      const result = await updateUser({ userId: user.userId, isDisabled });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update user status");
       }
       await refreshUsers();
     } catch (err) {
@@ -65,12 +61,9 @@ export default function UsersPageContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`/api/users/${user.userId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to delete user");
+      const result = await deleteUser({ userId: user.userId });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to delete user");
       }
       await refreshUsers();
     } catch (err) {
@@ -135,7 +128,7 @@ export default function UsersPageContent() {
       </div>
 
       <div className="space-y-8 mt-6">
-        <section className="rounded-2xl border border-border bg-card/40 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">
@@ -176,7 +169,7 @@ export default function UsersPageContent() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card/40 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">
@@ -217,7 +210,7 @@ export default function UsersPageContent() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card/30 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">
@@ -263,7 +256,7 @@ export default function UsersPageContent() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card/40 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <UnassignedEmployees />
         </section>
       </div>

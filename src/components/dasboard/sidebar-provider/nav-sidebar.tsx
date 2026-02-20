@@ -249,7 +249,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       hasSubmenu: true,
       subItems: [
         {
-          label: "Overview",
+          label: "Deductions Directory",
           path: "",
           roles: ["admin", "generalManager", "clerk"],
         },
@@ -259,12 +259,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "clerk"],
         },
         {
-          label: "Deduction Types",
-          path: "/types",
-          roles: ["admin", "generalManager", "clerk"],
-        },
-        {
-          label: "History",
+          label: "Deduction History",
           path: "/history",
           roles: ["admin", "generalManager", "clerk"],
         },
@@ -284,7 +279,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "clerk"],
         },
         {
-          label: "History",
+          label: "Contribution History",
           path: "/history",
           roles: ["admin", "generalManager", "clerk"],
         },
@@ -399,7 +394,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
   ];
 
   const filteredMenuItems = menuItems.filter((item) =>
-    item.roles.includes(userRole || "admin")
+    item.roles.includes(userRole || "admin"),
   );
   return (
     <div
@@ -415,7 +410,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
             const visibleSubItems = (item.subItems?.filter((si: any) =>
               typeof si === "object"
                 ? !("roles" in si) || si.roles?.includes(userRole)
-                : true
+                : true,
             ) || []) as any[];
 
             if (item.hasSubmenu) {
@@ -522,7 +517,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                                 : "text-inherit hover:text-inherit"
                             }`}
                             onClick={(
-                              e: React.MouseEvent<HTMLButtonElement>
+                              e: React.MouseEvent<HTMLButtonElement>,
                             ) => {
                               e.stopPropagation();
                               updateOpenState(item.id, !openStates[item.id]);

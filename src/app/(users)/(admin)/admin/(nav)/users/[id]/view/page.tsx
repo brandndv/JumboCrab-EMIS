@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Pencil, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getUserById } from "@/actions/users-action";
+import { getUserById } from "@/actions/users/users-action";
 import type { UserWithEmployee } from "@/lib/validations/users";
 
 class ErrorBoundary extends React.Component<

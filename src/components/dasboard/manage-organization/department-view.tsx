@@ -1,5 +1,6 @@
 "use client";
 
+import { listDepartments } from "@/actions/organization/departments-action";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -50,10 +51,11 @@ export function DepartmentView() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch("/api/departments");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load departments");
-      setData(json?.data ?? []);
+      const result = await listDepartments();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load departments");
+      }
+      setData(result.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load departments");
     } finally {

@@ -18,8 +18,9 @@ import {
 } from "@/components/ui/select";
 import { Eye, EyeOff, Search } from "lucide-react";
 import { Roles } from "@prisma/client";
-import { getEmployeesWithoutUser } from "@/actions/employees-action";
+import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { useRouter } from "next/navigation";
+import { createAuthUser } from "@/actions/auth/auth-action";
 
 type Employee = {
   employeeId: string; // Changed from id to employeeId
@@ -120,31 +121,20 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth/users/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username,
-          email,
-          password,
-          role,
-          employee: selectedEmployee
-            ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
-            : null,
-          employeeId: selectedEmployee?.employeeId || null,
-        }),
+      const result = await createAuthUser({
+        username,
+        email,
+        password,
+        role,
+        employeeId: selectedEmployee?.employeeId || null,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create user");
+      if (!result.success) {
+        throw new Error(result.error || "Failed to create user");
       }
 
       // Success case
-      console.log("User created successfully:", data);
+      console.log("User created successfully:", result.user);
 
       // Clear form on success
       setUsername("");

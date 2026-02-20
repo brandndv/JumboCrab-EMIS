@@ -1,5 +1,6 @@
 "use client";
 
+import { getOrganizationStructure } from "@/actions/organization/organization-structure-action";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,8 +27,8 @@ type EmployeeRow = {
   firstName: string;
   lastName: string;
   supervisorUserId?: string | null;
-  department?: { name: string | null };
-  position?: { name: string | null };
+  department?: { departmentId: string; name: string } | null;
+  position?: { positionId: string; name: string } | null;
 };
 
 type SupervisorGroup = {
@@ -49,13 +50,14 @@ export function SupervisorView() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch("/api/organization/structure");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load structure");
-      setEmployees(json?.data ?? []);
-      setSupervisors(json?.supervisors ?? []);
-      setGroupsFromApi(json?.supervisorGroups ?? []);
-      setUnassignedFromApi(json?.unassigned ?? []);
+      const result = await getOrganizationStructure();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load structure");
+      }
+      setEmployees(result.data ?? []);
+      setSupervisors(result.supervisors ?? []);
+      setGroupsFromApi(result.supervisorGroups ?? []);
+      setUnassignedFromApi(result.unassigned ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load structure");
     } finally {

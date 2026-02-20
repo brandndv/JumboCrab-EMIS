@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { Session } from "@/types/session";
-import { fetchSession } from "@/actions/session-action";
+import { fetchSession } from "@/actions/auth/session-action";
 import { User } from "@/lib/validations/users";
 
 interface RawSession {

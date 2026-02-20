@@ -41,8 +41,8 @@ const AppSidebar = () => {
             name: employee
               ? `${employee.firstName} ${employee.lastName || ""}`.trim()
               : user?.username
-              ? user.username.charAt(0).toUpperCase() + user.username.slice(1)
-              : "User",
+                ? user.username.charAt(0).toUpperCase() + user.username.slice(1)
+                : "User",
             email: user?.email || "",
             avatar: "",
           }}

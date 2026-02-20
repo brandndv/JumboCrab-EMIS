@@ -14,7 +14,14 @@ import {
 import { useCallback, useState, useEffect, useMemo } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { createEmployee, updateEmployee } from "@/actions/employees-action";
+import { listDepartmentOptions } from "@/actions/organization/departments-action";
+import {
+  createEmployee,
+  getEmployeeById,
+  getGeneratedEmployeeCode,
+  updateEmployee,
+} from "@/actions/employees/employees-action";
+import { listPositions } from "@/actions/organization/positions-action";
 import {
   NATIONALITIES,
   EMERGENCY_RELATIONSHIPS,
@@ -110,21 +117,17 @@ export default function EmployeeForm({
       positionId: string;
       name: string;
       departmentId: string;
-      department?: { departmentId: string; name: string };
+      department?: { departmentId: string; name: string } | null;
     }[]
   >([]);
 
-  const getGeneratedEmployeeCode = useCallback(async () => {
+  const fetchGeneratedEmployeeCode = useCallback(async () => {
     try {
-      const response = await fetch(`/api/employees/generate-code`); // Changed from /api/employees/${employeeId}
-      if (!response.ok) {
-        throw new Error("Failed to generate employee code");
-      }
-      const data = await response.json();
-      if (typeof data.employeeCode !== "string") {
+      const result = await getGeneratedEmployeeCode();
+      if (!result.success || typeof result.employeeCode !== "string") {
         throw new Error("Invalid employee code response");
       }
-      return data.employeeCode as string;
+      return result.employeeCode;
     } catch (error) {
       console.error("Error fetching employee code:", error);
       // Fallback to a local random code if the API fails
@@ -139,11 +142,11 @@ export default function EmployeeForm({
     const fetchEmployee = async () => {
       try {
         if (mode !== "create" && employeeId && !initialData) {
-          const response = await fetch(`/api/employees/${employeeId}`);
-          if (!response.ok) {
-            throw new Error("Failed to fetch employee data");
+          const result = await getEmployeeById(employeeId);
+          if (!result.success || !result.data) {
+            throw new Error(result.error || "Failed to fetch employee data");
           }
-          const data = await response.json();
+          const data = result.data;
           setFormData({
             ...data,
             img: data.img ?? null,
@@ -161,7 +164,7 @@ export default function EmployeeForm({
           return;
         }
 
-        const employeeCode = await getGeneratedEmployeeCode();
+        const employeeCode = await fetchGeneratedEmployeeCode();
         setFormData({
           employeeCode,
           firstName: "",
@@ -199,17 +202,15 @@ export default function EmployeeForm({
     // Load departments/positions from API for selects
     const fetchLookups = async () => {
       try {
-        const [deptRes, posRes] = await Promise.all([
-          fetch("/api/departments"),
-          fetch("/api/positions"),
+        const [deptResult, posResult] = await Promise.all([
+          listDepartmentOptions(),
+          listPositions(),
         ]);
-        if (deptRes.ok) {
-          const data = await deptRes.json();
-          setDepartments(data?.data ?? []);
+        if (deptResult.success) {
+          setDepartments(deptResult.data ?? []);
         }
-        if (posRes.ok) {
-          const data = await posRes.json();
-          setPositions(data?.data ?? []);
+        if (posResult.success) {
+          setPositions(posResult.data ?? []);
         }
       } catch (err) {
         console.error("Failed to load departments/positions", err);
@@ -217,7 +218,7 @@ export default function EmployeeForm({
     };
 
     fetchLookups();
-  }, [employeeId, mode, initialData, getGeneratedEmployeeCode]);
+  }, [employeeId, mode, initialData, fetchGeneratedEmployeeCode]);
 
   const filteredPositions = useMemo(() => {
     if (!formData.departmentId) return positions;
@@ -602,7 +603,7 @@ export default function EmployeeForm({
                             errors.suffix
                               ? "border-destructive"
                               : "border-border"
-                          } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                          } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                         >
                           <option value="">-</option>
                           <option value="JR">Jr.</option>
@@ -703,7 +704,7 @@ export default function EmployeeForm({
                               errors.sex
                                 ? "border-destructive"
                                 : "border-border"
-                            } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                            } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                             required
                           >
                             <option value="">-</option>
@@ -736,7 +737,7 @@ export default function EmployeeForm({
                             errors.civilStatus
                               ? "border-destructive"
                               : "border-border"
-                          } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                          } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                           required
                         >
                           <option value="">Select Status</option>
@@ -770,7 +771,7 @@ export default function EmployeeForm({
                             errors.nationality
                               ? "border-destructive"
                               : "border-border"
-                          } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                          } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                           required
                         >
                           <option value="">Select nationality</option>
@@ -862,7 +863,7 @@ export default function EmployeeForm({
               name="description"
               value={formData.description || ""}
               onChange={handleChange}
-              className="flex rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-h-[100px] w-full"
+              className="flex rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-h-[100px] w-full"
             />
           )}
         </div>
@@ -1019,7 +1020,7 @@ export default function EmployeeForm({
                     onChange={(e) => handleDepartmentChange(e.target.value || "")}
                     className={`w-full h-10 px-3 py-2 rounded-md border ${
                       errors.departmentId ? "border-destructive" : "border-border"
-                    } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                    } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                   >
                     <option value="">Select department</option>
                     {departments.map((department) => (
@@ -1055,7 +1056,7 @@ export default function EmployeeForm({
                     }
                     className={`w-full h-10 px-3 py-2 rounded-md border ${
                       errors.positionId ? "border-destructive" : "border-border"
-                    } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                    } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                     disabled={!filteredPositions.length && !!formData.departmentId}
                   >
                     <option value="">Select position</option>
@@ -1145,7 +1146,7 @@ export default function EmployeeForm({
                   onChange={(e) =>
                     handleSelectChange("employmentStatus", e.target.value)
                   }
-                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
+                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 >
                   <option value="">Select employment status</option>
                   {EMPLOYMENT_STATUS.map((status) => (
@@ -1172,7 +1173,7 @@ export default function EmployeeForm({
                   onChange={(e) =>
                     handleSelectChange("currentStatus", e.target.value)
                   }
-                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
+                  className="w-full h-10 px-3 py-2 rounded-md border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                 >
                   <option value="">Select current status</option>
                   {CURRENT_STATUS.map((status) => (
@@ -1246,7 +1247,7 @@ export default function EmployeeForm({
                       errors.emergencyContactRelationship
                         ? "border-destructive"
                         : "border-border"
-                    } bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
+                    } bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring`}
                   >
                     <option value="">Select relationship</option>
                     {emergencyRelationshipOptions.map((relationship) => (

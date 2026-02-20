@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getEmployeesWithoutUser } from "@/actions/employees-action";
+import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { Button } from "@/components/ui/button";
 
 interface AddUsersEmployeeAccountProps {

@@ -9,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RefreshCcw, RotateCcw, Pencil } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { TZ } from "@/lib/timezone";
+import { updatePunch } from "@/actions/attendance/attendance-action";
 import {
   Dialog,
   DialogContent,
@@ -148,14 +148,15 @@ export function DailyAttendance() {
     if (!punchEdit) return;
     try {
       setPunchSaving(true);
-      await fetch("/api/attendance/punches", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: punchEdit.id,
-          punchTime: punchEditTime ? new Date(punchEditTime).toISOString() : punchEdit.punchTime,
-        }),
+      const result = await updatePunch({
+        id: punchEdit.id,
+        punchTime: punchEditTime
+          ? new Date(punchEditTime).toISOString()
+          : punchEdit.punchTime,
       });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update punch");
+      }
       await load();
       setPunchEdit(null);
     } catch (err) {
@@ -257,13 +258,18 @@ export function DailyAttendance() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={row.status === "PRESENT" ? "secondary" : "outline"}
-                        className={cn(
-                          "uppercase tracking-wide",
-                          row.status === "ABSENT" && "border-destructive text-destructive",
-                          row.status === "LATE" && "border-amber-500 text-amber-600",
-                          row.status === "INCOMPLETE" && "border-blue-500 text-blue-600"
-                        )}
+                        variant={
+                          row.status === "PRESENT"
+                            ? "success"
+                            : row.status === "LATE"
+                            ? "warning"
+                            : row.status === "INCOMPLETE"
+                            ? "info"
+                            : row.status === "ABSENT"
+                            ? "destructive"
+                            : "outline"
+                        }
+                        className="uppercase tracking-wide"
                       >
                         {row.status}
                       </Badge>

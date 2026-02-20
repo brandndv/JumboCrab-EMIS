@@ -2,7 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { ContributionsTable } from "@/components/dasboard/manage-contributions/contributions-table";
-import { useContributions } from "@/components/dasboard/manage-contributions/contributions-provider";
+import { useContributions } from "@/hooks/use-contributions";
 
 export default function ContributionsPageContent() {
   const {

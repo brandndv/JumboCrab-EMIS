@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getEmployeesWithoutUser } from "@/actions/employees-action";
+import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -98,14 +98,14 @@ export function UnassignedEmployees() {
       )}
 
       {!loading && !error && filtered.length > 0 && (
-        <div className="rounded-2xl border border-border/70 bg-card/60 shadow-sm overflow-hidden">
-          <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-3 text-sm font-medium text-muted-foreground border-b border-border/70">
+        <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-3 text-sm font-medium text-muted-foreground border-b border-border">
             <div className="col-span-3">Employee Code</div>
             <div className="col-span-4">Name</div>
             <div className="col-span-3">Email</div>
             <div className="col-span-2 text-right">Actions</div>
           </div>
-          <div className="divide-y divide-border/70">
+          <div className="divide-y divide-border">
             {filtered.map((emp) => (
               <div
                 key={emp.employeeId}

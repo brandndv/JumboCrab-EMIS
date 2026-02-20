@@ -8,6 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { RefreshCcw, LogIn, LogOut, Coffee, Clock, Shield, Fingerprint } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatZonedDate, formatZonedTime, startOfZonedDay, zonedNow } from "@/lib/timezone";
+import {
+  getKioskStatus,
+  recordKioskPunch,
+  searchKioskUsers,
+} from "@/actions/attendance/kiosk-attendance-action";
 
 type Punch = {
   punchTime: string;
@@ -120,13 +125,14 @@ export default function KioskClockPage() {
     try {
       setLoadingStatus(true);
       setError(null);
-      const params = new URLSearchParams();
-      params.set("username", u);
-      if (selectedDate) params.set("date", selectedDate);
-      const res = await fetch(`/api/kiosk/attendance?${params.toString()}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load status");
-      setStatus(json.data);
+      const result = await getKioskStatus({
+        username: u,
+        date: selectedDate || undefined,
+      });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load status");
+      }
+      setStatus(result.data ?? null);
     } catch (err) {
       setStatus(null);
       setError(err instanceof Error ? err.message : "Failed to load status");
@@ -138,10 +144,11 @@ export default function KioskClockPage() {
   const loadSuggestions = async (term: string) => {
     try {
       setFetchingSuggestions(true);
-      const res = await fetch(`/api/kiosk/attendance?query=${encodeURIComponent(term)}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load suggestions");
-      setSuggestions(json.data ?? []);
+      const result = await searchKioskUsers({ query: term });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load suggestions");
+      }
+      setSuggestions(result.data ?? []);
     } catch (err) {
       setSuggestions([]);
     } finally {
@@ -221,17 +228,15 @@ const nextActions = useMemo(() => {
       setPunching(punchType);
       setError(null);
       setInfo(null);
-      const res = await fetch("/api/kiosk/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, punchType }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) {
-        const msg = reasonMessage(json?.reason, json?.error || res.statusText || "Failed to punch");
+      const result = await recordKioskPunch({ username, password, punchType });
+      if (!result.success) {
+        const msg = reasonMessage(
+          result.reason,
+          result.error || "Failed to punch"
+        );
         throw new Error(msg);
       }
-      setInfo(reasonMessage(json?.reason, "Punch recorded"));
+      setInfo(reasonMessage(result.reason, "Punch recorded"));
       setPassword("");
       setSuggestions([]);
       setStatusUser(username);

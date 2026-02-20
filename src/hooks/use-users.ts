@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getUsers } from "@/actions/users-action";
+import { getUsers } from "@/actions/users/users-action";
 import { User } from "@/lib/validations/users";
 
 export function useUsersState(initialUsers: User[] = []) {

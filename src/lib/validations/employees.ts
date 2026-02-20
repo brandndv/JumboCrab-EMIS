@@ -51,9 +51,9 @@ export const employeeSchema = z.object({
     .nullable()
     .transform((val) => {
       if (!val || val.trim() === "") return null;
-      return SUFFIX.includes(val as any) ? val : null;
+      return SUFFIX.includes(val as (typeof SUFFIX)[number]) ? val : null;
     })
-    .refine((val) => !val || SUFFIX.includes(val as any), {
+    .refine((val) => !val || SUFFIX.includes(val as (typeof SUFFIX)[number]), {
       message: `Suffix must be one of: ${SUFFIX.join(", ")}`,
     }),
   sex: z.enum(GENDER),
@@ -143,12 +143,15 @@ export const validatePartialEmployee = (data: unknown) => {
 
 // Schema for creating a new employee (excludes auto-generated fields)
 export const createEmployeeSchema = employeeSchema.omit({
-  id: true,
+  employeeId: true,
   createdAt: true,
   updatedAt: true,
 });
 
-// Schema for updating an employee (all fields optional except id)
+// Schema for updating an employee (all fields optional except employeeId)
 export const updateEmployeeSchema = employeeSchema.partial().extend({
-  id: z.string().optional(),
+  employeeId: z.string().min(1, "Employee ID is required"),
 });
+
+export type EmployeeCreateInput = z.input<typeof createEmployeeSchema>;
+export type EmployeeUpdateInput = z.input<typeof updateEmployeeSchema>;

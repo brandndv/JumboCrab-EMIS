@@ -1,15 +1,15 @@
 import { z } from "zod";
 import { User as PrismaUser, Roles } from "@prisma/client";
 
-// Create a type that matches your form data structure
-type UserFormData = Omit<
-  PrismaUser,
-  "id" | "createdAt" | "updatedAt" | "password" | "salt"
-> & {
-  id?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-};
+// // Create a type that matches your form data structure
+// type UserFormData = Omit<
+//   PrismaUser,
+//   "id" | "createdAt" | "updatedAt" | "password" | "salt"
+// > & {
+//   id?: string;
+//   createdAt?: Date;
+//   updatedAt?: Date;
+// };
 
 export const userSchema = z.object({
   userId: z.string().optional(),

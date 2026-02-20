@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { listContributionDirectory } from "@/actions/contributions/contributions-action";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type ContributionRow = {
   employeeId: string;
@@ -32,7 +33,9 @@ export function useContributionsState() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "set" | "not-set">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "set" | "not-set">(
+    "all"
+  );
   const [departments, setDepartments] = useState<string[]>([]);
 
   // Load the directory from the API; keep it simple for now.
@@ -61,12 +64,11 @@ export function useContributionsState() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/contributions");
-      if (!res.ok) {
-        throw new Error("Failed to fetch contributions");
+      const result = await listContributionDirectory();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to fetch contributions");
       }
-      const data = await res.json();
-      const rows: ContributionRow[] = (data?.data || []).map((row: any) => ({
+      const rows: ContributionRow[] = (result.data || []).map((row: any) => ({
         employeeId: row.employeeId,
         employeeName: row.employeeName,
         employeeCode: row.employeeCode,
@@ -124,6 +126,19 @@ export function useContributionsState() {
     departments,
     refreshContributions,
   };
+}
+
+export const ContributionsContext = createContext<
+  ReturnType<typeof useContributionsState> | undefined
+>(undefined);
+export function useContributions() {
+  const context = useContext(ContributionsContext);
+  if (!context) {
+    throw new Error(
+      "useContributions must be used within a ContributionsProvider"
+    );
+  }
+  return context;
 }
 
 export type ContributionsState = ReturnType<typeof useContributionsState>;

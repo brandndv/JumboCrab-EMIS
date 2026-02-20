@@ -33,6 +33,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { TZ } from "@/lib/timezone";
+import { assignPatternToEmployee } from "@/actions/schedule/schedule-action";
 import {
   EmployeeLite,
   Pattern,
@@ -220,17 +221,18 @@ export function PatternsSection({
       return;
     try {
       setAssignmentSaving(true);
-      await fetch("/api/schedule/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: assignmentEdit.employeeId,
-          patternId: assignmentEditPattern,
-          effectiveDate: assignmentEditDate,
-        }),
+      const result = await assignPatternToEmployee({
+        employeeId: assignmentEdit.employeeId,
+        patternId: assignmentEditPattern,
+        effectiveDate: assignmentEditDate,
       });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to assign pattern");
+      }
       await onRefresh();
       setAssignmentEdit(null);
+    } catch (error) {
+      console.error("Failed to update assignment", error);
     } finally {
       setAssignmentSaving(false);
     }

@@ -1,5 +1,12 @@
 "use client";
 
+import { listDepartmentOptions } from "@/actions/organization/departments-action";
+import {
+  createPosition,
+  deletePosition,
+  listPositions,
+  updatePosition,
+} from "@/actions/organization/positions-action";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +28,7 @@ type PositionRow = {
   name: string;
   description?: string | null;
   departmentId: string;
-  department?: { departmentId: string; name: string };
+  department?: { departmentId: string; name: string } | null;
 };
 
 export function PositionTable() {
@@ -43,16 +50,18 @@ export function PositionTable() {
     try {
       setLoading(true);
       setError(null);
-      const [posRes, deptRes] = await Promise.all([
-        fetch("/api/positions"),
-        fetch("/api/departments"),
+      const [posResult, deptResult] = await Promise.all([
+        listPositions(),
+        listDepartmentOptions(),
       ]);
-      const posData = await posRes.json();
-      const deptData = await deptRes.json();
-      if (!posRes.ok) throw new Error(posData?.error || "Failed to load positions");
-      if (!deptRes.ok) throw new Error(deptData?.error || "Failed to load departments");
-      setPositions(posData?.data ?? []);
-      setDepartments(deptData?.data ?? []);
+      if (!posResult.success) {
+        throw new Error(posResult.error || "Failed to load positions");
+      }
+      if (!deptResult.success) {
+        throw new Error(deptResult.error || "Failed to load departments");
+      }
+      setPositions(posResult.data ?? []);
+      setDepartments(deptResult.data ?? []);
     } catch (err) {
       console.error("Positions fetch failed", err);
       setError(err instanceof Error ? err.message : "Failed to load positions");
@@ -89,19 +98,20 @@ export function PositionTable() {
     try {
       setSaving(true);
       setFormError(null);
-      const res = await fetch("/api/positions", {
-        method: editingId ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          positionId: editingId || undefined,
-          name: name.trim(),
-          description: description.trim() || null,
-          departmentId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to save position");
+      const result = editingId
+        ? await updatePosition({
+            positionId: editingId,
+            name: name.trim(),
+            description: description.trim() || null,
+            departmentId,
+          })
+        : await createPosition({
+            name: name.trim(),
+            description: description.trim() || null,
+            departmentId,
+          });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to save position");
       }
       await load();
       setOpen(false);
@@ -142,10 +152,9 @@ export function PositionTable() {
     try {
       setDeletingId(id);
       setError(null);
-      const res = await fetch(`/api/positions?id=${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to delete position");
+      const result = await deletePosition(id);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to delete position");
       }
       await load();
     } catch (err) {

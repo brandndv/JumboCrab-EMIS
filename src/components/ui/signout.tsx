@@ -1,7 +1,7 @@
 "use client";
 
 import React, { ElementType, ComponentPropsWithoutRef, forwardRef } from "react";
-import { signOut } from "@/lib/auth-utils";
+import { signOutUser } from "@/actions/auth/auth-action";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -53,7 +53,10 @@ const SignOutButton = forwardRef(function SignOutButton<T extends ElementType = 
     }
     
     try {
-      await signOut();
+      const result = await signOutUser();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to sign out");
+      }
       router.push("/");
       router.refresh();
     } catch (error) {
