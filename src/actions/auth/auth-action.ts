@@ -4,8 +4,31 @@ import { Roles } from "@prisma/client";
 import { getSession, hashPassword, sessionOptions, signIn } from "@/lib/auth";
 import { getRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
+import { normalizeRole } from "@/lib/rbac";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
+
+function toDbRole(role: Roles | string): Roles | null {
+  const appRole = normalizeRole(role);
+  if (!appRole) return null;
+
+  switch (appRole) {
+    case "admin":
+      return Roles.Admin;
+    case "generalManager":
+      return Roles.GeneralManager;
+    case "manager":
+      return Roles.Manager;
+    case "supervisor":
+      return Roles.Supervisor;
+    case "clerk":
+      return Roles.Clerk;
+    case "employee":
+      return Roles.Employee;
+    default:
+      return null;
+  }
+}
 
 export async function signInUser(input: {
   username: string;
@@ -137,7 +160,15 @@ export async function createAuthUser(input: {
       };
     }
 
-    if (role === "employee" && !employeeId) {
+    const appRole = normalizeRole(role);
+    if (!appRole) {
+      return {
+        success: false,
+        error: `Invalid role. Must be one of: ${Object.values(Roles).join(", ")}`,
+      };
+    }
+
+    if (appRole === "employee" && !employeeId) {
       return {
         success: false,
         error: "Employee ID is required for employee role",
@@ -166,19 +197,15 @@ export async function createAuthUser(input: {
       };
     }
 
-    const validRoles = Object.values(Roles);
-    const roleValue = role.toString().trim();
-    const normalizedRole =
-      roleValue.charAt(0).toLowerCase() + roleValue.slice(1);
-
-    if (!validRoles.includes(normalizedRole as Roles)) {
+    const dbRole = toDbRole(role);
+    if (!dbRole) {
       return {
         success: false,
-        error: `Invalid role. Must be one of: ${validRoles.join(", ")}`,
+        error: `Invalid role. Must be one of: ${Object.values(Roles).join(", ")}`,
       };
     }
 
-    if (role === "employee" && employeeId) {
+    if (appRole === "employee" && employeeId) {
       const employee = await db.employee.findUnique({
         where: { employeeId },
         include: { user: true },
@@ -204,9 +231,9 @@ export async function createAuthUser(input: {
         email,
         password: hash,
         salt,
-        role: normalizedRole as Roles,
+        role: dbRole,
         isDisabled: false,
-        ...(role === "employee" &&
+        ...(appRole === "employee" &&
           employeeId && {
             employee: { connect: { employeeId } },
           }),

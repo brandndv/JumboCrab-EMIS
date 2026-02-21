@@ -70,7 +70,7 @@ const NavHeader = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 w-full items-center border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+    <header className="sticky top-0 z-30 flex h-16 w-full shrink-0 items-center border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className="flex h-full w-full items-center justify-between px-4">
         {/* Left side: Breadcrumb navigation */}
         <div className="flex items-center space-x-2">

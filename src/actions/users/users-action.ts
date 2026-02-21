@@ -5,6 +5,29 @@ import { prisma } from "@/lib/prisma";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import { Roles } from "@prisma/client";
 import { hashPassword } from "@/lib/auth";
+import { normalizeRole } from "@/lib/rbac";
+
+function toDbRole(role: string): Roles | null {
+  const appRole = normalizeRole(role);
+  if (!appRole) return null;
+
+  switch (appRole) {
+    case "admin":
+      return Roles.Admin;
+    case "generalManager":
+      return Roles.GeneralManager;
+    case "manager":
+      return Roles.Manager;
+    case "supervisor":
+      return Roles.Supervisor;
+    case "clerk":
+      return Roles.Clerk;
+    case "employee":
+      return Roles.Employee;
+    default:
+      return null;
+  }
+}
 
 const baseUserSelect = {
   userId: true,
@@ -34,6 +57,7 @@ const baseUserSelect = {
 const normalizeUsers = (users: any[]) =>
   users.map((u) => ({
     ...u,
+    role: normalizeRole(u.role) ?? "employee",
     employee: u.employee
       ? {
           ...u.employee,
@@ -156,15 +180,14 @@ export async function updateUser(input: {
     }
 
     if (input.role !== undefined) {
-      const validRoles = Object.values(Roles);
-      const normalizedRole = input.role as Roles;
-      if (!validRoles.includes(normalizedRole)) {
+      const dbRole = toDbRole(input.role);
+      if (!dbRole) {
         return {
           success: false,
-          error: `Invalid role. Must be one of: ${validRoles.join(", ")}`,
+          error: `Invalid role. Must be one of: ${Object.values(Roles).join(", ")}`,
         };
       }
-      updates.role = normalizedRole;
+      updates.role = dbRole;
     }
 
     if (input.password) {

@@ -31,9 +31,12 @@ import {
   Plus,
   RefreshCcw,
   Trash2,
+  Wand2,
 } from "lucide-react";
 import { TZ } from "@/lib/timezone";
-import { assignPatternToEmployee } from "@/actions/schedule/schedule-action";
+import {
+  createEmployeePatternOverride,
+} from "@/actions/schedule/schedule-action";
 import {
   EmployeeLite,
   Pattern,
@@ -42,7 +45,6 @@ import {
   formatMinutes,
   formatDateDisplay,
   makeDate,
-  patternLabel,
 } from "../../../types/schedule-types";
 
 export type PatternEditState = {
@@ -50,6 +52,26 @@ export type PatternEditState = {
   name: string;
   dayShifts: Record<string, string>;
 };
+
+const dayFields = [
+  { key: "monShiftId", label: "Monday" },
+  { key: "tueShiftId", label: "Tuesday" },
+  { key: "wedShiftId", label: "Wednesday" },
+  { key: "thuShiftId", label: "Thursday" },
+  { key: "friShiftId", label: "Friday" },
+  { key: "satShiftId", label: "Saturday" },
+  { key: "sunShiftId", label: "Sunday" },
+] as const;
+
+const emptyDayShifts = () => ({
+  sunShiftId: "",
+  monShiftId: "",
+  tueShiftId: "",
+  wedShiftId: "",
+  thuShiftId: "",
+  friShiftId: "",
+  satShiftId: "",
+});
 
 type PatternsSectionProps = {
   showAssignPattern: boolean;
@@ -70,7 +92,6 @@ type PatternsSectionProps = {
   onAssignPatternChange: (value: string) => void;
   onAssignEffectiveChange: (value: string) => void;
   onAssignSubmit: () => void;
-  onReassign: (assignment: PatternAssignment) => void;
   onDeleteAssignment: (id: string) => void;
   editingPatternId: string | null;
   patternCode: string;
@@ -113,7 +134,6 @@ export function PatternsSection({
   onAssignPatternChange,
   onAssignEffectiveChange,
   onAssignSubmit,
-  onReassign,
   onDeleteAssignment,
   editingPatternId,
   patternCode,
@@ -164,30 +184,27 @@ export function PatternsSection({
     );
   }, [patterns, patternSearch]);
 
-  const [assignmentSearch, setAssignmentSearch] = useState("");
-  const [assignmentPatternFilter, setAssignmentPatternFilter] = useState("");
+  const [assignmentEmployeeFilter, setAssignmentEmployeeFilter] = useState("");
   const filteredAssignments = useMemo(() => {
-    const term = assignmentSearch.trim().toLowerCase();
-    return assignments.filter((a) => {
-      const matchesPattern =
-        !assignmentPatternFilter || a.pattern?.id === assignmentPatternFilter;
-      const matchesTerm = term
-        ? `${a.employee.firstName} ${a.employee.lastName} ${a.employee.employeeCode}`
-            .toLowerCase()
-            .includes(term)
-        : true;
-      return matchesPattern && matchesTerm;
-    });
-  }, [assignments, assignmentPatternFilter, assignmentSearch]);
+    if (!assignmentEmployeeFilter) return assignments;
+    return assignments.filter((a) => a.employeeId === assignmentEmployeeFilter);
+  }, [assignments, assignmentEmployeeFilter]);
 
   const [expandedEmployees, setExpandedEmployees] = useState<
     Record<string, boolean>
   >({});
-  const [assignmentEdit, setAssignmentEdit] =
+  const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
+  const [patternPickerOpen, setPatternPickerOpen] = useState(false);
+  const [assignmentOverrideEdit, setAssignmentOverrideEdit] =
     useState<PatternAssignment | null>(null);
-  const [assignmentEditPattern, setAssignmentEditPattern] = useState("");
-  const [assignmentEditDate, setAssignmentEditDate] = useState("");
-  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentOverrideDate, setAssignmentOverrideDate] = useState("");
+  const [assignmentOverrideDayShifts, setAssignmentOverrideDayShifts] =
+    useState<Record<string, string>>(emptyDayShifts());
+  const [assignmentOverrideSaving, setAssignmentOverrideSaving] =
+    useState(false);
+  const [assignmentOverrideError, setAssignmentOverrideError] = useState<
+    string | null
+  >(null);
 
   const groupedAssignments = useMemo(() => {
     const grouped: Record<
@@ -206,35 +223,128 @@ export function PatternsSection({
     });
   }, [filteredAssignments]);
 
-  const openEditAssignment = (assignment: PatternAssignment) => {
-    setAssignmentEdit(assignment);
-    setAssignmentEditPattern(assignment.pattern?.id ?? "");
-    const parsed = new Date(assignment.effectiveDate);
-    const dateInput = Number.isNaN(parsed.getTime())
-      ? assignment.effectiveDate.slice(0, 10)
-      : parsed.toLocaleDateString("en-CA", { timeZone: TZ });
-    setAssignmentEditDate(dateInput);
+  const resolveAssignmentDayShift = (
+    assignment: PatternAssignment,
+    key:
+      | "sunShiftId"
+      | "monShiftId"
+      | "tueShiftId"
+      | "wedShiftId"
+      | "thuShiftId"
+      | "friShiftId"
+      | "satShiftId"
+  ) => {
+    const snapshotKey = `${key}Snapshot` as
+      | "sunShiftIdSnapshot"
+      | "monShiftIdSnapshot"
+      | "tueShiftIdSnapshot"
+      | "wedShiftIdSnapshot"
+      | "thuShiftIdSnapshot"
+      | "friShiftIdSnapshot"
+      | "satShiftIdSnapshot";
+    const snapshotValues = [
+      assignment.sunShiftIdSnapshot,
+      assignment.monShiftIdSnapshot,
+      assignment.tueShiftIdSnapshot,
+      assignment.wedShiftIdSnapshot,
+      assignment.thuShiftIdSnapshot,
+      assignment.friShiftIdSnapshot,
+      assignment.satShiftIdSnapshot,
+    ];
+    const patternValues = [
+      assignment.pattern?.sunShiftId ?? null,
+      assignment.pattern?.monShiftId ?? null,
+      assignment.pattern?.tueShiftId ?? null,
+      assignment.pattern?.wedShiftId ?? null,
+      assignment.pattern?.thuShiftId ?? null,
+      assignment.pattern?.friShiftId ?? null,
+      assignment.pattern?.satShiftId ?? null,
+    ];
+    const hasAnySnapshotValue = snapshotValues.some((value) => value !== null);
+    const patternHasAnyValue = patternValues.some((value) => value !== null);
+    const useSnapshotValues =
+      hasAnySnapshotValue ||
+      (typeof assignment.reason === "string" &&
+        assignment.reason.startsWith("OVERRIDE_FROM:")) ||
+      !patternHasAnyValue;
+    const snapshotValue = assignment[snapshotKey];
+    const patternValue = assignment.pattern?.[key] ?? null;
+    return useSnapshotValues ? snapshotValue : patternValue;
   };
 
-  const saveAssignmentEdit = async () => {
-    if (!assignmentEdit || !assignmentEditPattern || !assignmentEditDate)
-      return;
+  const openOverrideEditor = (assignment: PatternAssignment) => {
+    setAssignmentOverrideEdit(assignment);
+    const parsed = new Date(assignment.effectiveDate);
+    setAssignmentOverrideDate(
+      Number.isNaN(parsed.getTime())
+        ? assignment.effectiveDate.slice(0, 10)
+        : parsed.toLocaleDateString("en-CA", { timeZone: TZ })
+    );
+    setAssignmentOverrideDayShifts({
+      sunShiftId: resolveAssignmentDayShift(assignment, "sunShiftId")
+        ? String(resolveAssignmentDayShift(assignment, "sunShiftId"))
+        : "",
+      monShiftId: resolveAssignmentDayShift(assignment, "monShiftId")
+        ? String(resolveAssignmentDayShift(assignment, "monShiftId"))
+        : "",
+      tueShiftId: resolveAssignmentDayShift(assignment, "tueShiftId")
+        ? String(resolveAssignmentDayShift(assignment, "tueShiftId"))
+        : "",
+      wedShiftId: resolveAssignmentDayShift(assignment, "wedShiftId")
+        ? String(resolveAssignmentDayShift(assignment, "wedShiftId"))
+        : "",
+      thuShiftId: resolveAssignmentDayShift(assignment, "thuShiftId")
+        ? String(resolveAssignmentDayShift(assignment, "thuShiftId"))
+        : "",
+      friShiftId: resolveAssignmentDayShift(assignment, "friShiftId")
+        ? String(resolveAssignmentDayShift(assignment, "friShiftId"))
+        : "",
+      satShiftId: resolveAssignmentDayShift(assignment, "satShiftId")
+        ? String(resolveAssignmentDayShift(assignment, "satShiftId"))
+        : "",
+    });
+    setAssignmentOverrideError(null);
+  };
+
+  const saveAssignmentOverride = async () => {
+    if (!assignmentOverrideEdit) return;
     try {
-      setAssignmentSaving(true);
-      const result = await assignPatternToEmployee({
-        employeeId: assignmentEdit.employeeId,
-        patternId: assignmentEditPattern,
-        effectiveDate: assignmentEditDate,
+      setAssignmentOverrideSaving(true);
+      setAssignmentOverrideError(null);
+
+      const payload: Record<string, number | null | string> = {
+        employeeId: assignmentOverrideEdit.employeeId,
+        sourceAssignmentId: assignmentOverrideEdit.id,
+      };
+      Object.entries(assignmentOverrideDayShifts).forEach(([key, val]) => {
+        payload[key] = val ? Number(val) : null;
+      });
+
+      const result = await createEmployeePatternOverride(payload as {
+        employeeId: string;
+        sourceAssignmentId?: string;
+        sunShiftId?: number | null;
+        monShiftId?: number | null;
+        tueShiftId?: number | null;
+        wedShiftId?: number | null;
+        thuShiftId?: number | null;
+        friShiftId?: number | null;
+        satShiftId?: number | null;
       });
       if (!result.success) {
-        throw new Error(result.error || "Failed to assign pattern");
+        throw new Error(result.error || "Failed to create employee override");
       }
+
       await onRefresh();
-      setAssignmentEdit(null);
+      setAssignmentOverrideEdit(null);
     } catch (error) {
-      console.error("Failed to update assignment", error);
+      setAssignmentOverrideError(
+        error instanceof Error
+          ? error.message
+          : "Failed to create employee override"
+      );
     } finally {
-      setAssignmentSaving(false);
+      setAssignmentOverrideSaving(false);
     }
   };
 
@@ -267,14 +377,11 @@ export function PatternsSection({
                         : ""
                     }
                     onFocus={() =>
-                      setExpandedEmployees((prev) => ({
-                        ...prev,
-                        __empPicker: true,
-                      }))
+                      setEmployeePickerOpen(true)
                     }
                     readOnly
                   />
-                  {(expandedEmployees as any).__empPicker && (
+                  {employeePickerOpen && (
                     <div className="absolute z-20 mt-1 w-full rounded-md border bg-card shadow-lg p-3 space-y-2">
                       <Input
                         autoFocus
@@ -289,10 +396,7 @@ export function PatternsSection({
                             key={emp.employeeId}
                             onClick={() => {
                               onAssignEmployeeChange(emp.employeeId);
-                              setExpandedEmployees((prev) => ({
-                                ...prev,
-                                __empPicker: false,
-                              }));
+                              setEmployeePickerOpen(false);
                             }}
                             className="w-full text-left px-2 py-2 hover:bg-muted/60"
                           >
@@ -315,10 +419,7 @@ export function PatternsSection({
                           size="sm"
                           variant="ghost"
                           onClick={() =>
-                            setExpandedEmployees((prev) => ({
-                              ...prev,
-                              __empPicker: false,
-                            }))
+                            setEmployeePickerOpen(false)
                           }
                         >
                           Close
@@ -340,14 +441,11 @@ export function PatternsSection({
                         : ""
                     }
                     onFocus={() =>
-                      setExpandedEmployees((prev) => ({
-                        ...prev,
-                        __patPicker: true,
-                      }))
+                      setPatternPickerOpen(true)
                     }
                     readOnly
                   />
-                  {(expandedEmployees as any).__patPicker && (
+                  {patternPickerOpen && (
                     <div className="absolute z-20 mt-1 w-full rounded-md border bg-card shadow-lg p-3 space-y-2">
                       <Input
                         autoFocus
@@ -362,10 +460,7 @@ export function PatternsSection({
                             key={p.id}
                             onClick={() => {
                               onAssignPatternChange(p.id);
-                              setExpandedEmployees((prev) => ({
-                                ...prev,
-                                __patPicker: false,
-                              }));
+                              setPatternPickerOpen(false);
                             }}
                             className="w-full text-left px-2 py-2 hover:bg-muted/60"
                           >
@@ -386,10 +481,7 @@ export function PatternsSection({
                           size="sm"
                           variant="ghost"
                           onClick={() =>
-                            setExpandedEmployees((prev) => ({
-                              ...prev,
-                              __patPicker: false,
-                            }))
+                            setPatternPickerOpen(false)
                           }
                         >
                           Close
@@ -462,22 +554,16 @@ export function PatternsSection({
               Latest weekly pattern per employee.
             </p>
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <input
-              className="w-full sm:w-56 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-              placeholder="Search employee"
-              value={assignmentSearch}
-              onChange={(e) => setAssignmentSearch(e.target.value)}
-            />
+          <div className="w-full sm:w-72">
             <select
-              className="w-full sm:w-48 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-              value={assignmentPatternFilter}
-              onChange={(e) => setAssignmentPatternFilter(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              value={assignmentEmployeeFilter}
+              onChange={(e) => setAssignmentEmployeeFilter(e.target.value)}
             >
-              <option value="">All patterns</option>
-              {patterns.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+              <option value="">All employees</option>
+              {employees.map((emp) => (
+                <option key={emp.employeeId} value={emp.employeeId}>
+                  {emp.firstName} {emp.lastName} ({emp.employeeCode})
                 </option>
               ))}
             </select>
@@ -557,10 +643,10 @@ export function PatternsSection({
                               size="sm"
                               variant="ghost"
                               className="gap-1"
-                              onClick={() => openEditAssignment(latest)}
+                              onClick={() => openOverrideEditor(latest)}
                             >
-                              <Pencil className="h-4 w-4" />
-                              Edit
+                              <Wand2 className="h-4 w-4" />
+                              Override
                             </Button>
                             <Button
                               size="sm"
@@ -598,10 +684,10 @@ export function PatternsSection({
                                   size="sm"
                                   variant="ghost"
                                   className="gap-1"
-                                  onClick={() => openEditAssignment(a)}
+                                  onClick={() => openOverrideEditor(a)}
                                 >
-                                  <Pencil className="h-4 w-4" />
-                                  Edit
+                                  <Wand2 className="h-4 w-4" />
+                                  Override
                                 </Button>
                                 <Button
                                   size="sm"
@@ -626,56 +712,73 @@ export function PatternsSection({
       </Card>
 
       <Dialog
-        open={!!assignmentEdit}
-        onOpenChange={(open) => !open && setAssignmentEdit(null)}
+        open={!!assignmentOverrideEdit}
+        onOpenChange={(open) => !open && setAssignmentOverrideEdit(null)}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[95vw] max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Edit assignment</DialogTitle>
+            <DialogTitle>Override selected weekly pattern</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="text-sm text-muted-foreground">
-              {assignmentEdit?.employee.firstName}{" "}
-              {assignmentEdit?.employee.lastName} (
-              {assignmentEdit?.employee.employeeCode})
+              {assignmentOverrideEdit?.employee.firstName}{" "}
+              {assignmentOverrideEdit?.employee.lastName} (
+              {assignmentOverrideEdit?.employee.employeeCode})
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Pattern</label>
-              <select
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                value={assignmentEditPattern}
-                onChange={(e) => setAssignmentEditPattern(e.target.value)}
-              >
-                <option value="">Select pattern</option>
-                {patterns.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {patternLabel(p)}
-                  </option>
-                ))}
-              </select>
+            <div className="grid gap-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Effective date</label>
+                <Input
+                  type="date"
+                  value={assignmentOverrideDate}
+                  readOnly
+                  disabled
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Effective date</label>
-              <Input
-                type="date"
-                value={assignmentEditDate}
-                onChange={(e) => setAssignmentEditDate(e.target.value)}
-              />
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+              {dayFields.map((d) => (
+                <div className="space-y-2" key={`override-${d.key}`}>
+                  <label className="text-sm font-medium">{d.label}</label>
+                  <select
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    value={assignmentOverrideDayShifts[d.key] ?? ""}
+                    onChange={(e) =>
+                      setAssignmentOverrideDayShifts((prev) => ({
+                        ...prev,
+                        [d.key]: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Rest day</option>
+                    {shifts.map((s) => (
+                      <option key={`${d.key}-${s.id}`} value={s.id}>
+                        {s.name} ({formatMinutes(s.startMinutes)} -{" "}
+                        {formatMinutes(s.endMinutes)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
             </div>
+            {assignmentOverrideError && (
+              <p className="text-sm text-destructive">
+                {assignmentOverrideError}
+              </p>
+            )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setAssignmentEdit(null)}>
+            <Button
+              variant="ghost"
+              onClick={() => setAssignmentOverrideEdit(null)}
+            >
               Cancel
             </Button>
             <Button
-              onClick={saveAssignmentEdit}
-              disabled={
-                assignmentSaving ||
-                !assignmentEditPattern ||
-                !assignmentEditDate
-              }
+              onClick={saveAssignmentOverride}
+              disabled={assignmentOverrideSaving}
             >
-              {assignmentSaving ? "Saving..." : "Save"}
+              {assignmentOverrideSaving ? "Saving..." : "Save override"}
             </Button>
           </DialogFooter>
         </DialogContent>

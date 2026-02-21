@@ -30,14 +30,14 @@ async function seedUsers() {
   const { hash, salt } = await hashPassword(password);
 
   const entries: { username: string; email: string; role: Roles }[] = [
-    { username: "admin", email: "admin@demo.com", role: Roles.admin },
-    { username: "gm", email: "gm@demo.com", role: Roles.generalManager },
-    { username: "manager", email: "manager@demo.com", role: Roles.manager },
-    { username: "supervisor", email: "supervisor@demo.com", role: Roles.supervisor },
-    { username: "clerk", email: "clerk@demo.com", role: Roles.clerk },
-    { username: "emp1", email: "emp1@demo.com", role: Roles.employee },
-    { username: "emp2", email: "emp2@demo.com", role: Roles.employee },
-    { username: "emp3", email: "emp3@demo.com", role: Roles.employee },
+    { username: "admin", email: "admin@demo.com", role: Roles.Admin },
+    { username: "gm", email: "gm@demo.com", role: Roles.GeneralManager },
+    { username: "manager", email: "manager@demo.com", role: Roles.Manager },
+    { username: "supervisor", email: "supervisor@demo.com", role: Roles.Supervisor },
+    { username: "clerk", email: "clerk@demo.com", role: Roles.Clerk },
+    { username: "emp1", email: "emp1@demo.com", role: Roles.Employee },
+    { username: "emp2", email: "emp2@demo.com", role: Roles.Employee },
+    { username: "emp3", email: "emp3@demo.com", role: Roles.Employee },
   ];
 
   const users: Record<string, { userId: string; role: Roles }> = {};

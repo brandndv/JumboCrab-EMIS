@@ -4,13 +4,14 @@ import { useEffect, useState, useMemo } from "react";
 import { Session } from "@/types/session";
 import { fetchSession } from "@/actions/auth/session-action";
 import { User } from "@/lib/validations/users";
+import { normalizeRole } from "@/lib/rbac";
 
 interface RawSession {
   userId?: string;
   id?: string;
   username?: string;
   email?: string;
-  role?: User["role"];
+  role?: string;
   employee?: Session["user"]["employee"];
   isLoggedIn: boolean;
 }
@@ -36,11 +37,13 @@ export function useSession() {
           return;
         }
 
+        const role = normalizeRole(rawSession.role) ?? "employee";
+
         const userData: User = {
           userId: rawSession.userId || rawSession.id || "",
           username: rawSession.username || "",
           email: rawSession.email || "",
-          role: rawSession.role || "employee",
+          role,
           isDisabled: false,
         };
 

@@ -4,12 +4,13 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AlertCircle } from "lucide-react";
 import { useSession } from "@/hooks/use-session";
+import { getHomePathForRole, normalizeRole } from "@/lib/rbac";
 
 export default function NotFound() {
   const { session, loading } = useSession();
 
-  const userRole = session?.user?.role?.toLowerCase();
-  const dashboardHref = userRole ? `/${userRole}/dashboard` : "/sign-in";
+  const userRole = normalizeRole(session?.user?.role);
+  const dashboardHref = userRole ? getHomePathForRole(userRole) : "/sign-in";
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center">

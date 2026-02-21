@@ -671,13 +671,6 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
           onPatternEditChange={(value) => setPatternEdit(value)}
           onSavePatternEdit={savePatternEdit}
           onCancelPatternEdit={cancelPatternEdit}
-          onReassign={(a) => {
-            setAssignEmployeeId(a.employeeId);
-            setAssignPatternId(a.pattern?.id ?? "");
-            setAssignEffective(a.effectiveDate.slice(0, 10));
-            setAssignError(null);
-            setAssignSuccess(null);
-          }}
           onDeleteAssignment={async (id) => {
             const result = await deletePatternAssignment(id);
             if (!result.success) {

@@ -9,10 +9,7 @@ export const APP_ROLES = [
 
 export type AppRole = (typeof APP_ROLES)[number];
 
-export const ADMIN_PANEL_ROLES: AppRole[] = [
-  "admin",
-  "generalManager",
-];
+export const ADMIN_PANEL_ROLES: AppRole[] = ["admin", "generalManager"];
 
 export const EMPLOYEE_PANEL_ROLES: AppRole[] = ["employee"];
 
@@ -99,6 +96,7 @@ const RBAC_RULES: AccessRule[] = [
   { path: rolePath("admin"), allowedRoles: ADMIN_PANEL_ROLES },
   { path: rolePath("employee"), allowedRoles: EMPLOYEE_PANEL_ROLES },
   { path: rolePath("manager"), allowedRoles: ["manager"] },
+  { path: rolePath("generalManager"), allowedRoles: ["generalManager"] },
 ];
 
 const ROLE_NORMALIZATION: Record<string, AppRole> = {

@@ -226,6 +226,14 @@ model EmployeePatternAssignment {
   employeeId    String
   effectiveDate DateTime // changeover date; latest <= target date applies
   patternId     String
+  // Immutable snapshot of weekday shift IDs at assignment time.
+  sunShiftIdSnapshot Int?
+  monShiftIdSnapshot Int?
+  tueShiftIdSnapshot Int?
+  wedShiftIdSnapshot Int?
+  thuShiftIdSnapshot Int?
+  friShiftIdSnapshot Int?
+  satShiftIdSnapshot Int?
   reason        String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -405,10 +413,10 @@ enum SUFFIX {
 }
 
 enum Roles {
-  admin
-  generalManager
-  manager
-  supervisor
-  clerk
-  employee
+  Admin
+  GeneralManager
+  Manager
+  Supervisor
+  Clerk
+  Employee
 }

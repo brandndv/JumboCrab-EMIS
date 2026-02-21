@@ -99,12 +99,14 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
   const isActive = (href: string) => pathname.startsWith(href);
 
   const menuItems = [
+    // ========== DASHBOARD MENU ========== //
     {
       id: "dashboard",
       label: "Dashboard",
       icon: LayoutDashboard,
       href: `/${userRole}/dashboard`,
       hasSubmenu: false,
+      // ========== DASHBOARD ACCESS ========= //
       roles: [
         "admin",
         "generalManager",
@@ -114,6 +116,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         "employee",
       ],
     },
+    // ========== USERS MENU ========== //
     {
       id: "user",
       label: "User",
@@ -136,8 +139,10 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "manager", "generalManager"],
         },
       ],
+      // ========== USER ACCESS ========= //
       roles: ["admin", "manager", "generalManager"],
     },
+    // ========== EMPLOYEES MENU ========== //
     {
       id: "employees",
       label: "Employees",
@@ -160,8 +165,10 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager"],
         },
       ],
+      // ========== EMPLOYEE ACCESS ========= //
       roles: ["admin", "generalManager", "manager", "supervisor"],
     },
+    // ========== ORGANIZATION MENU ========== //
     {
       id: "organization",
       label: "Organization",
@@ -185,8 +192,10 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "manager", "supervisor"],
         },
       ],
+      // ========== ORGANIZATION ACCESS ========= //
       roles: ["admin", "generalManager", "manager", "supervisor"],
     },
+    // ========== ATTENDANCE MENU ========== //
     {
       id: "attendance",
       label: "Attendance",
@@ -198,26 +207,12 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         {
           label: "Daily Attendance",
           path: "",
-          roles: [
-            "admin",
-            "generalManager",
-            "manager",
-            "supervisor",
-            "clerk",
-            "employee",
-          ],
+          roles: ["admin", "generalManager", "manager", "supervisor", "clerk"],
         },
         {
           label: "Attendance History",
           path: "/history",
-          roles: [
-            "admin",
-            "generalManager",
-            "manager",
-            "supervisor",
-            "clerk",
-            "employee",
-          ],
+          roles: ["admin", "generalManager", "manager", "supervisor", "clerk"],
         },
         {
           label: "Overrides",
@@ -235,15 +230,34 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "manager", "supervisor"],
         },
       ],
+      // ========== ATTENDANCE ACCESS ========= //
       roles: [
         "admin",
         "generalManager",
         "manager",
-        "supervisor",
-        "clerk",
+        // "supervisor",
+        // "clerk",
         "employee",
       ],
     },
+    // ========== SCAN MENU ========= //
+    {
+      id: "scan",
+      label: "Scan",
+      icon: ClipboardClock,
+      href: `/${userRole}/scan`,
+      hasSubmenu: false,
+      // ========== SCAN ACCESS ========= //
+      roles: [
+        // "admin",
+        // "generalManager",
+        // "manager",
+        // "supervisor",
+        // "clerk",
+        "employee",
+      ],
+    },
+    // ========== DEDUCTION MENU ========== //
     {
       id: "deduction",
       label: "Deduction",
@@ -266,9 +280,11 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           path: "/history",
           roles: ["admin", "generalManager", "clerk"],
         },
+        // ========== DEDUCTION ACCESS ========= //
       ],
       roles: ["admin", "generalManager", "clerk"],
     },
+    // ========== CONTRIBUTION MENU ========== //
     {
       id: "contributions",
       label: "Contributions",
@@ -287,8 +303,13 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "clerk"],
         },
       ],
-      roles: ["admin", "generalManager", "clerk"],
+      // ========== CONTRIBUTION ACCESS ========= //
+      roles: [
+        "admin",
+        // "generalManager", "clerk"
+      ],
     },
+    // ========== VIOLATION MENU ========== //
     {
       id: "violation",
       label: "Violation",
@@ -302,8 +323,13 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "manager", "supervisor", "clerk", "employee"],
         },
       ],
-      roles: ["admin", "manager", "supervisor", "clerk", "employee"],
+      // ========== VIOLATION ACCESS ========= //
+      roles: [
+        "admin",
+        //  "manager", "supervisor", "clerk", "employee"
+      ],
     },
+    // ========== PAYROLL MENU ========== //
     {
       id: "payroll",
       label: "Payroll",
@@ -337,8 +363,13 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "clerk", "employee"],
         },
       ],
-      roles: ["admin", "generalManager", "clerk", "employee"],
+      // ========== PAYROLL ACCESS ========= //
+      roles: [
+        "admin",
+        // "generalManager", "clerk", "employee"
+      ],
     },
+    // ========== REQUEST MENU ========== //
     {
       id: "requests",
       label: "Requests",
@@ -357,8 +388,13 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "manager", "employee"],
         },
       ],
-      roles: ["admin", "manager", "employee"],
+      // ========== REQUEST ACCESS ========= //
+      roles: [
+        "admin",
+        // "manager", "employee"
+      ],
     },
+    // ========== REPORTS MENU ========== //
     {
       id: "reports",
       label: "Reports",
@@ -392,7 +428,11 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "manager", "supervisor", "clerk"],
         },
       ],
-      roles: ["admin", "generalManager", "manager", "supervisor", "clerk"],
+      // ========== REPORT ACCESS ========= //
+      roles: [
+        "admin",
+        // "generalManager", "manager", "supervisor", "clerk"
+      ],
     },
   ];
 

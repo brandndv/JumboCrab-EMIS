@@ -1,0 +1,127 @@
+"use client";
+
+import { notFound } from "next/navigation";
+import { getEmployeeById } from "@/actions/employees/employees-action";
+import EmployeeForm from "@/components/dasboard/manage-empoyees/employee-form";
+import { useEffect, useState } from "react";
+import { Employee } from "@/lib/validations/employees";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
+
+function EmployeeEditPageContent({
+  paramsPromise,
+}: {
+  paramsPromise: Promise<{ id: string }>;
+}) {
+  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadEmployee = async () => {
+      try {
+        const params = await paramsPromise;
+        const employeeId = params?.id;
+
+        if (!employeeId) {
+          console.error("No employee ID provided for edit");
+          setError("No employee ID provided");
+          setLoading(false);
+          return;
+        }
+
+        console.log("Fetching employee for edit with ID:", employeeId);
+        const { data, error: fetchError } = await getEmployeeById(employeeId);
+
+        if (fetchError || !data) {
+          console.error("Error loading employee for edit:", fetchError);
+          setError(fetchError || "Failed to load employee");
+          notFound();
+          return;
+        }
+
+        // Normalize nullable fields from Prisma to match the Employee form type
+        setEmployee({
+          ...data,
+          isEnded: data.isEnded ?? false,
+          img: data.img ?? null,
+          emergencyContactName: data.emergencyContactName ?? null,
+          emergencyContactRelationship:
+            data.emergencyContactRelationship ?? null,
+          emergencyContactPhone: data.emergencyContactPhone ?? null,
+          emergencyContactEmail: data.emergencyContactEmail ?? null,
+          address: data.address ?? null,
+          city: data.city ?? null,
+          state: data.state ?? null,
+          postalCode: data.postalCode ?? null,
+          country: data.country ?? null,
+          email: data.email ?? null,
+          phone: data.phone ?? null,
+          description: data.description ?? null,
+        });
+      } catch (err) {
+        console.error("Error in EmployeeEditPage:", err);
+        setError("Failed to load employee data");
+        notFound();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadEmployee();
+  }, [paramsPromise]);
+
+  if (loading) {
+    return <div className="p-4">Loading employee data...</div>;
+  }
+
+  if (error || !employee) {
+    return (
+      <div className="p-4 text-red-600">Error loading employee: {error}</div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-8 sm:px-8 lg:px-12">
+      <div className="flex justify-between items-start">
+        <div className="mb-6">
+          <h3 className="text-lg font-medium">Edit Employee</h3>
+          <p className="text-sm text-muted-foreground">
+            Update employee details
+          </p>
+        </div>
+        <Button asChild variant="outline" className="gap-2">
+          <Link href={`/admin/employees/${employee.employeeId}/view`}>
+            <ArrowLeft className="h-4 w-4" />
+            Back to View
+          </Link>
+        </Button>
+      </div>
+      {employee?.employeeId && (
+        <Card className="border-border shadow-sm">
+          <CardContent className="p-6">
+            <EmployeeForm
+              employeeId={employee.employeeId}
+              mode="edit"
+              initialData={employee}
+            />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// Server component wrapper
+export default function EmployeeEditPage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  // Create a promise that resolves with the params
+  const paramsPromise = Promise.resolve(params);
+
+  return <EmployeeEditPageContent paramsPromise={paramsPromise} />;
+}

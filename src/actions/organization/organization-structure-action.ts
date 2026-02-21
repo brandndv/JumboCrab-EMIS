@@ -1,5 +1,6 @@
 "use server";
 
+import { Roles } from "@prisma/client";
 import { db } from "@/lib/db";
 
 type SupervisorUser = {
@@ -45,7 +46,16 @@ export async function getOrganizationStructure(): Promise<{
         },
       }),
       db.user.findMany({
-        where: { role: { in: ["admin", "generalManager", "manager", "supervisor"] } },
+        where: {
+          role: {
+            in: [
+              Roles.Admin,
+              Roles.GeneralManager,
+              Roles.Manager,
+              Roles.Supervisor,
+            ],
+          },
+        },
         select: { userId: true, username: true, email: true, role: true },
         orderBy: { username: "asc" },
       }),

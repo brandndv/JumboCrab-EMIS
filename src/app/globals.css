@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --sidebar: #ffffff;
+  --sidebar: var(--background);
   --sidebar-foreground: #111827;
   --sidebar-primary: #f97316;
   --sidebar-primary-foreground: #fff7ed;
@@ -95,7 +95,7 @@
 }
 
 .dark {
-  --sidebar: #0f172a;
+  --sidebar: var(--background);
   --sidebar-foreground: #e5e7eb;
   --sidebar-primary: #f97316;
   --sidebar-primary-foreground: #fff7ed;

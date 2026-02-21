@@ -3,9 +3,10 @@
 
 import { useState, useEffect } from "react";
 import { getAuthRole } from "@/actions/auth/auth-action";
+import { normalizeRole, type AppRole } from "@/lib/rbac";
 
 export function useRole() {
-  const [role, setRole] = useState<string | null>(null);
+  const [role, setRole] = useState<AppRole | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -13,7 +14,7 @@ export function useRole() {
       try {
         const result = await getAuthRole();
         if (result.success) {
-          setRole(result.role);
+          setRole(normalizeRole(result.role));
         }
       } catch (error) {
         console.error("Failed to fetch role:", error);

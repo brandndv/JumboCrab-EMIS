@@ -1,0 +1,34 @@
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import EmployeeForm from "@/components/dasboard/manage-empoyees/employee-form";
+
+export default function AddEmployeePage() {
+  return (
+    <div className="px-4 py-8 sm:px-8 lg:px-12">
+      <div className="flex justify-between items-start">
+        <div>
+          <h3 className="text-lg font-medium">Add New Employee</h3>
+          <p className="text-sm text-muted-foreground">
+            Add a new employee to the system
+          </p>
+        </div>
+        <Button asChild variant="outline" className="gap-2">
+          <Link href="/admin/employees">
+            <ArrowLeft className="h-4 w-4" />
+            Back to List
+          </Link>
+        </Button>
+      </div>
+
+      <Card className="border-border shadow-sm">
+        <CardContent className="p-6">
+          <EmployeeForm employeeId={null} mode="create" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

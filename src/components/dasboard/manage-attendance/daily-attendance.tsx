@@ -8,9 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RefreshCcw, RotateCcw, Pencil } from "lucide-react";
+import { RefreshCcw, RotateCcw, Pencil, Trash2 } from "lucide-react";
 import { TZ } from "@/lib/timezone";
-import { updatePunch } from "@/actions/attendance/attendance-action";
+import { deletePunch, updatePunch } from "@/actions/attendance/attendance-action";
 import {
   Dialog,
   DialogContent,
@@ -73,12 +73,12 @@ export function DailyAttendance() {
     punchError,
     date,
     punches,
-    lockLoading,
-    lockMessage,
+    recomputeLoading,
+    recomputeMessage,
     setDate,
     setPunchError,
     load,
-    lockDay,
+    recomputeDay,
   } = useAttendance();
   const [filter, setFilter] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
@@ -88,6 +88,7 @@ export function DailyAttendance() {
   const [punchEditType, setPunchEditType] = useState("");
   const [punchEditTime, setPunchEditTime] = useState("");
   const [punchSaving, setPunchSaving] = useState(false);
+  const [punchDeletingId, setPunchDeletingId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const term = filter.trim().toLowerCase();
@@ -166,6 +167,29 @@ export function DailyAttendance() {
     }
   };
 
+  const removePunch = async (p: PunchRow) => {
+    const shouldDelete = window.confirm(
+      `Delete ${formatPunchLabel(p.punchType)} at ${formatTime(p.punchTime)}?`
+    );
+    if (!shouldDelete) return;
+
+    try {
+      setPunchDeletingId(p.id);
+      const result = await deletePunch({ id: p.id });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to delete punch");
+      }
+      if (punchEdit?.id === p.id) {
+        setPunchEdit(null);
+      }
+      await load();
+    } catch (err) {
+      setPunchError(err instanceof Error ? err.message : "Failed to delete punch");
+    } finally {
+      setPunchDeletingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card className="shadow-sm">
@@ -186,14 +210,14 @@ export function DailyAttendance() {
           <Button onClick={load} size="sm" className="gap-2">
             <RefreshCcw className="h-4 w-4" /> Load
           </Button>
-          <Button onClick={lockDay} size="sm" variant="outline" className="gap-2" disabled={lockLoading}>
-            {lockLoading ? "Locking..." : "Lock day"}
+          <Button onClick={recomputeDay} size="sm" variant="outline" className="gap-2" disabled={recomputeLoading}>
+            {recomputeLoading ? "Recomputing..." : "Recompute day"}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 p-4">
-        {lockMessage && (
-          <p className="text-sm text-muted-foreground">{lockMessage}</p>
+        {recomputeMessage && (
+          <p className="text-sm text-muted-foreground">{recomputeMessage}</p>
         )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Input
@@ -392,9 +416,21 @@ export function DailyAttendance() {
                         {formatTime(p.punchTime)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant="ghost" className="gap-1" onClick={() => openPunchEdit(p)}>
-                          <Pencil className="h-4 w-4" /> Edit
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button size="sm" variant="ghost" className="gap-1" onClick={() => openPunchEdit(p)}>
+                            <Pencil className="h-4 w-4" /> Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1 text-destructive"
+                            onClick={() => removePunch(p)}
+                            disabled={punchDeletingId === p.id}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {punchDeletingId === p.id ? "Deleting..." : "Delete"}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -19,6 +19,16 @@ const shiftSelect = {
   notes: true,
 };
 
+type DayShiftKey =
+  | "sunShiftId"
+  | "monShiftId"
+  | "tueShiftId"
+  | "wedShiftId"
+  | "thuShiftId"
+  | "friShiftId"
+  | "satShiftId";
+type DayShiftMap = Record<DayShiftKey, number | null>;
+
 export async function getScheduleSnapshot(dateParam?: string) {
   try {
     const date = dateParam ? new Date(dateParam) : new Date();
@@ -29,6 +39,13 @@ export async function getScheduleSnapshot(dateParam?: string) {
     const [schedule, patterns, shifts] = await Promise.all([
       getDailySchedule(date),
       db.weeklyPattern.findMany({
+        where: {
+          code: {
+            not: {
+              startsWith: "OVR-",
+            },
+          },
+        },
         orderBy: { name: "asc" },
         include: {
           sunShift: { select: shiftSelect },
@@ -250,7 +267,19 @@ export async function assignPatternToEmployee(input: {
 
     const [employee, pattern] = await Promise.all([
       db.employee.findUnique({ where: { employeeId }, select: { employeeId: true } }),
-      db.weeklyPattern.findUnique({ where: { id: patternId }, select: { id: true } }),
+      db.weeklyPattern.findUnique({
+        where: { id: patternId },
+        select: {
+          id: true,
+          sunShiftId: true,
+          monShiftId: true,
+          tueShiftId: true,
+          wedShiftId: true,
+          thuShiftId: true,
+          friShiftId: true,
+          satShiftId: true,
+        },
+      }),
     ]);
 
     if (!employee) {
@@ -277,6 +306,13 @@ export async function assignPatternToEmployee(input: {
         employeeId,
         patternId,
         effectiveDate: dayStart,
+        sunShiftIdSnapshot: pattern.sunShiftId,
+        monShiftIdSnapshot: pattern.monShiftId,
+        tueShiftIdSnapshot: pattern.tueShiftId,
+        wedShiftIdSnapshot: pattern.wedShiftId,
+        thuShiftIdSnapshot: pattern.thuShiftId,
+        friShiftIdSnapshot: pattern.friShiftId,
+        satShiftIdSnapshot: pattern.satShiftId,
       },
     });
 
@@ -292,5 +328,112 @@ export async function assignPatternToEmployee(input: {
   } catch (error) {
     console.error("Failed to assign pattern", error);
     return { success: false, error: "Failed to assign pattern" };
+  }
+}
+
+export async function createEmployeePatternOverride(input: {
+  employeeId: string;
+  sourceAssignmentId?: string;
+  sunShiftId?: number | null;
+  monShiftId?: number | null;
+  tueShiftId?: number | null;
+  wedShiftId?: number | null;
+  thuShiftId?: number | null;
+  friShiftId?: number | null;
+  satShiftId?: number | null;
+}) {
+  try {
+    const employeeId =
+      typeof input.employeeId === "string" && input.employeeId.trim()
+        ? input.employeeId.trim()
+        : "";
+    if (!employeeId) {
+      return { success: false, error: "employeeId is required" };
+    }
+
+    const dayShifts: DayShiftMap = {
+      sunShiftId: typeof input.sunShiftId === "number" ? input.sunShiftId : null,
+      monShiftId: typeof input.monShiftId === "number" ? input.monShiftId : null,
+      tueShiftId: typeof input.tueShiftId === "number" ? input.tueShiftId : null,
+      wedShiftId: typeof input.wedShiftId === "number" ? input.wedShiftId : null,
+      thuShiftId: typeof input.thuShiftId === "number" ? input.thuShiftId : null,
+      friShiftId: typeof input.friShiftId === "number" ? input.friShiftId : null,
+      satShiftId: typeof input.satShiftId === "number" ? input.satShiftId : null,
+    };
+
+    const shiftIds = Object.values(dayShifts).filter(
+      (id): id is number => typeof id === "number"
+    );
+    const uniqueShiftIds = Array.from(new Set(shiftIds));
+
+    const sourceAssignmentId =
+      typeof input.sourceAssignmentId === "string" &&
+      input.sourceAssignmentId.trim()
+        ? input.sourceAssignmentId.trim()
+        : "";
+
+    const [employee, shiftsCount, sourceAssignment] = await Promise.all([
+      db.employee.findUnique({
+        where: { employeeId },
+        select: { employeeId: true },
+      }),
+      uniqueShiftIds.length
+        ? db.shift.count({ where: { id: { in: uniqueShiftIds } } })
+        : Promise.resolve(0),
+      sourceAssignmentId
+        ? db.employeePatternAssignment.findUnique({
+            where: { id: sourceAssignmentId },
+            select: {
+              id: true,
+              employeeId: true,
+              patternId: true,
+              effectiveDate: true,
+            },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    if (!employee) {
+      return { success: false, error: "Employee not found" };
+    }
+    if (uniqueShiftIds.length && shiftsCount !== uniqueShiftIds.length) {
+      return { success: false, error: "One or more selected shifts were not found" };
+    }
+    if (!sourceAssignment || sourceAssignment.employeeId !== employeeId) {
+      return {
+        success: false,
+        error: "A valid source assignment for this employee is required",
+      };
+    }
+
+    const result = await db.employeePatternAssignment.update({
+      where: { id: sourceAssignment.id },
+      data: {
+        reason: `OVERRIDE_FROM:${sourceAssignmentId}`,
+        sunShiftIdSnapshot: dayShifts.sunShiftId,
+        monShiftIdSnapshot: dayShifts.monShiftId,
+        tueShiftIdSnapshot: dayShifts.tueShiftId,
+        wedShiftIdSnapshot: dayShifts.wedShiftId,
+        thuShiftIdSnapshot: dayShifts.thuShiftId,
+        friShiftIdSnapshot: dayShifts.friShiftId,
+        satShiftIdSnapshot: dayShifts.satShiftId,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        patternId: result.patternId,
+        assignmentId: result.id,
+        employeeId: result.employeeId,
+        effectiveDate: result.effectiveDate.toISOString(),
+      },
+    };
+  } catch (error) {
+    console.error("Failed to create employee pattern override", error);
+    return {
+      success: false,
+      error: "Failed to create employee pattern override",
+    };
   }
 }

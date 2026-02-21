@@ -30,6 +30,7 @@ type PunchRecord = Punch & {
 };
 
 type AttendanceOverrides = {
+  status?: ATTENDANCE_STATUS | null;
   actualInAt?: Date | string | null;
   actualOutAt?: Date | string | null;
   expectedShiftId?: number | null;
@@ -95,6 +96,9 @@ const serializeAttendance = (
   const actualOutAt = hasOverride(overrides, "actualOutAt")
     ? overrides?.actualOutAt ?? null
     : record.actualOutAt ?? null;
+  const status = hasOverride(overrides, "status")
+    ? overrides?.status ?? record.status
+    : record.status;
   const expectedShiftId = hasOverride(overrides, "expectedShiftId")
     ? overrides?.expectedShiftId ?? null
     : record.expectedShiftId ?? null;
@@ -133,7 +137,7 @@ const serializeAttendance = (
     id: record.id,
     employeeId: record.employeeId,
     workDate: record.workDate.toISOString(),
-    status: record.status,
+    status,
     expectedShiftId,
     expectedShiftName,
     scheduledStartMinutes,
@@ -309,8 +313,13 @@ export async function listAttendance(input?: {
                 Math.round((actualOutAt.getTime() - actualInAt.getTime()) / 60000)
               )
             : null;
+        const normalizedStatus =
+          !expected.shift && !actualInAt && !actualOutAt && punches.length === 0
+            ? ATTENDANCE_STATUS.REST
+            : record.status;
 
         return serializeAttendance(record, {
+          status: normalizedStatus,
           breakCount: breakCount || record.breakCount || 0,
           breakMinutes: breakMinutes || record.breakMinutes || 0,
           actualInAt,
@@ -415,7 +424,9 @@ export async function listAttendance(input?: {
         return {
           id: `placeholder-${emp.employeeId}-${start}`,
           workDate: dayStart.toISOString(),
-          status: "ABSENT",
+          status: expected?.shift
+            ? ATTENDANCE_STATUS.ABSENT
+            : ATTENDANCE_STATUS.REST,
           expectedShiftId,
           expectedShiftName,
           scheduledStartMinutes: scheduledStart,
@@ -541,6 +552,41 @@ export async function updatePunch(input: {
   } catch (error) {
     console.error("Failed to update punch", error);
     return { success: false, error: "Failed to update punch" };
+  }
+}
+
+export async function deletePunch(input: { id: string }) {
+  try {
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    if (!id) {
+      return { success: false, error: "id is required" };
+    }
+
+    const existing = await db.punch.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        employeeId: true,
+        punchTime: true,
+      },
+    });
+    if (!existing) {
+      return { success: false, error: "Punch not found" };
+    }
+
+    await db.punch.delete({ where: { id } });
+    await recomputeAttendanceForDay(existing.employeeId, existing.punchTime);
+
+    return {
+      success: true,
+      data: {
+        id: existing.id,
+        employeeId: existing.employeeId,
+      },
+    };
+  } catch (error) {
+    console.error("Failed to delete punch", error);
+    return { success: false, error: "Failed to delete punch" };
   }
 }
 
@@ -824,6 +870,40 @@ export async function recomputeAttendance(input: {
     };
   } catch (error) {
     console.error("Failed to recompute attendance", error);
+    return { success: false, error: "Failed to recompute attendance" };
+  }
+}
+
+export async function recomputeAttendanceForDate(input?: { date?: string }) {
+  try {
+    const dateRaw = typeof input?.date === "string" ? input.date : null;
+    const targetDate = dateRaw ? new Date(dateRaw) : new Date();
+    if (Number.isNaN(targetDate.getTime())) {
+      return { success: false, error: "Invalid date" };
+    }
+
+    const dayStart = startOfZonedDay(targetDate);
+    const employees = await db.employee.findMany({
+      where: { isArchived: false },
+      select: { employeeId: true },
+    });
+
+    await Promise.all(
+      employees.map((employee) =>
+        recomputeAttendanceForDay(employee.employeeId, dayStart)
+      )
+    );
+
+    return {
+      success: true,
+      data: {
+        processedCount: employees.length,
+        date: dayStart.toISOString(),
+        tz: TZ,
+      },
+    };
+  } catch (error) {
+    console.error("Failed to recompute attendance for date", error);
     return { success: false, error: "Failed to recompute attendance" };
   }
 }

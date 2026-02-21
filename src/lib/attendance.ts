@@ -9,10 +9,13 @@ type ExpectedShift = {
   source: "override" | "pattern" | "none";
 };
 
+type DayKey = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+const AUTO_TIMEOUT_GRACE_MINUTES = 60;
+
 const minutesBetween = (a: Date, b: Date) =>
   Math.round((b.getTime() - a.getTime()) / 60000);
 
-const dayKey = (date: Date) => {
+const dayKey = (date: Date): DayKey => {
   const dayStr = date.toLocaleDateString("en-US", { weekday: "short", timeZone: TZ }).toLowerCase();
   switch (dayStr.slice(0, 3)) {
     case "sun":
@@ -64,7 +67,53 @@ export async function getExpectedShiftForDate(employeeId: string, workDate: Date
 
   const pattern = patternAssignment.pattern;
   const key = dayKey(dayStart);
-  const shiftId = (pattern as any)[`${key}ShiftId`] as number | null | undefined;
+  const shiftIdsByDay: Record<
+    DayKey,
+    { snapshot: number | null; fromPattern: number | null }
+  > = {
+    sun: {
+      snapshot: patternAssignment.sunShiftIdSnapshot,
+      fromPattern: pattern.sunShiftId,
+    },
+    mon: {
+      snapshot: patternAssignment.monShiftIdSnapshot,
+      fromPattern: pattern.monShiftId,
+    },
+    tue: {
+      snapshot: patternAssignment.tueShiftIdSnapshot,
+      fromPattern: pattern.tueShiftId,
+    },
+    wed: {
+      snapshot: patternAssignment.wedShiftIdSnapshot,
+      fromPattern: pattern.wedShiftId,
+    },
+    thu: {
+      snapshot: patternAssignment.thuShiftIdSnapshot,
+      fromPattern: pattern.thuShiftId,
+    },
+    fri: {
+      snapshot: patternAssignment.friShiftIdSnapshot,
+      fromPattern: pattern.friShiftId,
+    },
+    sat: {
+      snapshot: patternAssignment.satShiftIdSnapshot,
+      fromPattern: pattern.satShiftId,
+    },
+  };
+  const snapshotValues = Object.values(shiftIdsByDay).map((entry) => entry.snapshot);
+  const patternValues = Object.values(shiftIdsByDay).map(
+    (entry) => entry.fromPattern
+  );
+  const hasAnySnapshotValue = snapshotValues.some((value) => value !== null);
+  const patternHasAnyValue = patternValues.some((value) => value !== null);
+  const useSnapshotValues =
+    hasAnySnapshotValue ||
+    (typeof patternAssignment.reason === "string" &&
+      patternAssignment.reason.startsWith("OVERRIDE_FROM:")) ||
+    !patternHasAnyValue;
+  const shiftId = useSnapshotValues
+    ? shiftIdsByDay[key].snapshot
+    : shiftIdsByDay[key].fromPattern;
 
   if (!shiftId) {
     return { shift: null, scheduledStartMinutes: null, scheduledEndMinutes: null, source: "none" };
@@ -92,13 +141,66 @@ export async function recomputeAttendanceForDay(
   const now = new Date();
   const nowMinutes = minutesBetween(dayStart, now);
 
-  const punches = await db.punch.findMany({
+  let punches = await db.punch.findMany({
     where: {
       employeeId,
       punchTime: { gte: dayStart, lt: dayEnd },
     },
     orderBy: { punchTime: "asc" },
   });
+
+  const expected = await getExpectedShiftForDate(employeeId, dayStart);
+  const paidHoursPerDay = expected.shift?.paidHoursPerDay ?? null;
+
+  let firstClockIn = punches.find((p) => p.punchType === PUNCH_TYPE.TIME_IN) ?? null;
+  let lastClockOut =
+    [...punches].reverse().find((p) => p.punchType === PUNCH_TYPE.TIME_OUT) ?? null;
+
+  // Auto-timeout rule: after scheduled end + 60 minutes, create a synthetic TIME_OUT.
+  // This keeps attendance from staying INCOMPLETE forever when someone forgets to clock out.
+  const autoTimeoutCutoffMinutes =
+    expected.scheduledEndMinutes != null
+      ? Math.max(0, expected.scheduledEndMinutes + AUTO_TIMEOUT_GRACE_MINUTES)
+      : null;
+  const shouldAutoTimeout =
+    expected.scheduledEndMinutes != null &&
+    firstClockIn != null &&
+    !lastClockOut &&
+    autoTimeoutCutoffMinutes != null &&
+    nowMinutes >= autoTimeoutCutoffMinutes;
+
+  if (shouldAutoTimeout && expected.scheduledEndMinutes != null) {
+    const autoTimeoutAt = new Date(
+      dayStart.getTime() + expected.scheduledEndMinutes * 60 * 1000
+    );
+    const hasTimeoutAtScheduledEnd = punches.some(
+      (p) =>
+        p.punchType === PUNCH_TYPE.TIME_OUT &&
+        p.punchTime.getTime() === autoTimeoutAt.getTime()
+    );
+
+    if (!hasTimeoutAtScheduledEnd) {
+      await db.punch.create({
+        data: {
+          employeeId,
+          punchType: PUNCH_TYPE.TIME_OUT,
+          punchTime: autoTimeoutAt,
+          source: "AUTO_TIMEOUT",
+        },
+      });
+    }
+
+    punches = await db.punch.findMany({
+      where: {
+        employeeId,
+        punchTime: { gte: dayStart, lt: dayEnd },
+      },
+      orderBy: { punchTime: "asc" },
+    });
+    firstClockIn = punches.find((p) => p.punchType === PUNCH_TYPE.TIME_IN) ?? null;
+    lastClockOut =
+      [...punches].reverse().find((p) => p.punchType === PUNCH_TYPE.TIME_OUT) ?? null;
+  }
 
   // Compute breaks by pairing consecutive break punches (BREAK_IN/OUT in any order)
   let breakCount = 0;
@@ -116,16 +218,10 @@ export async function recomputeAttendanceForDay(
     }
   });
 
-  const expected = await getExpectedShiftForDate(employeeId, dayStart);
-  const paidHoursPerDay = expected.shift?.paidHoursPerDay ?? null;
   // Lock and mark incomplete once we're 5 minutes after scheduled end (clamped to 0).
   const cutoffMinutes =
     expected.scheduledEndMinutes != null ? Math.max(0, expected.scheduledEndMinutes + 5) : null;
   const cutoffPassed = cutoffMinutes != null ? nowMinutes >= cutoffMinutes : false;
-
-  const firstClockIn = punches.find((p) => p.punchType === PUNCH_TYPE.TIME_IN) ?? null;
-  const lastClockOut =
-    [...punches].reverse().find((p) => p.punchType === PUNCH_TYPE.TIME_OUT) ?? null;
 
   const actualInAt = firstClockIn?.punchTime ?? punches[0]?.punchTime ?? null;
   const actualOutAt = lastClockOut?.punchTime ?? null;
@@ -150,7 +246,10 @@ export async function recomputeAttendanceForDay(
       ? Math.max(0, actualOutMinutes - expected.scheduledEndMinutes)
       : 0;
 
-  let status: ATTENDANCE_STATUS = ATTENDANCE_STATUS.ABSENT;
+  // If no schedule exists for the day, treat it as REST by default.
+  let status: ATTENDANCE_STATUS = expected.shift
+    ? ATTENDANCE_STATUS.ABSENT
+    : ATTENDANCE_STATUS.REST;
   if (actualInAt || actualOutAt) {
     if (!actualOutAt && cutoffPassed) {
       status = ATTENDANCE_STATUS.INCOMPLETE;

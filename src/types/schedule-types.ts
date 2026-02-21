@@ -65,6 +65,14 @@ export type PatternAssignment = {
   id: string;
   employeeId: string;
   effectiveDate: string;
+  reason?: string | null;
+  sunShiftIdSnapshot?: number | null;
+  monShiftIdSnapshot?: number | null;
+  tueShiftIdSnapshot?: number | null;
+  wedShiftIdSnapshot?: number | null;
+  thuShiftIdSnapshot?: number | null;
+  friShiftIdSnapshot?: number | null;
+  satShiftIdSnapshot?: number | null;
   employee: EmployeeLite;
   pattern: Pattern | null;
   isLatest?: boolean;

@@ -18,11 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Eye, EyeOff, Search } from "lucide-react";
-import { Roles } from "@prisma/client";
 import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { usePathname, useRouter } from "next/navigation";
 import { createAuthUser } from "@/actions/auth/auth-action";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { APP_ROLES, type AppRole } from "@/lib/rbac";
 
 type Employee = {
   employeeId: string;
@@ -55,8 +55,8 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Roles | "">(
-    defaultEmployeeId ? Roles.employee : "",
+  const [role, setRole] = useState<AppRole | "">(
+    defaultEmployeeId ? "employee" : "",
   );
   const [showPassword, setShowPassword] = useState(false);
   const [roleError, setRoleError] = useState("");
@@ -83,7 +83,7 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
               if (match) {
                 setSelectedEmployee(match);
                 setEmail(match.email ?? "");
-                setRole(Roles.employee);
+                setRole("employee");
               }
             }
           } else {
@@ -111,7 +111,7 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
 
   useEffect(() => {
     if (selectedEmployee) {
-      setRole(Roles.employee);
+      setRole("employee");
       setEmail(selectedEmployee.email ?? "");
     }
   }, [selectedEmployee]);
@@ -260,7 +260,7 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
                   <div className="space-y-1">
                     <Select
                       value={role || undefined}
-                      onValueChange={(value: Roles) => {
+                      onValueChange={(value: AppRole) => {
                         setRole(value);
                         if (value) setRoleError("");
                       }}
@@ -274,7 +274,7 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
                         <SelectValue placeholder="Select a role" />
                       </SelectTrigger>
                       <SelectContent className="bg-card text-foreground">
-                        {Object.values(Roles).map((roleValue) => (
+                        {APP_ROLES.map((roleValue) => (
                           <SelectItem key={roleValue} value={roleValue}>
                             {roleValue.charAt(0).toUpperCase() +
                               roleValue

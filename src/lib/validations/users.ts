@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { User as PrismaUser, Roles } from "@prisma/client";
+import { APP_ROLES } from "@/lib/rbac";
 
 // // Create a type that matches your form data structure
 // type UserFormData = Omit<
@@ -15,7 +15,7 @@ export const userSchema = z.object({
   userId: z.string().optional(),
   username: z.string().min(1, "Username is required"),
   email: z.string().email("Invalid email address"),
-  role: z.enum(Roles).default(Roles.employee),
+  role: z.enum(APP_ROLES).default("employee"),
   isDisabled: z.boolean().default(false),
   emailVerified: z.date().nullable().optional(),
   image: z.string().nullable().optional(),

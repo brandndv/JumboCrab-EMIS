@@ -4,8 +4,18 @@ import { useEffect } from "react";
 
 export function RegisterSW() {
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
+
+    if (process.env.NODE_ENV !== "production") {
+      // Prevent stale production SW/caches from breaking local dev.
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) =>
+          Promise.all(registrations.map((registration) => registration.unregister())),
+        )
+        .catch(() => undefined);
+      return;
+    }
 
     const register = () => {
       navigator.serviceWorker

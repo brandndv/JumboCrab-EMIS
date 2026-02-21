@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { TZ } from "@/lib/timezone";
 import {
-  autoLockAttendance,
   listAttendance,
   listAttendancePunches,
+  recomputeAttendanceForDate,
 } from "@/actions/attendance/attendance-action";
 
 export type AttendanceRow = {
@@ -57,15 +57,15 @@ export function useAttendanceState(initialDate = todayISO()) {
   const [punchError, setPunchError] = useState<string | null>(null);
   const [date, setDate] = useState(initialDate);
   const [punches, setPunches] = useState<PunchRow[]>([]);
-  const [lockLoading, setLockLoading] = useState(false);
-  const [lockMessage, setLockMessage] = useState<string | null>(null);
+  const [recomputeLoading, setRecomputeLoading] = useState(false);
+  const [recomputeMessage, setRecomputeMessage] = useState<string | null>(null);
 
   const load = async () => {
     try {
       setLoading(true);
       setError(null);
       setPunchError(null);
-      setLockMessage(null);
+      setRecomputeMessage(null);
       const [attendanceResult, punchesResult] = await Promise.all([
         listAttendance({ start: date, end: date, includeAll: true }),
         listAttendancePunches({ start: date }),
@@ -87,24 +87,24 @@ export function useAttendanceState(initialDate = todayISO()) {
     }
   };
 
-  const lockDay = async () => {
+  const recomputeDay = async () => {
     try {
-      setLockLoading(true);
-      setLockMessage(null);
-      const result = await autoLockAttendance({ date });
+      setRecomputeLoading(true);
+      setRecomputeMessage(null);
+      const result = await recomputeAttendanceForDate({ date });
       if (!result.success) {
-        throw new Error(result.error || "Failed to lock attendance");
+        throw new Error(result.error || "Failed to recompute attendance");
       }
-      setLockMessage(
-        `Locked ${result.data?.lockedCount ?? 0} attendance row(s) for ${date}.`
+      setRecomputeMessage(
+        `Recomputed ${result.data?.processedCount ?? 0} employee(s) for ${date}.`
       );
       await load();
     } catch (err) {
-      setLockMessage(
-        err instanceof Error ? err.message : "Failed to lock attendance"
+      setRecomputeMessage(
+        err instanceof Error ? err.message : "Failed to recompute attendance"
       );
     } finally {
-      setLockLoading(false);
+      setRecomputeLoading(false);
     }
   };
 
@@ -120,11 +120,11 @@ export function useAttendanceState(initialDate = todayISO()) {
     punchError,
     date,
     punches,
-    lockLoading,
-    lockMessage,
+    recomputeLoading,
+    recomputeMessage,
     setDate,
     setPunchError,
     load,
-    lockDay,
+    recomputeDay,
   };
 }

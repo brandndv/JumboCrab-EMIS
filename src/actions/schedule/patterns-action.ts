@@ -20,6 +20,13 @@ const shiftSelect = {
 export async function listPatterns() {
   try {
     const patterns = await db.weeklyPattern.findMany({
+      where: {
+        code: {
+          not: {
+            startsWith: "OVR-",
+          },
+        },
+      },
       orderBy: { name: "asc" },
       include: {
         sunShift: { select: shiftSelect },
@@ -248,6 +255,14 @@ export async function listPatternAssignments() {
         id: assignment.id,
         employeeId: assignment.employeeId,
         effectiveDate: assignment.effectiveDate.toISOString(),
+        reason: assignment.reason ?? null,
+        sunShiftIdSnapshot: assignment.sunShiftIdSnapshot,
+        monShiftIdSnapshot: assignment.monShiftIdSnapshot,
+        tueShiftIdSnapshot: assignment.tueShiftIdSnapshot,
+        wedShiftIdSnapshot: assignment.wedShiftIdSnapshot,
+        thuShiftIdSnapshot: assignment.thuShiftIdSnapshot,
+        friShiftIdSnapshot: assignment.friShiftIdSnapshot,
+        satShiftIdSnapshot: assignment.satShiftIdSnapshot,
         employee: assignment.employee,
         pattern: assignment.pattern ? serializePattern(assignment.pattern) : null,
         isLatest,

@@ -1,4 +1,4 @@
-const SW_VERSION = "v1";
+const SW_VERSION = "v2";
 const STATIC_CACHE = `static-${SW_VERSION}`;
 const OFFLINE_CACHE = `offline-${SW_VERSION}`;
 const OFFLINE_URL = "/offline";
@@ -47,11 +47,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (request.headers.get("RSC")) return;
+
   if (url.pathname.startsWith("/api/")) {
     return;
   }
 
-  if (isStaticAssetRequest(url.pathname)) {
+  if (isStaticAssetRequest(request, url.pathname)) {
     event.respondWith(cacheFirst(request));
   }
 });
@@ -67,10 +69,14 @@ async function handleNavigation(request, event) {
   }
 }
 
-function isStaticAssetRequest(pathname) {
-  if (pathname.startsWith("/_next/static/")) return true;
+function isStaticAssetRequest(request, pathname) {
+  // Avoid caching JS to prevent stale chunk/runtime mismatches.
+  const destination = request.destination;
+  if (destination === "style" || destination === "image" || destination === "font") {
+    return true;
+  }
 
-  return /\.(?:css|js|mjs|json|png|jpg|jpeg|gif|svg|webp|avif|ico|woff|woff2|ttf)$/i.test(
+  return /\.(?:css|png|jpg|jpeg|gif|svg|webp|avif|ico|woff|woff2|ttf)$/i.test(
     pathname,
   );
 }
