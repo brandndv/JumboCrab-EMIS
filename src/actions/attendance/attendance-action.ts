@@ -11,6 +11,7 @@ import {
 } from "@/lib/attendance";
 import { endOfZonedDay, startOfZonedDay, TZ, zonedNow } from "@/lib/timezone";
 
+// Minimal employee shape embedded in attendance/punch responses.
 type EmployeeSummary = {
   employeeId: string;
   employeeCode: string;
@@ -20,19 +21,25 @@ type EmployeeSummary = {
   position?: { name: string | null } | null;
 };
 
+// Attendance row loaded from DB with selected relation data.
 type AttendanceRecord = Attendance & {
   employee?: EmployeeSummary | null;
   expectedShift?: { name: string | null } | null;
 };
 
+// Punch row loaded from DB with selected relation data.
 type PunchRecord = Punch & {
   employee?: EmployeeSummary | null;
 };
 
+// Optional computed/override values to merge into serialized attendance payloads.
 type AttendanceOverrides = {
   status?: ATTENDANCE_STATUS | null;
   actualInAt?: Date | string | null;
   actualOutAt?: Date | string | null;
+  forgotToTimeOut?: boolean;
+  breakStartAt?: Date | string | null;
+  breakEndAt?: Date | string | null;
   expectedShiftId?: number | null;
   expectedShiftName?: string | null;
   scheduledStartMinutes?: number | null;
@@ -46,11 +53,13 @@ type AttendanceOverrides = {
   workedMinutes?: number | null;
 };
 
+// Checks whether a key exists on overrides, even if the value is null.
 const hasOverride = (
   overrides: AttendanceOverrides | undefined,
   key: keyof AttendanceOverrides
 ) => Boolean(overrides && Object.prototype.hasOwnProperty.call(overrides, key));
 
+// Normalizes Date/string values into ISO strings for API responses.
 const toIsoString = (value: Date | string | null | undefined) => {
   if (!value) return null;
   if (typeof value === "string") return value;
@@ -58,6 +67,7 @@ const toIsoString = (value: Date | string | null | undefined) => {
   return null;
 };
 
+// Safely converts Decimal/number/string-like values to string for JSON responses.
 const toStringOrNull = (value: unknown) => {
   if (value === null || typeof value === "undefined") return null;
   if (typeof value === "string") return value;
@@ -68,6 +78,7 @@ const toStringOrNull = (value: unknown) => {
   return null;
 };
 
+// Canonical serializer for punch records returned by server actions.
 const serializePunch = (punch: PunchRecord) => {
   return {
     id: punch.id,
@@ -86,6 +97,8 @@ const serializePunch = (punch: PunchRecord) => {
 const serializePunchNullable = (punch: PunchRecord | null) =>
   punch ? serializePunch(punch) : null;
 
+// Canonical serializer for attendance records.
+// Merges DB values with computed overrides so callers get a stable payload shape.
 const serializeAttendance = (
   record: AttendanceRecord,
   overrides?: AttendanceOverrides
@@ -96,6 +109,15 @@ const serializeAttendance = (
   const actualOutAt = hasOverride(overrides, "actualOutAt")
     ? overrides?.actualOutAt ?? null
     : record.actualOutAt ?? null;
+  const forgotToTimeOut = hasOverride(overrides, "forgotToTimeOut")
+    ? Boolean(overrides?.forgotToTimeOut)
+    : false;
+  const breakStartAt = hasOverride(overrides, "breakStartAt")
+    ? overrides?.breakStartAt ?? null
+    : null;
+  const breakEndAt = hasOverride(overrides, "breakEndAt")
+    ? overrides?.breakEndAt ?? null
+    : null;
   const status = hasOverride(overrides, "status")
     ? overrides?.status ?? record.status
     : record.status;
@@ -145,6 +167,9 @@ const serializeAttendance = (
     paidHoursPerDay: toStringOrNull(record.paidHoursPerDay),
     actualInAt: toIsoString(actualInAt),
     actualOutAt: toIsoString(actualOutAt),
+    forgotToTimeOut,
+    breakStartAt: toIsoString(breakStartAt),
+    breakEndAt: toIsoString(breakEndAt),
     workedMinutes,
     breakMinutes,
     breakCount,
@@ -161,29 +186,34 @@ const serializeAttendance = (
   };
 };
 
+// Derives break summary from raw punch sequence.
+// Break punches are paired in order, regardless of whether the first event is BREAK_IN/OUT.
 const computeBreakStats = (punches: Array<PunchRecord | Punch>) => {
   let breakCount = 0;
   let breakMinutes = 0;
   let breakStart: Date | null = null;
+  let breakStartAt: Date | null = null;
+  let breakEndAt: Date | null = null;
   punches.forEach((p) => {
     if (p.punchType === "BREAK_OUT" || p.punchType === "BREAK_IN") {
       if (!breakStart) {
         breakStart = p.punchTime;
+        if (!breakStartAt) breakStartAt = p.punchTime;
       } else {
         breakCount += 1;
         breakMinutes += Math.max(
           0,
           Math.round((p.punchTime.getTime() - breakStart.getTime()) / 60000)
         );
+        breakEndAt = p.punchTime;
         breakStart = null;
       }
     }
   });
-  return { breakCount, breakMinutes };
+  return { breakCount, breakMinutes, breakStartAt, breakEndAt };
 };
 
-const isIpAllowed = (ip: string | null) => {
-  const raw = process.env.ALLOWED_PUNCH_IPS;
+const isIpAllowed = (ip: string | null, raw: string | undefined) => {
   if (!raw) return true;
   const list = raw
     .split(",")
@@ -193,6 +223,11 @@ const isIpAllowed = (ip: string | null) => {
   return Boolean(ip && list.includes(ip));
 };
 
+// Self-punch from employee phone is open by default.
+// Set ALLOWED_SELF_PUNCH_IPS to enforce a specific allowlist.
+const isSelfPunchIpAllowed = (ip: string | null) =>
+  isIpAllowed(ip, process.env.ALLOWED_SELF_PUNCH_IPS);
+
 export async function listAttendance(input?: {
   start?: string | null;
   end?: string | null;
@@ -201,6 +236,7 @@ export async function listAttendance(input?: {
   includeAll?: boolean;
 }) {
   try {
+    // Normalize and validate query inputs first.
     const start = typeof input?.start === "string" ? input.start : null;
     const end = typeof input?.end === "string" ? input.end : null;
     const employeeId =
@@ -211,6 +247,7 @@ export async function listAttendance(input?: {
 
     const where: Record<string, any> = {};
     if (start || end) {
+      // Convert date boundaries into timezone-aware day boundaries for DB filtering.
       const workDate: Record<string, Date> = {};
       if (start) {
         const parsedStart = new Date(start);
@@ -229,6 +266,7 @@ export async function listAttendance(input?: {
       }
     }
 
+    // Optional dimension filters.
     if (employeeId) where.employeeId = employeeId;
     if (
       status &&
@@ -237,6 +275,7 @@ export async function listAttendance(input?: {
       where.status = status as ATTENDANCE_STATUS;
     }
 
+    // Base attendance rows from DB.
     const records = await db.attendance.findMany({
       where,
       orderBy: { workDate: "desc" },
@@ -255,8 +294,10 @@ export async function listAttendance(input?: {
       },
     });
 
+    // Enrich each row with punch-derived values and expected schedule values.
     const enriched = await Promise.all(
       records.map(async (record) => {
+        // Rebuild local day boundaries in configured timezone before querying punches.
         const localDisplay = new Date(
           new Date(record.workDate).toLocaleString("en-US", { timeZone: TZ })
         );
@@ -271,7 +312,8 @@ export async function listAttendance(input?: {
           },
           orderBy: { punchTime: "asc" },
         });
-        const { breakCount, breakMinutes } = computeBreakStats(punches);
+        const { breakCount, breakMinutes, breakStartAt, breakEndAt } =
+          computeBreakStats(punches);
 
         const expected = await getExpectedShiftForDate(
           record.employeeId,
@@ -284,6 +326,15 @@ export async function listAttendance(input?: {
           punches.find((p) => p.punchType === "TIME_IN") ?? null;
         const lastClockOut =
           [...punches].reverse().find((p) => p.punchType === "TIME_OUT") ?? null;
+        // Synthetic TIME_OUT generated by auto-timeout logic in lib/attendance.ts.
+        const autoTimeoutPunch =
+          [...punches]
+            .reverse()
+            .find(
+              (p) =>
+                p.punchType === PUNCH_TYPE.TIME_OUT &&
+                p.source === "AUTO_TIMEOUT"
+            ) ?? null;
 
         const actualInAt = firstClockIn?.punchTime ?? record.actualInAt ?? null;
         const actualOutAt = lastClockOut?.punchTime ?? null;
@@ -317,11 +368,21 @@ export async function listAttendance(input?: {
           !expected.shift && !actualInAt && !actualOutAt && punches.length === 0
             ? ATTENDANCE_STATUS.REST
             : record.status;
+        // "Forgot to timeout" is true when system auto-closed the shift,
+        // or when a shift is still incomplete with no TIME_OUT.
+        const forgotToTimeOut =
+          Boolean(autoTimeoutPunch) ||
+          (normalizedStatus === ATTENDANCE_STATUS.INCOMPLETE &&
+            Boolean(actualInAt) &&
+            !actualOutAt);
 
         return serializeAttendance(record, {
           status: normalizedStatus,
+          forgotToTimeOut,
           breakCount: breakCount || record.breakCount || 0,
           breakMinutes: breakMinutes || record.breakMinutes || 0,
+          breakStartAt,
+          breakEndAt,
           actualInAt,
           actualOutAt,
           expectedShiftId: expected.shift?.id ?? record.expectedShiftId ?? null,
@@ -338,6 +399,8 @@ export async function listAttendance(input?: {
       })
     );
 
+    // Include-all mode (single day only): include employees with no attendance row yet.
+    // Used by Daily Attendance to show a complete employee roster for the selected day.
     if (includeAll && singleDay && start) {
       const employees = await db.employee.findMany({
         where: { isArchived: false },
@@ -368,9 +431,14 @@ export async function listAttendance(input?: {
         orderBy: { punchTime: "asc" },
       });
 
-      const breakMap = new Map<string, { count: number; minutes: number }>();
+      const breakMap = new Map<
+        string,
+        { count: number; minutes: number; startAt: string | null; endAt: string | null }
+      >();
+      const forgotTimeoutMap = new Map<string, boolean>();
       for (const empId of employeeIds) {
-        breakMap.set(empId, { count: 0, minutes: 0 });
+        breakMap.set(empId, { count: 0, minutes: 0, startAt: null, endAt: null });
+        forgotTimeoutMap.set(empId, false);
       }
 
       const groupedPunches = new Map<string, typeof punches>();
@@ -381,7 +449,22 @@ export async function listAttendance(input?: {
 
       groupedPunches.forEach((list, empId) => {
         const stats = computeBreakStats(list);
-        breakMap.set(empId, { count: stats.breakCount, minutes: stats.breakMinutes });
+        // Track whether this employee had a system-generated timeout punch.
+        const autoTimeoutPunch =
+          [...list]
+            .reverse()
+            .find(
+              (p) =>
+                p.punchType === PUNCH_TYPE.TIME_OUT &&
+                p.source === "AUTO_TIMEOUT"
+            ) ?? null;
+        breakMap.set(empId, {
+          count: stats.breakCount,
+          minutes: stats.breakMinutes,
+          startAt: toIsoString(stats.breakStartAt),
+          endAt: toIsoString(stats.breakEndAt),
+        });
+        forgotTimeoutMap.set(empId, Boolean(autoTimeoutPunch));
       });
 
       const map = new Map(enriched.map((row) => [row.employeeId, row]));
@@ -397,8 +480,14 @@ export async function listAttendance(input?: {
       );
 
       const merged = employees.map((emp) => {
+        // Existing row => augment with latest derived schedule/break/forgot-timeout values.
         const existing = map.get(emp.employeeId);
-        const breaks = breakMap.get(emp.employeeId) ?? { count: 0, minutes: 0 };
+        const breaks = breakMap.get(emp.employeeId) ?? {
+          count: 0,
+          minutes: 0,
+          startAt: null,
+          endAt: null,
+        };
         const expected = expectedMap.get(emp.employeeId);
         const scheduledStart =
           existing?.scheduledStartMinutes ?? expected?.scheduledStartMinutes ?? null;
@@ -416,11 +505,18 @@ export async function listAttendance(input?: {
             scheduledEndMinutes: scheduledEnd,
             expectedShiftId,
             expectedShiftName,
+            forgotToTimeOut:
+              (forgotTimeoutMap.get(emp.employeeId) ?? false) ||
+              existing.forgotToTimeOut ||
+              false,
             breakCount: breaks.count || existing.breakCount || 0,
             breakMinutes: breaks.minutes || existing.breakMinutes || 0,
+            breakStartAt: breaks.startAt ?? existing.breakStartAt ?? null,
+            breakEndAt: breaks.endAt ?? existing.breakEndAt ?? null,
           };
         }
 
+        // Missing row => create placeholder attendance (ABSENT/REST) for table completeness.
         return {
           id: `placeholder-${emp.employeeId}-${start}`,
           workDate: dayStart.toISOString(),
@@ -438,8 +534,11 @@ export async function listAttendance(input?: {
           undertimeMinutes: null,
           overtimeMinutesRaw: null,
           punchesCount: 0,
+          forgotToTimeOut: forgotTimeoutMap.get(emp.employeeId) ?? false,
           breakCount: breaks.count,
           breakMinutes: breaks.minutes,
+          breakStartAt: breaks.startAt,
+          breakEndAt: breaks.endAt,
           employeeId: emp.employeeId,
           employee: emp,
         };
@@ -457,6 +556,7 @@ export async function listAttendance(input?: {
 
 export async function listAttendancePunches(input: { start: string }) {
   try {
+    // This endpoint is day-scoped (one day at a time).
     const start = typeof input.start === "string" ? input.start : "";
     if (!start) {
       return { success: false, error: "start (yyyy-mm-dd) is required" };
@@ -468,6 +568,7 @@ export async function listAttendancePunches(input: { start: string }) {
     const dayStart = startOfZonedDay(parsed);
     const dayEnd = endOfZonedDay(parsed);
 
+    // Return all punches in chronological order with employee metadata.
     const punches = await db.punch.findMany({
       where: { punchTime: { gte: dayStart, lt: dayEnd } },
       orderBy: { punchTime: "asc" },
@@ -498,6 +599,7 @@ export async function updatePunch(input: {
   punchTime?: string;
 }) {
   try {
+    // Validate mutable fields; only provided fields are updated.
     const id = typeof input.id === "string" ? input.id : "";
     const punchType =
       typeof input.punchType === "string" ? input.punchType : "";
@@ -544,6 +646,7 @@ export async function updatePunch(input: {
       },
     });
 
+    // Any punch change can alter totals/status, so recompute that employee-day.
     if (updated.employeeId && updated.punchTime) {
       await recomputeAttendanceForDay(updated.employeeId, updated.punchTime);
     }
@@ -557,6 +660,7 @@ export async function updatePunch(input: {
 
 export async function deletePunch(input: { id: string }) {
   try {
+    // Load the row first so we still know which employee/day to recompute after delete.
     const id = typeof input.id === "string" ? input.id.trim() : "";
     if (!id) {
       return { success: false, error: "id is required" };
@@ -592,6 +696,7 @@ export async function deletePunch(input: { id: string }) {
 
 export async function autoLockAttendance(input?: { date?: string }) {
   try {
+    // Locks unlocked rows for a day and forces INCOMPLETE if TIME_OUT is missing.
     const dateRaw = typeof input?.date === "string" ? input.date : null;
     const targetDate = dateRaw ? new Date(dateRaw) : new Date();
     if (Number.isNaN(targetDate.getTime())) {
@@ -632,6 +737,7 @@ export async function autoLockAttendance(input?: { date?: string }) {
 
 export async function getSelfAttendanceStatus(input?: { date?: string }) {
   try {
+    // Self-service endpoint for employee dashboard/kiosk-like views.
     const session = await getSession();
     if (!session.isLoggedIn || !session.userId) {
       return { success: false, error: "Unauthorized", reason: "unauthorized" };
@@ -670,6 +776,7 @@ export async function getSelfAttendanceStatus(input?: { date?: string }) {
       orderBy: { punchTime: "asc" },
     });
 
+    // Return schedule context + raw punches + quick break summary for UI.
     const breakStats = computeBreakStats(punches);
     const lastPunch = punches[punches.length - 1] ?? null;
 
@@ -700,6 +807,7 @@ export async function getSelfAttendanceStatus(input?: { date?: string }) {
 
 export async function recordSelfPunch(input: { punchType: string }) {
   try {
+    // Self-punch applies auth + optional IP restrictions + schedule timing guards.
     const session = await getSession();
     if (!session.isLoggedIn || !session.userId) {
       return { success: false, error: "Unauthorized" };
@@ -710,7 +818,7 @@ export async function recordSelfPunch(input: { punchType: string }) {
       hdr.get("x-forwarded-for")?.split(",")[0].trim() ||
       hdr.get("x-real-ip") ||
       null;
-    if (!isIpAllowed(clientIp)) {
+    if (!isSelfPunchIpAllowed(clientIp)) {
       return {
         success: false,
         error: "Punching not allowed from this device",
@@ -745,6 +853,7 @@ export async function recordSelfPunch(input: { punchType: string }) {
     const expected = await getExpectedShiftForDate(employee.employeeId, todayStart);
 
     if (punchType === PUNCH_TYPE.TIME_IN) {
+      // Time-in is only valid during scheduled shift window.
       if (expected.scheduledStartMinutes == null) {
         return {
           success: false,
@@ -780,6 +889,7 @@ export async function recordSelfPunch(input: { punchType: string }) {
       punchType: punchType as PUNCH_TYPE,
       punchTime: now,
       source: "WEB_SELF",
+      // Keep attendance row fresh immediately after punch.
       recompute: true,
     });
 
@@ -798,6 +908,7 @@ export async function recordAttendancePunch(input: {
   recompute?: boolean;
 }) {
   try {
+    // Admin/manager punch endpoint: can set explicit punch time/source.
     const employeeId =
       typeof input.employeeId === "string" && input.employeeId.trim()
         ? input.employeeId.trim()
@@ -826,6 +937,7 @@ export async function recordAttendancePunch(input: {
       punchType: punchType as PUNCH_TYPE,
       punchTime,
       source,
+      // Caller controls whether recomputation runs immediately.
       recompute,
     });
 
@@ -847,6 +959,7 @@ export async function recomputeAttendance(input: {
   workDate?: string;
 }) {
   try {
+    // Recompute one employee for one day.
     const employeeId =
       typeof input.employeeId === "string" && input.employeeId.trim()
         ? input.employeeId.trim()
@@ -876,6 +989,7 @@ export async function recomputeAttendance(input: {
 
 export async function recomputeAttendanceForDate(input?: { date?: string }) {
   try {
+    // Batch recompute all active employees for a specific day.
     const dateRaw = typeof input?.date === "string" ? input.date : null;
     const targetDate = dateRaw ? new Date(dateRaw) : new Date();
     if (Number.isNaN(targetDate.getTime())) {

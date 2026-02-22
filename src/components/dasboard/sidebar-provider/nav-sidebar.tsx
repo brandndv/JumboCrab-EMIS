@@ -22,16 +22,11 @@ import {
   HandCoins,
   ClipboardClock,
   Banknote,
-  StickyNote,
-  NotebookPen,
   Handshake,
   TriangleAlertIcon,
+  ScanLine,
 } from "lucide-react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 
 interface NavSidebarProps {
   userRole: string; // Use string (primitive) type, not String (object)
@@ -244,7 +239,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
     {
       id: "scan",
       label: "Scan",
-      icon: ClipboardClock,
+      icon: ScanLine,
       href: `/${userRole}/scan`,
       hasSubmenu: false,
       // ========== SCAN ACCESS ========= //

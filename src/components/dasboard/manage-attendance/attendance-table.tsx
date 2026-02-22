@@ -27,6 +27,7 @@ type AttendanceRow = {
   scheduledEndMinutes?: number | null;
   actualInAt?: string | null;
   actualOutAt?: string | null;
+  forgotToTimeOut?: boolean;
   workedMinutes?: number | null;
   lateMinutes?: number | null;
   undertimeMinutes?: number | null;
@@ -199,6 +200,7 @@ export function AttendanceHistoryTable() {
             <option value="PRESENT">Present</option>
             <option value="ABSENT">Absent</option>
             <option value="LATE">Late</option>
+            <option value="INCOMPLETE">Incomplete</option>
           </select>
           <Button
             variant="outline"
@@ -318,22 +320,29 @@ export function AttendanceHistoryTable() {
                         </div>
                       </TableCell>
                       <TableCell>
-                      <Badge
-                        variant={
-                          row.status === "PRESENT"
-                            ? "success"
-                            : row.status === "LATE"
-                            ? "warning"
-                            : row.status === "INCOMPLETE"
-                            ? "info"
-                            : row.status === "ABSENT"
-                            ? "destructive"
-                            : "outline"
-                        }
-                        className="uppercase tracking-wide"
-                      >
-                        {row.status}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge
+                          variant={
+                            row.status === "PRESENT"
+                              ? "success"
+                              : row.status === "LATE"
+                              ? "warning"
+                              : row.status === "INCOMPLETE"
+                              ? "info"
+                              : row.status === "ABSENT"
+                              ? "destructive"
+                              : "outline"
+                          }
+                          className="w-fit uppercase tracking-wide"
+                        >
+                          {row.status}
+                        </Badge>
+                        {row.forgotToTimeOut ? (
+                          <Badge className="w-fit uppercase tracking-wide" variant="destructive">
+                            Forgot time out
+                          </Badge>
+                        ) : null}
+                      </div>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {row.scheduledStartMinutes != null &&

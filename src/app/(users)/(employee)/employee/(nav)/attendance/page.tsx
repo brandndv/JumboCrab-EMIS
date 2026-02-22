@@ -1,7 +1,7 @@
-import React from "react";
+import EmployeeAttendance from "@/components/dasboard/manage-attendance/employee-attendance";
 
 const EmployeeAttendancePage = () => {
-  return <div>EmployeeAttendancePage</div>;
+  return <EmployeeAttendance />;
 };
 
 export default EmployeeAttendancePage;

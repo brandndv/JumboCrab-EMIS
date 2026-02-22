@@ -31,15 +31,19 @@ import {
 import { Eye, EyeOff } from "lucide-react";
 import type { Employee } from "@/lib/validations/employees";
 
-type EmployeeSnapshot = Partial<Employee>;
+type EmployeeType = Partial<Employee>;
 type EmployeeInfoTab = "profile" | "governmentIds";
 
 const formatStatus = (value?: string | null) => {
   if (!value) return "—";
-  return value.replaceAll("_", " ").toLowerCase().replace(/^./, (v) => v.toUpperCase());
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/^./, (v) => v.toUpperCase());
 };
 
-const formatValue = (value?: string | null) => (value?.trim() ? value.trim() : "—");
+const formatValue = (value?: string | null) =>
+  value?.trim() ? value.trim() : "—";
 
 const getInitials = (fullName: string) => {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
@@ -48,7 +52,7 @@ const getInitials = (fullName: string) => {
   return `${parts[0]?.[0] ?? ""}${parts[parts.length - 1]?.[0] ?? ""}`.toUpperCase();
 };
 
-const formatAddress = (employee?: EmployeeSnapshot | null) => {
+const formatAddress = (employee?: EmployeeType | null) => {
   if (!employee) return "—";
   const parts = [
     employee.address,
@@ -103,7 +107,9 @@ const MyAccountPage = () => {
   const employeeId = user?.employee?.employeeId;
   const [employeeInfoTab, setEmployeeInfoTab] =
     useState<EmployeeInfoTab>("profile");
-  const [employeeDetails, setEmployeeDetails] = useState<EmployeeSnapshot | null>(null);
+  const [employeeDetails, setEmployeeDetails] = useState<EmployeeType | null>(
+    null,
+  );
   const [employeeDetailsLoading, setEmployeeDetailsLoading] = useState(false);
   const [governmentIds, setGovernmentIds] = useState<GovernmentIdRecord | null>(
     null,
@@ -133,7 +139,7 @@ const MyAccountPage = () => {
       try {
         const result = await getEmployeeById(employeeId);
         if (!cancelled && result.success && result.data) {
-          setEmployeeDetails(result.data as unknown as EmployeeSnapshot);
+          setEmployeeDetails(result.data as unknown as EmployeeType);
         }
       } finally {
         if (!cancelled) {
@@ -167,7 +173,9 @@ const MyAccountPage = () => {
         if (cancelled) return;
 
         if (!result.success) {
-          setGovernmentIdsError(result.error || "Failed to load government IDs.");
+          setGovernmentIdsError(
+            result.error || "Failed to load government IDs.",
+          );
           setGovernmentIds(null);
           return;
         }
@@ -195,7 +203,7 @@ const MyAccountPage = () => {
 
   const employee = useMemo(() => {
     if (employeeDetails) return employeeDetails;
-    return (user?.employee as EmployeeSnapshot | null) ?? null;
+    return (user?.employee as EmployeeType | null) ?? null;
   }, [employeeDetails, user?.employee]);
 
   const fullName = useMemo(() => {
@@ -204,7 +212,10 @@ const MyAccountPage = () => {
     const middleName = employee?.middleName ?? "";
     const lastName = employee?.lastName ?? "";
     const suffix = employee?.suffix ?? "";
-    const employeeName = [firstName, middleName, lastName, suffix].filter(Boolean).join(" ").trim();
+    const employeeName = [firstName, middleName, lastName, suffix]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
     return employeeName || user.username || "User";
   }, [user, employee]);
 
@@ -301,7 +312,9 @@ const MyAccountPage = () => {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground sm:text-3xl">My Account</h1>
+        <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
+          My Account
+        </h1>
         <p className="text-sm text-muted-foreground">
           View your account credentials and profile details.
         </p>
@@ -310,14 +323,18 @@ const MyAccountPage = () => {
       <Card className="rounded-2xl border border-border/70 bg-card/60 shadow-sm">
         <CardHeader className="flex flex-col items-start gap-4 space-y-0 pb-4 sm:flex-row sm:items-center sm:gap-5">
           <Avatar className="h-16 w-16 ring-2 ring-primary/20 sm:h-20 sm:w-20">
-            {profileImageSrc && <AvatarImage src={profileImageSrc} alt={fullName} />}
+            {profileImageSrc && (
+              <AvatarImage src={profileImageSrc} alt={fullName} />
+            )}
             <AvatarFallback className="bg-primary/10 text-primary font-semibold uppercase">
               {getInitials(fullName)}
             </AvatarFallback>
           </Avatar>
           <div className="space-y-1">
             <CardTitle className="text-xl">Account Credentials</CardTitle>
-            <CardDescription>Your sign-in details and password settings</CardDescription>
+            <CardDescription>
+              Your sign-in details and password settings
+            </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -357,7 +374,9 @@ const MyAccountPage = () => {
                         onClick={() => setShowNewPassword((prev) => !prev)}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                         aria-label={
-                          showNewPassword ? "Hide new password" : "Show new password"
+                          showNewPassword
+                            ? "Hide new password"
+                            : "Show new password"
                         }
                       >
                         {showNewPassword ? (
@@ -482,8 +501,14 @@ const MyAccountPage = () => {
                         label="Last Name"
                         value={formatValue(employee.lastName)}
                       />
-                      <InfoField label="Suffix" value={formatValue(employee.suffix)} />
-                      <InfoField label="Gender" value={formatStatus(employee.sex)} />
+                      <InfoField
+                        label="Suffix"
+                        value={formatValue(employee.suffix)}
+                      />
+                      <InfoField
+                        label="Gender"
+                        value={formatStatus(employee.sex)}
+                      />
                       <InfoField
                         label="Civil Status"
                         value={formatStatus(employee.civilStatus)}
@@ -558,7 +583,9 @@ const MyAccountPage = () => {
                       />
                       <InfoField
                         label="Relationship"
-                        value={formatValue(employee.emergencyContactRelationship)}
+                        value={formatValue(
+                          employee.emergencyContactRelationship,
+                        )}
                       />
                       <InfoField
                         label="Contact Phone"

@@ -16,6 +16,9 @@ export type AttendanceRow = {
   scheduledEndMinutes?: number | null;
   actualInAt?: string | null;
   actualOutAt?: string | null;
+  forgotToTimeOut?: boolean;
+  breakStartAt?: string | null;
+  breakEndAt?: string | null;
   lateMinutes?: number | null;
   undertimeMinutes?: number | null;
   overtimeMinutesRaw?: number | null;

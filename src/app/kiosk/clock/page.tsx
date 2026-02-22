@@ -5,9 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCcw, LogIn, LogOut, Coffee, Clock, Shield, Fingerprint } from "lucide-react";
+import { RefreshCcw, LogIn, LogOut, Coffee, Clock, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatZonedDate, formatZonedTime, startOfZonedDay, zonedNow } from "@/lib/timezone";
+import { KioskQrPanel } from "@/components/kiosk/kiosk-qr-panel";
+import {
+  type KioskAuthMode,
+  type KioskUserSuggestion,
+  UsernamePasswordAuth,
+} from "@/components/kiosk/username-password-auth";
 import {
   getKioskStatus,
   recordKioskPunch,
@@ -17,17 +23,6 @@ import {
 type Punch = {
   punchTime: string;
   punchType: string;
-};
-
-type UserSuggestion = {
-  username: string;
-  role: string;
-  employee: {
-    employeeId: string;
-    employeeCode: string;
-    firstName: string;
-    lastName: string;
-  } | null;
 };
 
 type StatusPayload = {
@@ -57,7 +52,6 @@ const minutesToTime = (mins: number | null) => {
   return `${h12}:${m.toString().padStart(2, "0")} ${suffix}`;
 };
 
-const actionsOrder = ["TIME_IN", "BREAK_IN", "BREAK_OUT", "TIME_OUT"] as const;
 const reasonMessage = (reason?: string, fallback?: string) => {
   const map: Record<string, string> = {
     unauthorized: "You must sign in first.",
@@ -96,14 +90,14 @@ const formatPunchLabel = (punchType: Punch["punchType"]) => {
 export default function KioskClockPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [authMode, setAuthMode] = useState<"password" | "biometric">("password");
+  const [authMode, setAuthMode] = useState<KioskAuthMode>("password");
   const [statusUser, setStatusUser] = useState<string>("");
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [punching, setPunching] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<UserSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<KioskUserSuggestion[]>([]);
   const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
   const [now, setNow] = useState<Date>(zonedNow());
   const [mounted, setMounted] = useState(false);
@@ -149,7 +143,7 @@ export default function KioskClockPage() {
         throw new Error(result.error || "Failed to load suggestions");
       }
       setSuggestions(result.data ?? []);
-    } catch (err) {
+    } catch {
       setSuggestions([]);
     } finally {
       setFetchingSuggestions(false);
@@ -160,11 +154,6 @@ export default function KioskClockPage() {
     if (statusUser) loadStatus(statusUser);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusUser]);
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(zonedNow()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -196,8 +185,8 @@ const nextActions = useMemo(() => {
         setError("Username and password required");
         return;
       }
-      if (authMode === "biometric") {
-        setError("Biometric mode is not available yet.");
+      if (authMode === "qr") {
+        setError("QR mode uses employee scan flow. Kiosk-side manual punch is disabled.");
         return;
       }
       // Front-end validation mirrors API reasons for faster feedback
@@ -269,60 +258,43 @@ const nextActions = useMemo(() => {
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-col gap-4">
-            <CardTitle className="text-xl">Enter credentials</CardTitle>
+            <CardTitle className="text-xl">
+              {authMode === "password" ? "Enter credentials" : "Scan via QR"}
+            </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Your username/password are verified for each punch. No session is created.
+              {authMode === "password"
+                ? "Your username/password are verified for each punch. No session is created."
+                : "Employee devices can scan this QR to authenticate at the kiosk."}
             </p>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Shield className="h-4 w-4" />
-                <span>Only allowed IPs can punch (configure ALLOWED_PUNCH_IPS env).</span>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs">
-                <Button
-                  type="button"
-                  variant={authMode === "password" ? "default" : "outline"}
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setAuthMode("password")}
-                >
-                  <LogIn className="h-4 w-4" />
-                  Username & password (default)
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setAuthMode("biometric")}
-                  disabled
-                >
-                  <Fingerprint className="h-4 w-4" />
-                  Biometric (coming soon)
-                </Button>
-              </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Shield className="h-4 w-4" />
+              <span>Only allowed IPs can punch (configure ALLOWED_PUNCH_IPS env).</span>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                placeholder="Username"
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  loadSuggestions(e.target.value);
-                }}
-                onFocus={() => loadSuggestions(username)}
-                onBlur={() => setStatusUser(username)}
-              />
-              <Input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={authMode !== "password"}
-              />
-            </div>
+            <UsernamePasswordAuth
+              authMode={authMode}
+              onAuthModeChange={setAuthMode}
+              username={username}
+              onUsernameChange={(value) => {
+                setUsername(value);
+                loadSuggestions(value);
+              }}
+              onUsernameFocus={() => loadSuggestions(username)}
+              onUsernameBlur={() => setStatusUser(username)}
+              password={password}
+              onPasswordChange={setPassword}
+              suggestions={suggestions}
+              fetchingSuggestions={fetchingSuggestions}
+              onSelectSuggestion={(selectedUsername) => {
+                setUsername(selectedUsername);
+                setStatusUser(selectedUsername);
+                setSuggestions([]);
+              }}
+            />
+            {authMode === "qr" ? (
+              <KioskQrPanel />
+            ) : null}
             <div className="flex flex-wrap items-center gap-3 justify-center">
               {nextActions.map((action) => (
                 <Button
@@ -331,7 +303,7 @@ const nextActions = useMemo(() => {
                     "gap-3 text-lg px-8 py-6",
                     !action.enabled && "opacity-60 cursor-not-allowed"
                   )}
-                  disabled={!!punching || !action.enabled}
+                  disabled={!!punching || !action.enabled || authMode !== "password"}
                   onClick={() => punch(action.type)}
                   size="lg"
                 >
@@ -360,31 +332,6 @@ const nextActions = useMemo(() => {
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             {info && <p className="text-sm text-green-600">{info}</p>}
-            {suggestions.length > 0 && (
-              <div className="rounded-lg border p-2 space-y-1 bg-muted/30">
-                <p className="text-xs text-muted-foreground">Select user</p>
-                {suggestions.map((s) => (
-                  <button
-                    key={s.username}
-                    className="w-full text-left rounded-md px-2 py-1 hover:bg-muted"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setUsername(s.username);
-                      setStatusUser(s.username);
-                      setSuggestions([]);
-                    }}
-                  >
-                    <span className="text-sm font-medium">{s.username}</span>{" "}
-                    <span className="text-xs text-muted-foreground">
-                      {s.employee?.firstName} {s.employee?.lastName} ({s.employee?.employeeCode})
-                    </span>
-                  </button>
-                ))}
-                {fetchingSuggestions && (
-                  <p className="text-xs text-muted-foreground">Searching...</p>
-                )}
-              </div>
-            )}
           </CardContent>
         </Card>
 

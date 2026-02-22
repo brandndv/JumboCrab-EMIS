@@ -281,22 +281,29 @@ export function DailyAttendance() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          row.status === "PRESENT"
-                            ? "success"
-                            : row.status === "LATE"
-                            ? "warning"
-                            : row.status === "INCOMPLETE"
-                            ? "info"
-                            : row.status === "ABSENT"
-                            ? "destructive"
-                            : "outline"
-                        }
-                        className="uppercase tracking-wide"
-                      >
-                        {row.status}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge
+                          variant={
+                            row.status === "PRESENT"
+                              ? "success"
+                              : row.status === "LATE"
+                              ? "warning"
+                              : row.status === "INCOMPLETE"
+                              ? "info"
+                              : row.status === "ABSENT"
+                              ? "destructive"
+                              : "outline"
+                          }
+                          className="w-fit uppercase tracking-wide"
+                        >
+                          {row.status}
+                        </Badge>
+                        {row.forgotToTimeOut ? (
+                          <Badge className="w-fit uppercase tracking-wide" variant="destructive">
+                            Forgot time out
+                          </Badge>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {formatTime(row.actualInAt)}

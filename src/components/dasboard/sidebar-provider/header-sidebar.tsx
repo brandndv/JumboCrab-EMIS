@@ -19,7 +19,7 @@ const HeaderSidebar = () => {
         >
           <Avatar className="h-8 w-8 rounded-lg">
             <AvatarImage
-              src={"/logo.png"}
+              src={"/logo.svg"}
               alt="Logo"
               className="object-contain"
             />

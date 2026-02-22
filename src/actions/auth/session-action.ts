@@ -18,7 +18,12 @@ export async function fetchSession() {
     const user = await db.user.findUnique({
       where: { userId: session.userId },
       include: {
-        employee: true,
+        employee: {
+          include: {
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
       },
     });
 
@@ -29,12 +34,20 @@ export async function fetchSession() {
       };
     }
 
+    const normalizedEmployee = user.employee
+      ? {
+          ...user.employee,
+          position: user.employee.position?.name ?? null,
+          department: user.employee.department?.name ?? null,
+        }
+      : null;
+
     const plainSession = {
       userId: user.userId,
       username: user.username,
       email: user.email,
       role: user.role,
-      employee: user.employee || null,
+      employee: normalizedEmployee,
       isLoggedIn: true,
     };
 
