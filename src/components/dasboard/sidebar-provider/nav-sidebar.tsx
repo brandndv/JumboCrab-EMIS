@@ -25,6 +25,7 @@ import {
   Handshake,
   TriangleAlertIcon,
   ScanLine,
+  Receipt,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 
@@ -255,23 +256,6 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         "employee",
       ],
     },
-    // ========== SCAN MENU ========= //
-    {
-      id: "scan",
-      label: "Scan",
-      icon: ScanLine,
-      href: `/${userRole}/scan`,
-      hasSubmenu: false,
-      // ========== SCAN ACCESS ========= //
-      roles: [
-        // "admin",
-        // "generalManager",
-        // "manager",
-        // "supervisor",
-        // "clerk",
-        "employee",
-      ],
-    },
     // ========== DEDUCTION MENU ========== //
     {
       id: "deduction",
@@ -335,17 +319,46 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         {
           label: "Violation Directory",
           path: "",
-          roles: ["admin", "manager", "supervisor", "clerk", "employee"],
+          roles: ["admin", "generalManager"],
         },
         {
-          label: "Add Violation",
+          label: "Employee Violations",
+          path: "/employee",
+          roles: ["generalManager", "manager"],
+        },
+        {
+          label: "Review Drafts",
+          path: "",
+          roles: ["manager"],
+        },
+        {
+          label: "My Drafts",
+          path: "",
+          roles: ["supervisor"],
+        },
+        {
+          label: "My Violations",
+          path: "",
+          roles: ["employee"],
+        },
+        {
+          label: "Assign Violation",
           path: "/add",
-          roles: ["admin"],
+          roles: ["manager"],
+        },
+        {
+          label: "Draft Violation",
+          path: "/add",
+          roles: ["supervisor"],
         },
       ],
       // ========== VIOLATION ACCESS ========= //
       roles: [
         "admin",
+        "generalManager",
+        "manager",
+        "supervisor",
+        "employee",
         //  "manager", "supervisor", "clerk", "employee"
       ],
     },
@@ -452,6 +465,53 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       roles: [
         "admin",
         // "generalManager", "manager", "supervisor", "clerk"
+      ],
+    },
+    // ========== PAYSLIP MENU ========= //
+    {
+      id: "payslip",
+      label: "Payslip",
+      icon: Receipt,
+      href: `/${userRole}/payslip`,
+      hasSubmenu: true,
+      subItems: [
+        {
+          label: "My Payslip",
+          path: "",
+          roles: ["employee"],
+        },
+        {
+          label: "History",
+          path: "/history",
+          roles: ["employee"],
+        },
+      ],
+
+      // ========== SCAN ACCESS ========= //
+      roles: [
+        // "admin",
+        // "generalManager",
+        // "manager",
+        // "supervisor",
+        // "clerk",
+        "employee",
+      ],
+    },
+    // ========== SCAN MENU ========= //
+    {
+      id: "scan",
+      label: "Scan",
+      icon: ScanLine,
+      href: `/${userRole}/scan`,
+      hasSubmenu: false,
+      // ========== SCAN ACCESS ========= //
+      roles: [
+        // "admin",
+        // "generalManager",
+        // "manager",
+        // "supervisor",
+        // "clerk",
+        "employee",
       ],
     },
   ];

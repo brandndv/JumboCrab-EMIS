@@ -103,17 +103,20 @@ export function FooterSidebar({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <Link href={user.role ? `/${user.role}/account` : "/sign-in"}>
-                <DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link
+                  href={user.role ? `/${user.role}/account` : "/sign-in"}
+                  className="flex w-full items-center gap-2"
+                >
                   <CircleUserRound />
                   My Account
-                </DropdownMenuItem>
-              </Link>
+                </Link>
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem asChild>
               <SignOutButton
-                className="flex flex-row gap-2"
+                className="flex w-full items-center gap-2"
                 as="button"
                 unstyled
               >

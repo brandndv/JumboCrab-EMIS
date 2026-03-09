@@ -25,6 +25,8 @@ model User {
   supervisedEmployees  Employee[]             @relation("EmployeeSupervisorUser")
   draftedViolations    EmployeeViolation[]    @relation("EmployeeViolationDraftedBy")
   reviewedViolations   EmployeeViolation[]    @relation("EmployeeViolationReviewedBy")
+  createdViolationResets EmployeeViolationReset[] @relation("EmployeeViolationResetCreatedBy")
+  createdViolationAutoResetPolicies ViolationAutoResetPolicy[] @relation("ViolationAutoResetPolicyCreatedBy")
   createdEmployeeTypes EmployeeType[]         @relation("EmployeeTypeCreatedBy")
 
   @@index([createdAt])
@@ -86,6 +88,8 @@ model Employee {
   attendances        Attendance[]
   punches            Punch[]
   employeeViolations EmployeeViolation[]
+  violationResets    EmployeeViolationReset[]
+  violationAutoResetPolicies ViolationAutoResetPolicy[]
 
   @@index([isArchived, employeeCode])
   @@index([departmentId])
@@ -405,19 +409,78 @@ model Violation {
   name                String
   description         String
   defaultStrikePoints Int      @default(1)
+  // Per employee cap for counted strikes of this violation type.
+  maxStrikesPerEmployee Int    @default(3)
   isActive            Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @default(now()) @updatedAt
 
   employeeViolations EmployeeViolation[]
+  violationResets   EmployeeViolationReset[]
+  autoResetPolicies ViolationAutoResetPolicy[]
 
   @@index([name])
+}
+
+model EmployeeViolationReset {
+  id              String    @id @default(cuid())
+  employeeId      String
+  violationId     String?
+  effectiveFrom   DateTime
+  reason          String
+  createdByUserId String?
+  autoPolicyId    String?
+  createdAt       DateTime  @default(now())
+
+  employee   Employee                  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  violation  Violation?                @relation(fields: [violationId], references: [violationId], onDelete: Cascade)
+  createdBy  User?                     @relation("EmployeeViolationResetCreatedBy", fields: [createdByUserId], references: [userId])
+  autoPolicy ViolationAutoResetPolicy? @relation("ViolationAutoResetPolicyResets", fields: [autoPolicyId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, effectiveFrom])
+  @@index([employeeId, violationId, effectiveFrom])
+  @@index([createdAt])
+}
+
+model ViolationAutoResetPolicy {
+  id                    String                 @id @default(cuid())
+  name                  String?
+  frequency             ViolationResetFrequency
+  dayOfMonth            Int                    @default(1)
+  monthOfYear           Int?
+  effectiveFrom         DateTime               @default(now())
+  nextRunAt             DateTime
+  lastRunAt             DateTime?
+  reasonTemplate        String?
+  appliesToAllEmployees Boolean                @default(true)
+  employeeId            String?
+  violationId           String?
+  isActive              Boolean                @default(true)
+  createdByUserId       String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  employee  Employee?               @relation(fields: [employeeId], references: [employeeId], onDelete: SetNull)
+  violation Violation?              @relation(fields: [violationId], references: [violationId], onDelete: SetNull)
+  createdBy User?                   @relation("ViolationAutoResetPolicyCreatedBy", fields: [createdByUserId], references: [userId], onDelete: SetNull)
+  resets    EmployeeViolationReset[] @relation("ViolationAutoResetPolicyResets")
+
+  @@index([isActive, nextRunAt])
+  @@index([employeeId])
+  @@index([violationId])
+  @@index([frequency, dayOfMonth, monthOfYear])
 }
 
 enum EmployeeViolationStatus {
   DRAFT
   APPROVED
   REJECTED
+}
+
+enum ViolationResetFrequency {
+  MONTHLY
+  QUARTERLY
+  YEARLY
 }
 
 enum ATTENDANCE_STATUS {

@@ -12,6 +12,12 @@ import {
   type EmployeeRateHistoryItem,
   updateEmployee,
 } from "@/actions/employees/employees-action";
+import {
+  getEmployeeViolationStrikeProgress,
+  getViolations,
+  type ViolationStrikeProgressRow,
+  type ViolationRow,
+} from "@/actions/violations/violations-action";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -36,14 +42,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { IdCard, Loader2, Plus } from "lucide-react";
 import EmployeeForm from "./employee-form";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 type EmployeeProfileData = EmployeeActionRecord;
 
-type TabKey = "profile" | "dailyRate" | "govIds";
+type TabKey = "profile" | "dailyRate" | "violations" | "govIds";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "profile", label: "Profile" },
   { key: "dailyRate", label: "Daily Rate" },
+  { key: "violations", label: "Employee Violations" },
   { key: "govIds", label: "Government IDs" },
 ];
 
@@ -134,6 +149,21 @@ export function EmployeeProfileTabs({
   const [rateHistoryWarning, setRateHistoryWarning] = useState<string | null>(
     null,
   );
+  const [employeeViolations, setEmployeeViolations] = useState<ViolationRow[]>(
+    [],
+  );
+  const [loadingEmployeeViolations, setLoadingEmployeeViolations] =
+    useState<boolean>(true);
+  const [employeeViolationsError, setEmployeeViolationsError] = useState<
+    string | null
+  >(null);
+  const [violationStrikeProgress, setViolationStrikeProgress] = useState<
+    ViolationStrikeProgressRow[]
+  >([]);
+  const [loadingViolationStrikeProgress, setLoadingViolationStrikeProgress] =
+    useState<boolean>(true);
+  const [violationStrikeProgressError, setViolationStrikeProgressError] =
+    useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formState, setFormState] = useState<
@@ -227,6 +257,50 @@ export function EmployeeProfileTabs({
       }
     };
     fetchContribution();
+  }, [employee.employeeId]);
+
+  useEffect(() => {
+    const fetchEmployeeViolations = async () => {
+      try {
+        setLoadingEmployeeViolations(true);
+        setEmployeeViolationsError(null);
+        const result = await getViolations({ employeeId: employee.employeeId });
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load employee violations");
+        }
+        setEmployeeViolations(result.data ?? []);
+      } catch (error) {
+        console.error("Error loading employee violations:", error);
+        setEmployeeViolationsError("Failed to load employee violations");
+      } finally {
+        setLoadingEmployeeViolations(false);
+      }
+    };
+
+    fetchEmployeeViolations();
+  }, [employee.employeeId]);
+
+  useEffect(() => {
+    const fetchViolationStrikeProgress = async () => {
+      try {
+        setLoadingViolationStrikeProgress(true);
+        setViolationStrikeProgressError(null);
+        const result = await getEmployeeViolationStrikeProgress({
+          employeeId: employee.employeeId,
+        });
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load strike progress");
+        }
+        setViolationStrikeProgress(result.data ?? []);
+      } catch (error) {
+        console.error("Error loading violation strike progress:", error);
+        setViolationStrikeProgressError("Failed to load strike progress");
+      } finally {
+        setLoadingViolationStrikeProgress(false);
+      }
+    };
+
+    fetchViolationStrikeProgress();
   }, [employee.employeeId]);
 
   const handleSaveGovIds = async () => {
@@ -340,6 +414,16 @@ export function EmployeeProfileTabs({
       maximumFractionDigits: 2,
     }).format(value);
   };
+
+  const approvedViolationsCount = employeeViolations.filter(
+    (violation) => violation.status === "APPROVED",
+  ).length;
+  const countedStrikesTotal = employeeViolations
+    .filter((violation) => violation.isCountedForStrike)
+    .reduce(
+      (total, violation) => total + Math.max(0, violation.strikePointsSnapshot),
+      0,
+    );
 
   return (
     <div className="mt-6 rounded-xl border bg-card shadow-sm">
@@ -528,6 +612,181 @@ export function EmployeeProfileTabs({
                 )}
                 {rateHistoryWarning && (
                   <p className="text-xs text-amber-600">{rateHistoryWarning}</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === "violations" && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card className="border-dashed">
+                <CardHeader className="px-4 pt-4 pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Total Records
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-2xl font-semibold">{employeeViolations.length}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-dashed">
+                <CardHeader className="px-4 pt-4 pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Approved Records
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-2xl font-semibold">{approvedViolationsCount}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-dashed">
+                <CardHeader className="px-4 pt-4 pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Counted Strikes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-2xl font-semibold">{countedStrikesTotal}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  Strike Progress Per Violation Type
+                </CardTitle>
+                <CardDescription>
+                  Counted strikes after resets, shown against each type&apos;s cap.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingViolationStrikeProgress ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading strike progress...
+                  </div>
+                ) : violationStrikeProgressError ? (
+                  <p className="text-sm text-destructive">
+                    {violationStrikeProgressError}
+                  </p>
+                ) : violationStrikeProgress.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No committed violation types yet.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {violationStrikeProgress.map((item) => {
+                      const pct = Math.min(
+                        100,
+                        Math.round(
+                          (item.currentCountedStrikes /
+                            Math.max(1, item.maxStrikesPerEmployee)) *
+                            100,
+                        ),
+                      );
+
+                      return (
+                        <div
+                          key={item.violationId}
+                          className="rounded-lg border bg-background/60 p-3"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium">
+                              {item.violationName}
+                            </p>
+                            <Badge variant="outline">{item.progressLabel}</Badge>
+                          </div>
+                          <div className="mt-2 h-2 w-full rounded bg-muted">
+                            <div
+                              className="h-2 rounded bg-primary"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Employee Violation History</CardTitle>
+                <CardDescription>
+                  Includes draft, approved, and rejected entries with strike-count status.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {loadingEmployeeViolations ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading employee violations...
+                  </div>
+                ) : employeeViolationsError ? (
+                  <p className="text-sm text-destructive">{employeeViolationsError}</p>
+                ) : employeeViolations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No violation records found for this employee.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Violation</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Strike</TableHead>
+                          <TableHead>Remarks</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {employeeViolations.map((violation) => (
+                          <TableRow key={violation.id}>
+                            <TableCell>
+                              {new Date(violation.violationDate).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              <p className="font-medium">{violation.violationName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {violation.violationDescription || "No description"}
+                              </p>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={
+                                  violation.status === "APPROVED"
+                                    ? "border-emerald-600 text-emerald-700"
+                                    : violation.status === "REJECTED"
+                                      ? "border-destructive text-destructive"
+                                      : "border-orange-600 text-orange-700"
+                                }
+                              >
+                                {violation.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {violation.isCountedForStrike
+                                ? `${violation.strikePointsSnapshot} counted`
+                                : "Not counted"}
+                            </TableCell>
+                            <TableCell className="max-w-[24rem]">
+                              <p className="line-clamp-2 text-sm text-muted-foreground">
+                                {violation.reviewRemarks ||
+                                  violation.remarks ||
+                                  "No remarks"}
+                              </p>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
