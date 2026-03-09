@@ -32,7 +32,7 @@ type ViolationDefinitionRow = {
   violationId: string;
   name: string;
   description: string;
-  defaultStrikePoints: number;
+  maxStrikesPerEmployee: number;
   isActive: boolean;
 };
 
@@ -45,7 +45,7 @@ export default function ViolationsTable() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [defaultStrikePoints, setDefaultStrikePoints] = useState(1);
+  const [maxStrikesPerEmployee, setMaxStrikesPerEmployee] = useState(3);
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -92,7 +92,7 @@ export default function ViolationsTable() {
       const payload = {
         name: name.trim(),
         description: description.trim(),
-        defaultStrikePoints,
+        maxStrikesPerEmployee,
         isActive,
       };
       const result = editingId
@@ -121,8 +121,10 @@ export default function ViolationsTable() {
     setEditingId(row.violationId);
     setName(row.name);
     setDescription(row.description || "");
-    setDefaultStrikePoints(
-      typeof row.defaultStrikePoints === "number" ? row.defaultStrikePoints : 1,
+    setMaxStrikesPerEmployee(
+      typeof row.maxStrikesPerEmployee === "number"
+        ? row.maxStrikesPerEmployee
+        : 3,
     );
     setIsActive(Boolean(row.isActive));
     setFormError(null);
@@ -134,7 +136,7 @@ export default function ViolationsTable() {
       setEditingId(null);
       setName("");
       setDescription("");
-      setDefaultStrikePoints(1);
+      setMaxStrikesPerEmployee(3);
       setIsActive(true);
       setFormError(null);
     }
@@ -205,26 +207,29 @@ export default function ViolationsTable() {
                   </div>
                   <div>
                     <Label htmlFor="violation-strike-points">
-                      Default Strike Points
+                      Max Strikes Per Employee
                     </Label>
                     <Input
                       id="violation-strike-points"
                       type="number"
-                      min={0}
+                      min={1}
                       step={1}
-                      value={defaultStrikePoints}
+                      value={maxStrikesPerEmployee}
                       onChange={(event) =>
-                        setDefaultStrikePoints(
+                        setMaxStrikesPerEmployee(
                           Math.max(
-                            0,
+                            1,
                             Math.floor(
-                              Number.parseInt(event.target.value || "0", 10) ||
-                                0,
+                              Number.parseInt(event.target.value || "1", 10) ||
+                                1,
                             ),
                           ),
                         )
                       }
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Every violation type always adds 1 strike when counted.
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
@@ -257,7 +262,7 @@ export default function ViolationsTable() {
               <TableRow>
                 <TableHead>Violation</TableHead>
                 <TableHead>Description</TableHead>
-                <TableHead>Strike Points</TableHead>
+                <TableHead>Strikes Rule</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -301,7 +306,9 @@ export default function ViolationsTable() {
                     <TableCell className="text-sm text-muted-foreground">
                       {row.description || "—"}
                     </TableCell>
-                    <TableCell>{row.defaultStrikePoints}</TableCell>
+                    <TableCell>
+                      1 strike each, max {row.maxStrikesPerEmployee}
+                    </TableCell>
                     <TableCell>
                       {row.isActive ? "Active" : "Inactive"}
                     </TableCell>

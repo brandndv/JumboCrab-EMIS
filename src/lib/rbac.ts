@@ -96,6 +96,7 @@ const RBAC_RULES: AccessRule[] = [
   { path: rolePath("admin"), allowedRoles: ADMIN_PANEL_ROLES },
   { path: rolePath("employee"), allowedRoles: EMPLOYEE_PANEL_ROLES },
   { path: rolePath("manager"), allowedRoles: ["manager"] },
+  { path: rolePath("supervisor"), allowedRoles: ["supervisor"] },
   { path: rolePath("generalManager"), allowedRoles: ["generalManager"] },
 ];
 

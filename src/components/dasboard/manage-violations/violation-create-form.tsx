@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   createEmployeeViolation,
   listEmployeesForViolation,
   listViolationDefinitions,
+  type ViolationRow,
   type ViolationDefinitionOption,
   type ViolationEmployeeOption,
 } from "@/actions/violations/violations-action";
@@ -25,6 +26,8 @@ const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
 
 type ViolationCreateFormProps = {
   initialEmployeeId?: string | null;
+  cancelPath?: string;
+  onSubmitted?: (created: ViolationRow) => void | Promise<void>;
 };
 
 const formatEmployeeLabel = (employee: ViolationEmployeeOption) =>
@@ -32,8 +35,11 @@ const formatEmployeeLabel = (employee: ViolationEmployeeOption) =>
 
 export default function ViolationCreateForm({
   initialEmployeeId,
+  cancelPath,
+  onSubmitted,
 }: ViolationCreateFormProps) {
   const router = useRouter();
+  const pathname = usePathname();
 
   const [employees, setEmployees] = useState<ViolationEmployeeOption[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
@@ -84,6 +90,11 @@ export default function ViolationCreateForm({
       ) ?? null,
     [activeDefinitions, selectedViolationId],
   );
+
+  const inferredCancelPath = useMemo(() => {
+    const rolePath = pathname.split("/").filter(Boolean)[0] || "admin";
+    return `/${rolePath}/violations`;
+  }, [pathname]);
 
   const loadEmployees = async (query: string) => {
     try {
@@ -173,6 +184,10 @@ export default function ViolationCreateForm({
       });
       if (!result.success) {
         throw new Error(result.error || "Failed to save violation assignment");
+      }
+
+      if (result.data && onSubmitted) {
+        await Promise.resolve(onSubmitted(result.data));
       }
 
       setMessage(
@@ -297,7 +312,8 @@ export default function ViolationCreateForm({
           ) : null}
           {selectedDefinition ? (
             <p className="text-xs text-muted-foreground">
-              Default strike points: {selectedDefinition.defaultStrikePoints}
+              Strike rule: 1 strike each, max{" "}
+              {selectedDefinition.maxStrikesPerEmployee} counted per employee
             </p>
           ) : null}
         </div>
@@ -332,7 +348,7 @@ export default function ViolationCreateForm({
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/admin/violations")}
+            onClick={() => router.push(cancelPath || inferredCancelPath)}
             disabled={submitting}
           >
             Cancel
