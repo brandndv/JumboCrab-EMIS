@@ -1280,7 +1280,7 @@ export default function EmployeeForm({
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="employmentStatus" className="mb-1 block">
                 Employment Status
@@ -1339,42 +1339,6 @@ export default function EmployeeForm({
                     </option>
                   ))}
                 </select>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="dailyRate" className="mb-1 block">
-                Daily Rate (PHP)
-              </Label>
-              {mode === "view" ? (
-                <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
-                  {formData.dailyRate != null
-                    ? new Intl.NumberFormat("en-PH", {
-                        style: "currency",
-                        currency: "PHP",
-                      }).format(Number(formData.dailyRate))
-                    : "-"}
-                </div>
-              ) : (
-                <div className="w-full">
-                  <Input
-                    id="dailyRate"
-                    name="dailyRate"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={
-                      formData.dailyRate == null
-                        ? ""
-                        : String(formData.dailyRate)
-                    }
-                    onChange={handleChange}
-                    className={errors.dailyRate ? "border-red-500" : ""}
-                    data-error={!!errors.dailyRate}
-                  />
-                  <FormError message={errors.dailyRate} />
-                </div>
               )}
             </div>
           </div>

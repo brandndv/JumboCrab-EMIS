@@ -51,6 +51,7 @@ export type EmployeeActionRecord = Omit<PrismaEmployee, "dailyRate"> & {
   dailyRate: number | null;
   department?: string | null;
   position?: string | null;
+  employeeType?: string | null;
 };
 
 const serializeEmployeeRecord = (
@@ -123,6 +124,7 @@ export async function getEmployees(): Promise<{
       include: {
         department: { select: { departmentId: true, name: true } },
         position: { select: { positionId: true, name: true } },
+        employeeType: { select: { employeeTypeId: true, name: true } },
       },
     });
     const normalized = employees.map(
@@ -132,6 +134,7 @@ export async function getEmployees(): Promise<{
           dailyRate: toRateNumber(emp.dailyRate),
           department: (emp as any).department?.name ?? null,
           position: (emp as any).position?.name ?? null,
+          employeeType: (emp as any).employeeType?.name ?? null,
         }) as EmployeeActionRecord,
     );
     console.log(`Fetched ${employees.length} employees`);
@@ -167,6 +170,7 @@ export async function getEmployeeById(id: string | undefined): Promise<{
       include: {
         department: { select: { departmentId: true, name: true } },
         position: { select: { positionId: true, name: true } },
+        employeeType: { select: { employeeTypeId: true, name: true } },
       },
     });
 
@@ -183,6 +187,7 @@ export async function getEmployeeById(id: string | undefined): Promise<{
           dailyRate: toRateNumber(employee.dailyRate),
           department: (employee as any).department?.name ?? null,
           position: (employee as any).position?.name ?? null,
+          employeeType: (employee as any).employeeType?.name ?? null,
         } as EmployeeActionRecord)
       : employee;
 
@@ -466,6 +471,7 @@ export async function updateEmployee(
       "civilStatus",
       "departmentId",
       "positionId",
+      "employeeTypeId",
       "supervisorUserId",
       "employmentStatus",
       "currentStatus",

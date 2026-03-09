@@ -1,7 +1,18 @@
 "use server";
 
-import type { Prisma } from "@prisma/client";
+import {
+  Roles,
+  type EmployeeViolationStatus,
+  type Prisma,
+} from "@prisma/client";
+import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+
+const EMPLOYEE_VIOLATION_STATUS = {
+  DRAFT: "DRAFT",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+} as const;
 
 type EmployeeViolationRecord = Prisma.EmployeeViolationGetPayload<{
   include: {
@@ -35,6 +46,12 @@ export type ViolationRow = {
   violationDescription?: string | null;
   violationDate: string;
   strikePointsSnapshot: number;
+  status: EmployeeViolationStatus;
+  draftedById?: string | null;
+  submittedAt?: string | null;
+  reviewedById?: string | null;
+  reviewedAt?: string | null;
+  reviewRemarks?: string | null;
   isAcknowledged: boolean;
   acknowledgedAt?: string | null;
   isCountedForStrike: boolean;
@@ -74,6 +91,15 @@ const parseDateInput = (value: string) => {
   return parsed;
 };
 
+const canManageViolationDefinitions = (role: Roles | undefined) =>
+  role === Roles.Admin || role === Roles.GeneralManager || role === Roles.Manager;
+
+const canDraftViolations = (role: Roles | undefined) =>
+  role === Roles.Supervisor || canManageViolationDefinitions(role);
+
+const canReviewViolations = (role: Roles | undefined) =>
+  canManageViolationDefinitions(role);
+
 const serializeViolation = (violation: EmployeeViolationRecord): ViolationRow => {
   const employeeName = [violation.employee.firstName, violation.employee.lastName]
     .filter(Boolean)
@@ -90,6 +116,12 @@ const serializeViolation = (violation: EmployeeViolationRecord): ViolationRow =>
     violationDescription: violation.violation.description ?? null,
     violationDate: toIsoString(violation.violationDate),
     strikePointsSnapshot: violation.strikePointsSnapshot,
+    status: violation.status,
+    draftedById: violation.draftedById ?? null,
+    submittedAt: toIsoString(violation.submittedAt) || null,
+    reviewedById: violation.reviewedById ?? null,
+    reviewedAt: toIsoString(violation.reviewedAt) || null,
+    reviewRemarks: violation.reviewRemarks ?? null,
     isAcknowledged: Boolean(violation.isAcknowledged),
     acknowledgedAt: toIsoString(violation.acknowledgedAt) || null,
     isCountedForStrike: Boolean(violation.isCountedForStrike),
@@ -226,6 +258,11 @@ export async function createViolationDefinition(input: {
   error?: string;
 }> {
   try {
+    const session = await getSession();
+    if (!session?.isLoggedIn || !canManageViolationDefinitions(session.role)) {
+      return { success: false, error: "You are not allowed to create violation definitions." };
+    }
+
     const name = typeof input.name === "string" ? input.name.trim() : "";
     const description =
       typeof input.description === "string" ? input.description.trim() : "";
@@ -302,6 +339,11 @@ export async function updateViolationDefinition(input: {
   error?: string;
 }> {
   try {
+    const session = await getSession();
+    if (!session?.isLoggedIn || !canManageViolationDefinitions(session.role)) {
+      return { success: false, error: "You are not allowed to update violation definitions." };
+    }
+
     const violationId =
       typeof input.violationId === "string" ? input.violationId.trim() : "";
     const name = typeof input.name === "string" ? input.name.trim() : "";
@@ -482,6 +524,11 @@ export async function createEmployeeViolation(input: {
   error?: string;
 }> {
   try {
+    const session = await getSession();
+    if (!session?.isLoggedIn || !canDraftViolations(session.role)) {
+      return { success: false, error: "You are not allowed to create employee violations." };
+    }
+
     const employeeId =
       typeof input.employeeId === "string" ? input.employeeId.trim() : "";
     const violationId =
@@ -506,6 +553,11 @@ export async function createEmployeeViolation(input: {
         ? input.voidReason.trim()
         : null;
     const acknowledgedAt = isAcknowledged ? new Date() : null;
+    const createdStatus =
+      session.role === Roles.Supervisor
+        ? EMPLOYEE_VIOLATION_STATUS.DRAFT
+        : EMPLOYEE_VIOLATION_STATUS.APPROVED;
+    const createdAtNow = new Date();
 
     if (!employeeId) return { success: false, error: "employeeId is required" };
     if (!violationId) return { success: false, error: "violationId is required" };
@@ -551,6 +603,24 @@ export async function createEmployeeViolation(input: {
         violationId,
         violationDate,
         strikePointsSnapshot: violation.defaultStrikePoints,
+        status: createdStatus,
+        draftedById: session.userId ?? null,
+        submittedAt:
+          createdStatus === EMPLOYEE_VIOLATION_STATUS.APPROVED
+            ? createdAtNow
+            : null,
+        reviewedById:
+          createdStatus === EMPLOYEE_VIOLATION_STATUS.APPROVED
+            ? session.userId ?? null
+            : null,
+        reviewedAt:
+          createdStatus === EMPLOYEE_VIOLATION_STATUS.APPROVED
+            ? createdAtNow
+            : null,
+        reviewRemarks:
+          createdStatus === EMPLOYEE_VIOLATION_STATUS.APPROVED
+            ? "Directly approved by management"
+            : null,
         isAcknowledged,
         acknowledgedAt,
         isCountedForStrike,
@@ -629,5 +699,84 @@ export async function setEmployeeViolationAcknowledged(input: {
   } catch (error) {
     console.error("Error updating violation acknowledgement:", error);
     return { success: false, error: "Failed to update acknowledgement." };
+  }
+}
+
+export async function reviewEmployeeViolation(input: {
+  id: string;
+  decision: "APPROVED" | "REJECTED";
+  reviewRemarks?: string | null;
+}): Promise<{
+  success: boolean;
+  data?: ViolationRow;
+  error?: string;
+}> {
+  try {
+    const session = await getSession();
+    if (!session?.isLoggedIn || !canReviewViolations(session.role)) {
+      return { success: false, error: "You are not allowed to review violations." };
+    }
+
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    const decision = input.decision;
+    const reviewRemarks =
+      typeof input.reviewRemarks === "string" && input.reviewRemarks.trim()
+        ? input.reviewRemarks.trim()
+        : null;
+
+    if (!id) return { success: false, error: "id is required" };
+    if (
+      decision !== EMPLOYEE_VIOLATION_STATUS.APPROVED &&
+      decision !== EMPLOYEE_VIOLATION_STATUS.REJECTED
+    ) {
+      return { success: false, error: "decision must be APPROVED or REJECTED" };
+    }
+
+    const existing = await db.employeeViolation.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!existing) {
+      return { success: false, error: "Violation draft not found" };
+    }
+    if (existing.status !== EMPLOYEE_VIOLATION_STATUS.DRAFT) {
+      return { success: false, error: "Only drafts can be reviewed" };
+    }
+
+    const reviewed = await db.employeeViolation.update({
+      where: { id },
+      data: {
+        status: decision,
+        reviewedById: session.userId ?? null,
+        reviewedAt: new Date(),
+        reviewRemarks,
+        submittedAt: new Date(),
+        isCountedForStrike:
+          decision === EMPLOYEE_VIOLATION_STATUS.APPROVED ? true : false,
+      },
+      include: {
+        employee: {
+          select: {
+            employeeId: true,
+            firstName: true,
+            lastName: true,
+            employeeCode: true,
+            img: true,
+          },
+        },
+        violation: {
+          select: {
+            violationId: true,
+            name: true,
+            description: true,
+          },
+        },
+      },
+    });
+
+    return { success: true, data: serializeViolation(reviewed) };
+  } catch (error) {
+    console.error("Error reviewing employee violation:", error);
+    return { success: false, error: "Failed to review violation." };
   }
 }

@@ -175,7 +175,11 @@ export default function ViolationCreateForm({
         throw new Error(result.error || "Failed to save violation assignment");
       }
 
-      setMessage("Violation assigned successfully.");
+      setMessage(
+        result.data?.status === "DRAFT"
+          ? "Violation draft submitted for manager approval."
+          : "Violation assigned successfully.",
+      );
       setRemarks("");
       setViolationDate(toDateInputValue(new Date()));
     } catch (err) {

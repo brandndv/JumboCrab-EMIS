@@ -23,6 +23,9 @@ model User {
   updatedContributions EmployeeContribution[] @relation("EmployeeContributionUpdatedBy")
   // Users who supervise employees
   supervisedEmployees  Employee[]             @relation("EmployeeSupervisorUser")
+  draftedViolations    EmployeeViolation[]    @relation("EmployeeViolationDraftedBy")
+  reviewedViolations   EmployeeViolation[]    @relation("EmployeeViolationReviewedBy")
+  createdEmployeeTypes EmployeeType[]         @relation("EmployeeTypeCreatedBy")
 
   @@index([createdAt])
   @@index([role, username])
@@ -68,9 +71,11 @@ model Employee {
   departmentId                 String?
   positionId                   String?
   supervisorUserId             String?
+  employeeTypeId               String?
   department                   Department?           @relation(fields: [departmentId], references: [departmentId])
   position                     Position?             @relation(fields: [positionId], references: [positionId])
   supervisorUser               User?                 @relation("EmployeeSupervisorUser", fields: [supervisorUserId], references: [userId])
+  employeeType                 EmployeeType?         @relation(fields: [employeeTypeId], references: [employeeTypeId])
   governmentId                 GovernmentId?         @relation("EmployeeGovernmentId")
   contribution                 EmployeeContribution?
   rateHistory                  EmployeeRateHistory[]
@@ -85,6 +90,21 @@ model Employee {
   @@index([isArchived, employeeCode])
   @@index([departmentId])
   @@index([positionId])
+  @@index([employeeTypeId])
+}
+
+model EmployeeType {
+  employeeTypeId   String   @id @default(cuid())
+  name             String   @unique
+  description      String?
+  isActive         Boolean  @default(true)
+  createdByUserId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdBy        User?    @relation("EmployeeTypeCreatedBy", fields: [createdByUserId], references: [userId])
+  employees        Employee[]
+
+  @@index([isActive, name])
 }
 
 // ======== ORG STRUCTURE ========= //
@@ -353,6 +373,12 @@ model EmployeeViolation {
   violationId          String
   violationDate        DateTime
   strikePointsSnapshot Int       @default(1)
+  status               EmployeeViolationStatus @default(DRAFT)
+  draftedById          String?
+  submittedAt          DateTime?
+  reviewedById         String?
+  reviewedAt           DateTime?
+  reviewRemarks        String?
   isAcknowledged       Boolean   @default(false)
   acknowledgedAt       DateTime?
   remarks              String?
@@ -361,11 +387,16 @@ model EmployeeViolation {
   voidReason           String?
   createdAt            DateTime  @default(now())
 
-  violation Violation @relation(fields: [violationId], references: [violationId], onDelete: Cascade)
-  employee  Employee  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  violation  Violation @relation(fields: [violationId], references: [violationId], onDelete: Cascade)
+  employee   Employee  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  draftedBy  User?     @relation("EmployeeViolationDraftedBy", fields: [draftedById], references: [userId])
+  reviewedBy User?     @relation("EmployeeViolationReviewedBy", fields: [reviewedById], references: [userId])
 
   @@index([employeeId, violationDate])
   @@index([violationId])
+  @@index([status, violationDate])
+  @@index([draftedById])
+  @@index([reviewedById])
   @@index([isCountedForStrike, voidedAt])
 }
 
@@ -381,6 +412,12 @@ model Violation {
   employeeViolations EmployeeViolation[]
 
   @@index([name])
+}
+
+enum EmployeeViolationStatus {
+  DRAFT
+  APPROVED
+  REJECTED
 }
 
 enum ATTENDANCE_STATUS {
