@@ -1,10 +1,22 @@
 "use server";
 
-import { ATTENDANCE_STATUS, PUNCH_TYPE, type Attendance, type Punch } from "@prisma/client";
+import {
+  ATTENDANCE_STATUS,
+  PUNCH_TYPE,
+  type Attendance,
+  type Prisma,
+  type Punch,
+} from "@prisma/client";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import {
+  computeBreakDeduction,
+  computeLateMinutes,
+  computePayableAmountFromNetMinutes,
+  computePayrollVariance,
+  computeRatePerMinute,
+  computeScheduledPaidMinutes,
   createPunchAndMaybeRecompute,
   getExpectedShiftForDate,
   recomputeAttendanceForDay,
@@ -17,6 +29,7 @@ type EmployeeSummary = {
   employeeCode: string;
   firstName: string;
   lastName: string;
+  dailyRate?: unknown;
   department?: { name: string | null } | null;
   position?: { name: string | null } | null;
 };
@@ -24,7 +37,10 @@ type EmployeeSummary = {
 // Attendance row loaded from DB with selected relation data.
 type AttendanceRecord = Attendance & {
   employee?: EmployeeSummary | null;
-  expectedShift?: { name: string | null } | null;
+  expectedShift?: {
+    name: string | null;
+    breakMinutesUnpaid?: number | null;
+  } | null;
 };
 
 // Punch row loaded from DB with selected relation data.
@@ -44,8 +60,14 @@ type AttendanceOverrides = {
   expectedShiftName?: string | null;
   scheduledStartMinutes?: number | null;
   scheduledEndMinutes?: number | null;
+  scheduledBreakMinutes?: number | null;
   breakCount?: number;
   breakMinutes?: number;
+  deductedBreakMinutes?: number;
+  netWorkedMinutes?: number | null;
+  dailyRate?: unknown;
+  ratePerMinute?: number | null;
+  payableAmount?: number | null;
   punchesCount?: number;
   lateMinutes?: number | null;
   undertimeMinutes?: number | null;
@@ -56,7 +78,7 @@ type AttendanceOverrides = {
 // Checks whether a key exists on overrides, even if the value is null.
 const hasOverride = (
   overrides: AttendanceOverrides | undefined,
-  key: keyof AttendanceOverrides
+  key: keyof AttendanceOverrides,
 ) => Boolean(overrides && Object.prototype.hasOwnProperty.call(overrides, key));
 
 // Normalizes Date/string values into ISO strings for API responses.
@@ -76,6 +98,133 @@ const toStringOrNull = (value: unknown) => {
     return (value as { toString: () => string }).toString();
   }
   return null;
+};
+
+// Safely converts Decimal/number/string-like values to number for calculations.
+const toNumberOrNull = (value: unknown) => {
+  if (value === null || typeof value === "undefined") return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof (value as { toString?: () => string })?.toString === "function") {
+    const parsed = Number.parseFloat(
+      (value as { toString: () => string }).toString(),
+    );
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const isMissingRateHistoryTableError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+  const maybeCode = (error as { code?: unknown }).code;
+  return maybeCode === "P2021";
+};
+
+const buildRateLookupKey = (employeeId: string, workDate: Date | string) =>
+  `${employeeId}::${typeof workDate === "string" ? workDate : workDate.toISOString()}`;
+
+const resolveEffectiveDailyRates = async ({
+  employeeDates,
+  fallbackDailyRates,
+}: {
+  employeeDates: Map<string, Date[]>;
+  fallbackDailyRates?: Map<string, unknown>;
+}) => {
+  const employeeIds = [...employeeDates.keys()];
+  if (employeeIds.length === 0) return new Map<string, number | null>();
+
+  const allDates = [...employeeDates.values()].flat();
+  if (allDates.length === 0) return new Map<string, number | null>();
+
+  const maxWorkDate = allDates.reduce(
+    (latest, current) => (current.getTime() > latest.getTime() ? current : latest),
+    allDates[0],
+  );
+
+  let historyRows: Array<{
+    employeeId: string;
+    dailyRate: unknown;
+    effectiveFrom: Date;
+  }> = [];
+  try {
+    historyRows = await db.employeeRateHistory.findMany({
+      where: {
+        employeeId: { in: employeeIds },
+        effectiveFrom: { lte: maxWorkDate },
+      },
+      orderBy: [{ employeeId: "asc" }, { effectiveFrom: "asc" }],
+      select: {
+        employeeId: true,
+        dailyRate: true,
+        effectiveFrom: true,
+      },
+    });
+  } catch (error) {
+    if (!isMissingRateHistoryTableError(error)) {
+      throw error;
+    }
+    console.warn(
+      "EmployeeRateHistory table is not available yet. Falling back to Employee.dailyRate.",
+    );
+  }
+
+  const historyByEmployee = new Map<
+    string,
+    { effectiveFrom: Date; dailyRate: unknown }[]
+  >();
+  historyRows.forEach((row) => {
+    if (!historyByEmployee.has(row.employeeId)) {
+      historyByEmployee.set(row.employeeId, []);
+    }
+    historyByEmployee.get(row.employeeId)!.push({
+      effectiveFrom: row.effectiveFrom,
+      dailyRate: row.dailyRate,
+    });
+  });
+
+  const resolved = new Map<string, number | null>();
+
+  employeeDates.forEach((dates, id) => {
+    const uniqueDateIsos = [...new Set(dates.map((date) => date.toISOString()))].sort();
+    const history = historyByEmployee.get(id) ?? [];
+    const fallbackRate = toNumberOrNull(fallbackDailyRates?.get(id));
+
+    let historyIndex = 0;
+    let currentRate: number | null = history.length === 0 ? fallbackRate : null;
+
+    uniqueDateIsos.forEach((iso) => {
+      const dateMs = new Date(iso).getTime();
+      while (
+        historyIndex < history.length &&
+        history[historyIndex].effectiveFrom.getTime() <= dateMs
+      ) {
+        currentRate = toNumberOrNull(history[historyIndex].dailyRate);
+        historyIndex += 1;
+      }
+
+      const rate =
+        currentRate ?? (history.length === 0 ? fallbackRate : null);
+
+      resolved.set(buildRateLookupKey(id, iso), rate);
+    });
+  });
+
+  return resolved;
+};
+
+const formatWorkedHoursAndMinutes = (minutes: number | null | undefined) => {
+  if (minutes == null) return null;
+  const normalizedMinutes = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(normalizedMinutes / 60);
+  const mins = normalizedMinutes % 60;
+  if (hours === 0) return `${mins} min${mins === 1 ? "" : "s"}`;
+  if (mins === 0) return `${hours}hr`;
+  return `${hours}hr ${mins} min${mins === 1 ? "" : "s"}`;
 };
 
 // Canonical serializer for punch records returned by server actions.
@@ -101,59 +250,83 @@ const serializePunchNullable = (punch: PunchRecord | null) =>
 // Merges DB values with computed overrides so callers get a stable payload shape.
 const serializeAttendance = (
   record: AttendanceRecord,
-  overrides?: AttendanceOverrides
+  overrides?: AttendanceOverrides,
 ) => {
+  // Override precedence:
+  // 1) If an override key exists, use it (including explicit null to clear a value).
+  // 2) If no override key exists, keep the persisted DB value.
   const actualInAt = hasOverride(overrides, "actualInAt")
-    ? overrides?.actualInAt ?? null
-    : record.actualInAt ?? null;
+    ? (overrides?.actualInAt ?? null)
+    : (record.actualInAt ?? null);
   const actualOutAt = hasOverride(overrides, "actualOutAt")
-    ? overrides?.actualOutAt ?? null
-    : record.actualOutAt ?? null;
+    ? (overrides?.actualOutAt ?? null)
+    : (record.actualOutAt ?? null);
   const forgotToTimeOut = hasOverride(overrides, "forgotToTimeOut")
     ? Boolean(overrides?.forgotToTimeOut)
     : false;
   const breakStartAt = hasOverride(overrides, "breakStartAt")
-    ? overrides?.breakStartAt ?? null
+    ? (overrides?.breakStartAt ?? null)
     : null;
   const breakEndAt = hasOverride(overrides, "breakEndAt")
-    ? overrides?.breakEndAt ?? null
+    ? (overrides?.breakEndAt ?? null)
     : null;
   const status = hasOverride(overrides, "status")
-    ? overrides?.status ?? record.status
+    ? (overrides?.status ?? record.status)
     : record.status;
   const expectedShiftId = hasOverride(overrides, "expectedShiftId")
-    ? overrides?.expectedShiftId ?? null
-    : record.expectedShiftId ?? null;
+    ? (overrides?.expectedShiftId ?? null)
+    : (record.expectedShiftId ?? null);
   const expectedShiftName = hasOverride(overrides, "expectedShiftName")
-    ? overrides?.expectedShiftName ?? null
-    : record.expectedShift?.name ?? null;
+    ? (overrides?.expectedShiftName ?? null)
+    : (record.expectedShift?.name ?? null);
   const scheduledStartMinutes = hasOverride(overrides, "scheduledStartMinutes")
-    ? overrides?.scheduledStartMinutes ?? null
-    : record.scheduledStartMinutes ?? null;
+    ? (overrides?.scheduledStartMinutes ?? null)
+    : (record.scheduledStartMinutes ?? null);
   const scheduledEndMinutes = hasOverride(overrides, "scheduledEndMinutes")
-    ? overrides?.scheduledEndMinutes ?? null
-    : record.scheduledEndMinutes ?? null;
+    ? (overrides?.scheduledEndMinutes ?? null)
+    : (record.scheduledEndMinutes ?? null);
+  const scheduledBreakMinutes = hasOverride(overrides, "scheduledBreakMinutes")
+    ? (overrides?.scheduledBreakMinutes ?? null)
+    : (record.expectedShift?.breakMinutesUnpaid ?? null);
   const breakCount = hasOverride(overrides, "breakCount")
-    ? overrides?.breakCount ?? 0
-    : record.breakCount ?? 0;
+    ? (overrides?.breakCount ?? 0)
+    : (record.breakCount ?? 0);
   const breakMinutes = hasOverride(overrides, "breakMinutes")
-    ? overrides?.breakMinutes ?? 0
-    : record.breakMinutes ?? 0;
+    ? (overrides?.breakMinutes ?? 0)
+    : (record.breakMinutes ?? 0);
+  const deductedBreakMinutes = hasOverride(overrides, "deductedBreakMinutes")
+    ? Math.max(0, overrides?.deductedBreakMinutes ?? 0)
+    : Math.max(0, record.deductedBreakMinutes ?? 0);
+  const dailyRate = hasOverride(overrides, "dailyRate")
+    ? toNumberOrNull(overrides?.dailyRate ?? null)
+    : toNumberOrNull(record.employee?.dailyRate ?? null);
+  const ratePerMinute = hasOverride(overrides, "ratePerMinute")
+    ? (overrides?.ratePerMinute ?? null)
+    : null;
+  const payableAmount = hasOverride(overrides, "payableAmount")
+    ? (overrides?.payableAmount ?? null)
+    : null;
   const punchesCount = hasOverride(overrides, "punchesCount")
-    ? overrides?.punchesCount ?? 0
+    ? (overrides?.punchesCount ?? 0)
     : 0;
   const lateMinutes = hasOverride(overrides, "lateMinutes")
-    ? overrides?.lateMinutes ?? null
-    : record.lateMinutes ?? null;
+    ? (overrides?.lateMinutes ?? null)
+    : (record.lateMinutes ?? null);
   const undertimeMinutes = hasOverride(overrides, "undertimeMinutes")
-    ? overrides?.undertimeMinutes ?? null
-    : record.undertimeMinutes ?? null;
+    ? (overrides?.undertimeMinutes ?? null)
+    : (record.undertimeMinutes ?? null);
   const overtimeMinutesRaw = hasOverride(overrides, "overtimeMinutesRaw")
-    ? overrides?.overtimeMinutesRaw ?? null
-    : record.overtimeMinutesRaw ?? null;
+    ? (overrides?.overtimeMinutesRaw ?? null)
+    : (record.overtimeMinutesRaw ?? null);
   const workedMinutes = hasOverride(overrides, "workedMinutes")
-    ? overrides?.workedMinutes ?? null
-    : record.workedMinutes ?? null;
+    ? (overrides?.workedMinutes ?? null)
+    : (record.workedMinutes ?? null);
+  const netWorkedMinutes = hasOverride(overrides, "netWorkedMinutes")
+    ? (overrides?.netWorkedMinutes ?? null)
+    : (record.netWorkedMinutes ?? null);
+  const workedHoursAndMinutes = formatWorkedHoursAndMinutes(workedMinutes);
+  const netWorkedHoursAndMinutes =
+    formatWorkedHoursAndMinutes(netWorkedMinutes);
 
   return {
     id: record.id,
@@ -164,6 +337,7 @@ const serializeAttendance = (
     expectedShiftName,
     scheduledStartMinutes,
     scheduledEndMinutes,
+    scheduledBreakMinutes,
     paidHoursPerDay: toStringOrNull(record.paidHoursPerDay),
     actualInAt: toIsoString(actualInAt),
     actualOutAt: toIsoString(actualOutAt),
@@ -171,7 +345,14 @@ const serializeAttendance = (
     breakStartAt: toIsoString(breakStartAt),
     breakEndAt: toIsoString(breakEndAt),
     workedMinutes,
+    workedHoursAndMinutes,
+    dailyRate,
+    ratePerMinute,
+    payableAmount,
     breakMinutes,
+    deductedBreakMinutes,
+    netWorkedMinutes,
+    netWorkedHoursAndMinutes,
     breakCount,
     lateMinutes,
     undertimeMinutes,
@@ -203,7 +384,7 @@ const computeBreakStats = (punches: Array<PunchRecord | Punch>) => {
         breakCount += 1;
         breakMinutes += Math.max(
           0,
-          Math.round((p.punchTime.getTime() - breakStart.getTime()) / 60000)
+          Math.round((p.punchTime.getTime() - breakStart.getTime()) / 60000),
         );
         breakEndAt = p.punchTime;
         breakStart = null;
@@ -227,6 +408,38 @@ const isIpAllowed = (ip: string | null, raw: string | undefined) => {
 // Set ALLOWED_SELF_PUNCH_IPS to enforce a specific allowlist.
 const isSelfPunchIpAllowed = (ip: string | null) =>
   isIpAllowed(ip, process.env.ALLOWED_SELF_PUNCH_IPS);
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const toDayKey = (date: Date) =>
+  date.toLocaleDateString("en-CA", { timeZone: TZ });
+
+const parseDateInput = (value: string) => {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const getRangeBounds = (start: Date, end?: Date) => {
+  const rangeStart = startOfZonedDay(start);
+  const rangeEnd = end ? endOfZonedDay(end) : endOfZonedDay(start);
+  return { rangeStart, rangeEnd };
+};
+
+const isAttendanceLockedForMoment = async (
+  employeeId: string,
+  punchTime: Date,
+) => {
+  const dayStart = startOfZonedDay(punchTime);
+  const dayEnd = endOfZonedDay(punchTime);
+  const attendance = await db.attendance.findFirst({
+    where: {
+      employeeId,
+      workDate: { gte: dayStart, lt: dayEnd },
+    },
+    select: { isLocked: true },
+  });
+  return Boolean(attendance?.isLocked);
+};
 
 export async function listAttendance(input?: {
   start?: string | null;
@@ -274,8 +487,8 @@ export async function listAttendance(input?: {
     ) {
       where.status = status as ATTENDANCE_STATUS;
     }
-
-    // Base attendance rows from DB.
+    //#1
+    // Base attendance rows from DB ( record.blank ).
     const records = await db.attendance.findMany({
       where,
       orderBy: { workDate: "desc" },
@@ -286,29 +499,52 @@ export async function listAttendance(input?: {
             employeeCode: true,
             firstName: true,
             lastName: true,
+            dailyRate: true,
             department: { select: { name: true } },
             position: { select: { name: true } },
           },
         },
-        expectedShift: { select: { name: true } },
+        expectedShift: { select: { name: true, breakMinutesUnpaid: true } },
       },
     });
 
-    // Enrich each row with punch-derived values and expected schedule values.
+    const recordDatesByEmployee = new Map<string, Date[]>();
+    const recordFallbackRates = new Map<string, unknown>();
+    records.forEach((record) => {
+      if (!recordDatesByEmployee.has(record.employeeId)) {
+        recordDatesByEmployee.set(record.employeeId, []);
+      }
+      recordDatesByEmployee.get(record.employeeId)!.push(record.workDate);
+      if (!recordFallbackRates.has(record.employeeId)) {
+        recordFallbackRates.set(record.employeeId, record.employee?.dailyRate ?? null);
+      }
+    });
+    const effectiveDailyRates = await resolveEffectiveDailyRates({
+      employeeDates: recordDatesByEmployee,
+      fallbackDailyRates: recordFallbackRates,
+    });
+
+    //#2
+    // Enrich each row with punch values and expected schedule values.
     const enriched = await Promise.all(
       records.map(async (record) => {
+        const effectiveDailyRate =
+          effectiveDailyRates.get(
+            buildRateLookupKey(record.employeeId, record.workDate),
+          ) ?? toNumberOrNull(record.employee?.dailyRate ?? null);
+
         // Rebuild local day boundaries in configured timezone before querying punches.
         const localDisplay = new Date(
-          new Date(record.workDate).toLocaleString("en-US", { timeZone: TZ })
+          new Date(record.workDate).toLocaleString("en-US", { timeZone: TZ }),
         );
         localDisplay.setHours(0, 0, 0, 0);
-        const dayStart = startOfZonedDay(localDisplay);
-        const dayEnd = endOfZonedDay(localDisplay);
+        const dayStart = startOfZonedDay(localDisplay); //declare day start - 00:00
+        const dayEnd = endOfZonedDay(localDisplay); // 23:59
 
         const punches = await db.punch.findMany({
           where: {
             employeeId: record.employeeId,
-            punchTime: { gte: dayStart, lt: dayEnd },
+            punchTime: { gte: dayStart, lt: dayEnd }, // include greater than or equals to day start and less than dayEnd
           },
           orderBy: { punchTime: "asc" },
         });
@@ -317,15 +553,18 @@ export async function listAttendance(input?: {
 
         const expected = await getExpectedShiftForDate(
           record.employeeId,
-          dayStart
+          dayStart,
         );
         const expectedStart = expected.scheduledStartMinutes ?? null;
         const expectedEnd = expected.scheduledEndMinutes ?? null;
+        const scheduledBreakMinutes =
+          expected.shift?.breakMinutesUnpaid ?? null;
 
         const firstClockIn =
           punches.find((p) => p.punchType === "TIME_IN") ?? null;
         const lastClockOut =
-          [...punches].reverse().find((p) => p.punchType === "TIME_OUT") ?? null;
+          [...punches].reverse().find((p) => p.punchType === "TIME_OUT") ??
+          null;
         // Synthetic TIME_OUT generated by auto-timeout logic in lib/attendance.ts.
         const autoTimeoutPunch =
           [...punches]
@@ -333,7 +572,7 @@ export async function listAttendance(input?: {
             .find(
               (p) =>
                 p.punchType === PUNCH_TYPE.TIME_OUT &&
-                p.source === "AUTO_TIMEOUT"
+                p.source === "AUTO_TIMEOUT",
             ) ?? null;
 
         const actualInAt = firstClockIn?.punchTime ?? record.actualInAt ?? null;
@@ -346,24 +585,50 @@ export async function listAttendance(input?: {
           : null;
 
         const lateMinutes =
-          expectedStart != null && actualInMinutes != null
-            ? Math.max(0, actualInMinutes - expectedStart)
-            : record.lateMinutes ?? null;
-        const undertimeMinutes =
-          expectedEnd != null && actualOutMinutes != null
-            ? Math.max(0, expectedEnd - actualOutMinutes)
-            : null;
-        const overtimeMinutesRaw =
-          expectedEnd != null && actualOutMinutes != null
-            ? Math.max(0, actualOutMinutes - expectedEnd)
-            : null;
+          computeLateMinutes(expectedStart, actualInMinutes) ??
+          record.lateMinutes ??
+          null;
         const workedMinutes =
           actualInAt && actualOutAt
             ? Math.max(
                 0,
-                Math.round((actualOutAt.getTime() - actualInAt.getTime()) / 60000)
+                Math.round(
+                  (actualOutAt.getTime() - actualInAt.getTime()) / 60000,
+                ),
               )
             : null;
+        const mergedBreakMinutes = breakMinutes || record.breakMinutes || 0;
+        const { deductedBreakMinutes, netWorkedMinutes } =
+          computeBreakDeduction({
+            workedMinutes,
+            actualBreakMinutes: mergedBreakMinutes,
+            scheduledBreakMinutes,
+            breakStartMinutes: expected.shift?.breakStartMinutes ?? null,
+            breakEndMinutes: expected.shift?.breakEndMinutes ?? null,
+            actualInMinutes,
+            actualOutMinutes,
+          });
+        const scheduledPaidMinutes = computeScheduledPaidMinutes({
+          paidHoursPerDay: expected.shift?.paidHoursPerDay ?? record.paidHoursPerDay,
+          scheduledStartMinutes: expectedStart,
+          scheduledEndMinutes: expectedEnd,
+          scheduledBreakMinutes,
+        });
+        const { undertimeMinutes, overtimeMinutesRaw } =
+          netWorkedMinutes != null && scheduledPaidMinutes != null
+            ? computePayrollVariance({
+                netWorkedMinutes,
+                scheduledPaidMinutes,
+              })
+            : { undertimeMinutes: null, overtimeMinutesRaw: null };
+        const ratePerMinute = computeRatePerMinute({
+          dailyRate: effectiveDailyRate,
+          scheduledPaidMinutes,
+        });
+        const payableAmount = computePayableAmountFromNetMinutes({
+          netWorkedMinutes,
+          ratePerMinute,
+        });
         const normalizedStatus =
           !expected.shift && !actualInAt && !actualOutAt && punches.length === 0
             ? ATTENDANCE_STATUS.REST
@@ -380,7 +645,12 @@ export async function listAttendance(input?: {
           status: normalizedStatus,
           forgotToTimeOut,
           breakCount: breakCount || record.breakCount || 0,
-          breakMinutes: breakMinutes || record.breakMinutes || 0,
+          breakMinutes: mergedBreakMinutes,
+          deductedBreakMinutes,
+          netWorkedMinutes,
+          dailyRate: effectiveDailyRate,
+          ratePerMinute,
+          payableAmount,
           breakStartAt,
           breakEndAt,
           actualInAt,
@@ -390,13 +660,14 @@ export async function listAttendance(input?: {
             expected.shift?.name ?? record.expectedShift?.name ?? null,
           scheduledStartMinutes: expectedStart,
           scheduledEndMinutes: expectedEnd,
+          scheduledBreakMinutes,
           punchesCount: punches.length,
           lateMinutes,
           undertimeMinutes,
           overtimeMinutesRaw,
           workedMinutes,
         });
-      })
+      }),
     );
 
     // Include-all mode (single day only): include employees with no attendance row yet.
@@ -410,6 +681,7 @@ export async function listAttendance(input?: {
           employeeCode: true,
           firstName: true,
           lastName: true,
+          dailyRate: true,
           department: { select: { name: true } },
           position: { select: { name: true } },
         },
@@ -422,6 +694,17 @@ export async function listAttendance(input?: {
       const dayStart = startOfZonedDay(parsedStart);
       const dayEnd = endOfZonedDay(parsedStart);
 
+      const includeAllDatesByEmployee = new Map<string, Date[]>();
+      const includeAllFallbackRates = new Map<string, unknown>();
+      employees.forEach((emp) => {
+        includeAllDatesByEmployee.set(emp.employeeId, [dayStart]);
+        includeAllFallbackRates.set(emp.employeeId, emp.dailyRate ?? null);
+      });
+      const includeAllEffectiveRates = await resolveEffectiveDailyRates({
+        employeeDates: includeAllDatesByEmployee,
+        fallbackDailyRates: includeAllFallbackRates,
+      });
+
       const employeeIds = employees.map((employee) => employee.employeeId);
       const punches = await db.punch.findMany({
         where: {
@@ -433,17 +716,28 @@ export async function listAttendance(input?: {
 
       const breakMap = new Map<
         string,
-        { count: number; minutes: number; startAt: string | null; endAt: string | null }
+        {
+          count: number;
+          minutes: number;
+          startAt: string | null;
+          endAt: string | null;
+        }
       >();
       const forgotTimeoutMap = new Map<string, boolean>();
       for (const empId of employeeIds) {
-        breakMap.set(empId, { count: 0, minutes: 0, startAt: null, endAt: null });
+        breakMap.set(empId, {
+          count: 0,
+          minutes: 0,
+          startAt: null,
+          endAt: null,
+        });
         forgotTimeoutMap.set(empId, false);
       }
 
       const groupedPunches = new Map<string, typeof punches>();
       punches.forEach((p) => {
-        if (!groupedPunches.has(p.employeeId)) groupedPunches.set(p.employeeId, []);
+        if (!groupedPunches.has(p.employeeId))
+          groupedPunches.set(p.employeeId, []);
         groupedPunches.get(p.employeeId)!.push(p);
       });
 
@@ -456,7 +750,7 @@ export async function listAttendance(input?: {
             .find(
               (p) =>
                 p.punchType === PUNCH_TYPE.TIME_OUT &&
-                p.source === "AUTO_TIMEOUT"
+                p.source === "AUTO_TIMEOUT",
             ) ?? null;
         breakMap.set(empId, {
           count: stats.breakCount,
@@ -474,9 +768,12 @@ export async function listAttendance(input?: {
       >();
       await Promise.all(
         employees.map(async (emp) => {
-          const expected = await getExpectedShiftForDate(emp.employeeId, dayStart);
+          const expected = await getExpectedShiftForDate(
+            emp.employeeId,
+            dayStart,
+          );
           expectedMap.set(emp.employeeId, expected);
-        })
+        }),
       );
 
       const merged = employees.map((emp) => {
@@ -490,9 +787,31 @@ export async function listAttendance(input?: {
         };
         const expected = expectedMap.get(emp.employeeId);
         const scheduledStart =
-          existing?.scheduledStartMinutes ?? expected?.scheduledStartMinutes ?? null;
+          existing?.scheduledStartMinutes ??
+          expected?.scheduledStartMinutes ??
+          null;
         const scheduledEnd =
-          existing?.scheduledEndMinutes ?? expected?.scheduledEndMinutes ?? null;
+          existing?.scheduledEndMinutes ??
+          expected?.scheduledEndMinutes ??
+          null;
+        const scheduledBreakMinutes =
+          existing?.scheduledBreakMinutes ??
+          expected?.shift?.breakMinutesUnpaid ??
+          null;
+        const scheduledPaidMinutes = computeScheduledPaidMinutes({
+          paidHoursPerDay: expected?.shift?.paidHoursPerDay ?? null,
+          scheduledStartMinutes: scheduledStart,
+          scheduledEndMinutes: scheduledEnd,
+          scheduledBreakMinutes,
+        });
+        const effectiveDailyRate =
+          includeAllEffectiveRates.get(
+            buildRateLookupKey(emp.employeeId, dayStart),
+          ) ?? toNumberOrNull(emp.dailyRate ?? null);
+        const ratePerMinute = computeRatePerMinute({
+          dailyRate: effectiveDailyRate,
+          scheduledPaidMinutes,
+        });
         const expectedShiftId =
           existing?.expectedShiftId ?? expected?.shift?.id ?? null;
         const expectedShiftName =
@@ -501,8 +820,11 @@ export async function listAttendance(input?: {
         if (existing) {
           return {
             ...existing,
+            dailyRate: existing.dailyRate ?? effectiveDailyRate,
+            ratePerMinute: existing.ratePerMinute ?? ratePerMinute ?? null,
             scheduledStartMinutes: scheduledStart,
             scheduledEndMinutes: scheduledEnd,
+            scheduledBreakMinutes,
             expectedShiftId,
             expectedShiftName,
             forgotToTimeOut:
@@ -527,9 +849,17 @@ export async function listAttendance(input?: {
           expectedShiftName,
           scheduledStartMinutes: scheduledStart,
           scheduledEndMinutes: scheduledEnd,
+          scheduledBreakMinutes,
           actualInAt: null,
           actualOutAt: null,
           workedMinutes: null,
+          workedHoursAndMinutes: null,
+          dailyRate: effectiveDailyRate,
+          ratePerMinute,
+          payableAmount: null,
+          deductedBreakMinutes: 0,
+          netWorkedMinutes: null,
+          netWorkedHoursAndMinutes: null,
           lateMinutes: null,
           undertimeMinutes: null,
           overtimeMinutesRaw: null,
@@ -551,6 +881,268 @@ export async function listAttendance(input?: {
   } catch (error) {
     console.error("Failed to fetch attendance", error);
     return { success: false, error: "Failed to load attendance" };
+  }
+}
+
+export async function listAttendanceLockSummary(input?: {
+  start?: string | null;
+  end?: string | null;
+}) {
+  try {
+    const startRaw = typeof input?.start === "string" ? input.start : "";
+    if (!startRaw) {
+      return { success: false, error: "start date is required" };
+    }
+
+    const startDate = parseDateInput(startRaw);
+    if (!startDate) {
+      return { success: false, error: "Invalid start date" };
+    }
+
+    const endRaw = typeof input?.end === "string" ? input.end : startRaw;
+    const endDate = parseDateInput(endRaw);
+    if (!endDate) {
+      return { success: false, error: "Invalid end date" };
+    }
+    if (endDate.getTime() < startDate.getTime()) {
+      return { success: false, error: "end date must be on/after start date" };
+    }
+
+    const { rangeStart, rangeEnd } = getRangeBounds(startDate, endDate);
+    const rows = await db.attendance.findMany({
+      where: {
+        workDate: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: {
+        workDate: true,
+        isLocked: true,
+      },
+    });
+
+    const byDate = new Map<string, { totalRows: number; lockedRows: number }>();
+    rows.forEach((row) => {
+      const key = toDayKey(row.workDate);
+      const current = byDate.get(key) ?? { totalRows: 0, lockedRows: 0 };
+      current.totalRows += 1;
+      if (row.isLocked) current.lockedRows += 1;
+      byDate.set(key, current);
+    });
+
+    const data: Array<{
+      date: string;
+      totalRows: number;
+      lockedRows: number;
+      unlockedRows: number;
+      lockState: "LOCKED" | "UNLOCKED" | "PARTIAL" | "NO_ROWS";
+    }> = [];
+    for (
+      let cursor = new Date(rangeStart);
+      cursor.getTime() < rangeEnd.getTime();
+      cursor = new Date(cursor.getTime() + DAY_MS)
+    ) {
+      const key = toDayKey(cursor);
+      const count = byDate.get(key) ?? { totalRows: 0, lockedRows: 0 };
+      const unlockedRows = Math.max(0, count.totalRows - count.lockedRows);
+      let lockState: "LOCKED" | "UNLOCKED" | "PARTIAL" | "NO_ROWS" = "NO_ROWS";
+      if (count.totalRows > 0) {
+        if (count.lockedRows === 0) {
+          lockState = "UNLOCKED";
+        } else if (count.lockedRows === count.totalRows) {
+          lockState = "LOCKED";
+        } else {
+          lockState = "PARTIAL";
+        }
+      }
+      data.push({
+        date: key,
+        totalRows: count.totalRows,
+        lockedRows: count.lockedRows,
+        unlockedRows,
+        lockState,
+      });
+    }
+
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    console.error("Failed to list attendance lock summary", error);
+    return { success: false, error: "Failed to load lock summary" };
+  }
+}
+
+export async function listLockableEmployees(input?: {
+  query?: string | null;
+  limit?: number | null;
+}) {
+  try {
+    const query = typeof input?.query === "string" ? input.query.trim() : "";
+    const queryTokens = query.split(/\s+/).filter(Boolean);
+    const limitRaw =
+      typeof input?.limit === "number" && Number.isFinite(input.limit)
+        ? Math.floor(input.limit)
+        : 30;
+    const limit = Math.max(1, Math.min(limitRaw, 200));
+
+    const where: Prisma.EmployeeWhereInput = { isArchived: false };
+    if (queryTokens.length > 0) {
+      // Each token must match at least one identity field.
+      where.AND = queryTokens.map((token) => ({
+        OR: [
+          { employeeCode: { contains: token, mode: "insensitive" } },
+          { firstName: { contains: token, mode: "insensitive" } },
+          { middleName: { contains: token, mode: "insensitive" } },
+          { lastName: { contains: token, mode: "insensitive" } },
+        ],
+      }));
+    }
+
+    const employees = await db.employee.findMany({
+      where,
+      orderBy: { employeeCode: "asc" },
+      take: limit,
+      select: {
+        employeeId: true,
+        employeeCode: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    return { success: true, data: employees };
+  } catch (error) {
+    console.error("Failed to list lockable employees", error);
+    return { success: false, error: "Failed to load employees" };
+  }
+}
+
+export async function setAttendanceLockState(input: {
+  start: string;
+  end?: string | null;
+  lock: boolean;
+  employeeId?: string | null;
+}) {
+  try {
+    const startRaw = typeof input.start === "string" ? input.start : "";
+    if (!startRaw) {
+      return { success: false, error: "start date is required" };
+    }
+
+    const startDate = parseDateInput(startRaw);
+    if (!startDate) {
+      return { success: false, error: "Invalid start date" };
+    }
+
+    const endRaw =
+      typeof input.end === "string" && input.end.trim() ? input.end : startRaw;
+    const endDate = parseDateInput(endRaw);
+    if (!endDate) {
+      return { success: false, error: "Invalid end date" };
+    }
+    if (endDate.getTime() < startDate.getTime()) {
+      return { success: false, error: "end date must be on/after start date" };
+    }
+
+    const employeeId =
+      typeof input.employeeId === "string" && input.employeeId.trim()
+        ? input.employeeId.trim()
+        : null;
+    const lock = Boolean(input.lock);
+
+    if (employeeId) {
+      const employee = await db.employee.findUnique({
+        where: { employeeId },
+        select: { employeeId: true },
+      });
+      if (!employee) {
+        return { success: false, error: "Employee not found" };
+      }
+    }
+
+    const { rangeStart, rangeEnd } = getRangeBounds(startDate, endDate);
+
+    // For employee-targeted lock operations, ensure daily attendance rows exist first.
+    // Only backfill missing rows; do not recompute existing ones during lock action.
+    if (lock && employeeId) {
+      for (
+        let cursor = new Date(rangeStart);
+        cursor.getTime() < rangeEnd.getTime();
+        cursor = new Date(cursor.getTime() + DAY_MS)
+      ) {
+        const existingForDay = await db.attendance.findUnique({
+          where: {
+            employeeId_workDate: {
+              employeeId,
+              workDate: cursor,
+            },
+          },
+          select: { id: true },
+        });
+        if (!existingForDay) {
+          await recomputeAttendanceForDay(employeeId, cursor);
+        }
+      }
+    }
+
+    const whereBase: Prisma.AttendanceWhereInput = {
+      workDate: { gte: rangeStart, lt: rangeEnd },
+    };
+    if (employeeId) {
+      whereBase.employeeId = employeeId;
+    }
+
+    let updatedCount = 0;
+    if (lock) {
+      const incompleteUpdate = await db.attendance.updateMany({
+        where: {
+          ...whereBase,
+          actualOutAt: null,
+        },
+        data: {
+          isLocked: true,
+          status: ATTENDANCE_STATUS.INCOMPLETE,
+        },
+      });
+      const completeUpdate = await db.attendance.updateMany({
+        where: {
+          ...whereBase,
+          actualOutAt: { not: null },
+        },
+        data: { isLocked: true },
+      });
+      updatedCount = incompleteUpdate.count + completeUpdate.count;
+    } else {
+      const unlockResult = await db.attendance.updateMany({
+        where: whereBase,
+        data: { isLocked: false },
+      });
+      updatedCount = unlockResult.count;
+    }
+
+    const totalRows = await db.attendance.count({ where: whereBase });
+    const lockedRows = await db.attendance.count({
+      where: {
+        ...whereBase,
+        isLocked: true,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        lock,
+        employeeId,
+        start: rangeStart.toISOString(),
+        endExclusive: rangeEnd.toISOString(),
+        updatedCount,
+        totalRows,
+        lockedRows,
+      },
+    };
+  } catch (error) {
+    console.error("Failed to set attendance lock state", error);
+    return { success: false, error: "Failed to update lock state" };
   }
 }
 
@@ -610,6 +1202,29 @@ export async function updatePunch(input: {
       return { success: false, error: "id is required" };
     }
 
+    const existing = await db.punch.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        employeeId: true,
+        punchTime: true,
+      },
+    });
+    if (!existing) {
+      return { success: false, error: "Punch not found" };
+    }
+
+    const originalDayLocked = await isAttendanceLockedForMoment(
+      existing.employeeId,
+      existing.punchTime,
+    );
+    if (originalDayLocked) {
+      return {
+        success: false,
+        error: "Attendance is locked for this day. Unlock before editing punch.",
+      };
+    }
+
     const data: Record<string, any> = {};
     if (punchType) {
       if (!Object.values(PUNCH_TYPE).includes(punchType as PUNCH_TYPE)) {
@@ -621,6 +1236,20 @@ export async function updatePunch(input: {
       const parsed = new Date(punchTimeRaw);
       if (Number.isNaN(parsed.getTime())) {
         return { success: false, error: "Invalid punchTime" };
+      }
+      // If punch is moved to another day, block edits when target day is locked.
+      if (toDayKey(parsed) !== toDayKey(existing.punchTime)) {
+        const targetDayLocked = await isAttendanceLockedForMoment(
+          existing.employeeId,
+          parsed,
+        );
+        if (targetDayLocked) {
+          return {
+            success: false,
+            error:
+              "Target attendance day is locked. Unlock before moving this punch.",
+          };
+        }
       }
       data.punchTime = parsed;
     }
@@ -676,6 +1305,17 @@ export async function deletePunch(input: { id: string }) {
     });
     if (!existing) {
       return { success: false, error: "Punch not found" };
+    }
+
+    const dayLocked = await isAttendanceLockedForMoment(
+      existing.employeeId,
+      existing.punchTime,
+    );
+    if (dayLocked) {
+      return {
+        success: false,
+        error: "Attendance is locked for this day. Unlock before deleting punch.",
+      };
     }
 
     await db.punch.delete({ where: { id } });
@@ -735,6 +1375,7 @@ export async function autoLockAttendance(input?: { date?: string }) {
   }
 }
 
+// KIOSK ATTENDANCE PART
 export async function getSelfAttendanceStatus(input?: { date?: string }) {
   try {
     // Self-service endpoint for employee dashboard/kiosk-like views.
@@ -770,9 +1411,15 @@ export async function getSelfAttendanceStatus(input?: { date?: string }) {
       };
     }
 
-    const expected = await getExpectedShiftForDate(employee.employeeId, dayStart);
+    const expected = await getExpectedShiftForDate(
+      employee.employeeId,
+      dayStart,
+    );
     const punches = await db.punch.findMany({
-      where: { employeeId: employee.employeeId, punchTime: { gte: dayStart, lt: dayEnd } },
+      where: {
+        employeeId: employee.employeeId,
+        punchTime: { gte: dayStart, lt: dayEnd },
+      },
       orderBy: { punchTime: "asc" },
     });
 
@@ -850,7 +1497,21 @@ export async function recordSelfPunch(input: { punchType: string }) {
 
     const now = zonedNow();
     const todayStart = startOfZonedDay(now);
-    const expected = await getExpectedShiftForDate(employee.employeeId, todayStart);
+    const expected = await getExpectedShiftForDate(
+      employee.employeeId,
+      todayStart,
+    );
+    const dayLocked = await isAttendanceLockedForMoment(
+      employee.employeeId,
+      now,
+    );
+    if (dayLocked) {
+      return {
+        success: false,
+        error: "Attendance is locked for today. Contact admin to unlock.",
+        reason: "attendance_locked",
+      };
+    }
 
     if (punchType === PUNCH_TYPE.TIME_IN) {
       // Time-in is only valid during scheduled shift window.
@@ -862,7 +1523,7 @@ export async function recordSelfPunch(input: { punchType: string }) {
         };
       }
       const minutesSinceStart = Math.round(
-        (now.getTime() - todayStart.getTime()) / 60000
+        (now.getTime() - todayStart.getTime()) / 60000,
       );
       if (minutesSinceStart < expected.scheduledStartMinutes) {
         return {
@@ -932,6 +1593,14 @@ export async function recordAttendancePunch(input: {
       return { success: false, error: "punchTime is invalid" };
     }
 
+    const dayLocked = await isAttendanceLockedForMoment(employeeId, punchTime);
+    if (dayLocked) {
+      return {
+        success: false,
+        error: "Attendance is locked for this day. Unlock before recording punch.",
+      };
+    }
+
     const { punch, attendance } = await createPunchAndMaybeRecompute({
       employeeId,
       punchType: punchType as PUNCH_TYPE,
@@ -974,6 +1643,22 @@ export async function recomputeAttendance(input: {
     if (Number.isNaN(workDate.getTime())) {
       return { success: false, error: "workDate is invalid" };
     }
+    const dayStart = startOfZonedDay(workDate);
+    const locked = await db.attendance.findUnique({
+      where: {
+        employeeId_workDate: {
+          employeeId,
+          workDate: dayStart,
+        },
+      },
+      select: { isLocked: true },
+    });
+    if (locked?.isLocked) {
+      return {
+        success: false,
+        error: "Attendance is locked for this day. Unlock before recomputing.",
+      };
+    }
 
     const result = await recomputeAttendanceForDay(employeeId, workDate);
 
@@ -997,21 +1682,34 @@ export async function recomputeAttendanceForDate(input?: { date?: string }) {
     }
 
     const dayStart = startOfZonedDay(targetDate);
+    const dayEnd = endOfZonedDay(targetDate);
     const employees = await db.employee.findMany({
       where: { isArchived: false },
       select: { employeeId: true },
     });
+    const lockedRows = await db.attendance.findMany({
+      where: {
+        workDate: { gte: dayStart, lt: dayEnd },
+        isLocked: true,
+      },
+      select: { employeeId: true },
+    });
+    const lockedSet = new Set(lockedRows.map((row) => row.employeeId));
+    const targets = employees.filter(
+      (employee) => !lockedSet.has(employee.employeeId),
+    );
 
     await Promise.all(
-      employees.map((employee) =>
-        recomputeAttendanceForDay(employee.employeeId, dayStart)
-      )
+      targets.map((employee) =>
+        recomputeAttendanceForDay(employee.employeeId, dayStart),
+      ),
     );
 
     return {
       success: true,
       data: {
-        processedCount: employees.length,
+        processedCount: targets.length,
+        skippedLockedCount: employees.length - targets.length,
         date: dayStart.toISOString(),
         tz: TZ,
       },

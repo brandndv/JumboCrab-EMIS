@@ -14,6 +14,7 @@ export type AttendanceRow = {
   status: string;
   scheduledStartMinutes?: number | null;
   scheduledEndMinutes?: number | null;
+  scheduledBreakMinutes?: number | null;
   actualInAt?: string | null;
   actualOutAt?: string | null;
   forgotToTimeOut?: boolean;
@@ -22,6 +23,14 @@ export type AttendanceRow = {
   lateMinutes?: number | null;
   undertimeMinutes?: number | null;
   overtimeMinutesRaw?: number | null;
+  workedMinutes?: number | null;
+  workedHoursAndMinutes?: string | null;
+  dailyRate?: number | null;
+  ratePerMinute?: number | null;
+  payableAmount?: number | null;
+  deductedBreakMinutes?: number | null;
+  netWorkedMinutes?: number | null;
+  netWorkedHoursAndMinutes?: string | null;
   breakMinutes?: number | null;
   breakCount?: number | null;
   punchesCount?: number | null;
@@ -82,8 +91,12 @@ export function useAttendanceState(initialDate = todayISO()) {
       setRows(attendanceResult.data ?? []);
       setPunches(punchesResult.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load attendance");
-      setPunchError(err instanceof Error ? err.message : "Failed to load punches");
+      setError(
+        err instanceof Error ? err.message : "Failed to load attendance",
+      );
+      setPunchError(
+        err instanceof Error ? err.message : "Failed to load punches",
+      );
       setPunches([]);
     } finally {
       setLoading(false);
@@ -99,12 +112,12 @@ export function useAttendanceState(initialDate = todayISO()) {
         throw new Error(result.error || "Failed to recompute attendance");
       }
       setRecomputeMessage(
-        `Recomputed ${result.data?.processedCount ?? 0} employee(s) for ${date}.`
+        `Recomputed ${result.data?.processedCount ?? 0} employee(s) for ${date}.`,
       );
       await load();
     } catch (err) {
       setRecomputeMessage(
-        err instanceof Error ? err.message : "Failed to recompute attendance"
+        err instanceof Error ? err.message : "Failed to recompute attendance",
       );
     } finally {
       setRecomputeLoading(false);

@@ -57,6 +57,8 @@ model Employee {
   emergencyContactRelationship String?
   emergencyContactPhone        String?
   emergencyContactEmail        String?
+  // Daily base pay used for pro-rated attendance pay (e.g., 450.00 per paid day).
+  dailyRate                    Decimal?              @db.Decimal(10, 2)
   description                  String?
   isArchived                   Boolean               @default(false)
   createdAt                    DateTime              @default(now())
@@ -71,13 +73,14 @@ model Employee {
   supervisorUser               User?                 @relation("EmployeeSupervisorUser", fields: [supervisorUserId], references: [userId])
   governmentId                 GovernmentId?         @relation("EmployeeGovernmentId")
   contribution                 EmployeeContribution?
-  violations                   Violation[]
+  rateHistory                  EmployeeRateHistory[]
 
   // Scheduling links
   patternAssignments EmployeePatternAssignment[]
   shiftOverrides     EmployeeShiftOverride[]
   attendances        Attendance[]
   punches            Punch[]
+  employeeViolations EmployeeViolation[]
 
   @@index([isArchived, employeeCode])
   @@index([departmentId])
@@ -155,6 +158,19 @@ model EmployeeContribution {
   updatedBy           User?    @relation("EmployeeContributionUpdatedBy", fields: [updatedById], references: [userId])
 }
 
+model EmployeeRateHistory {
+  id            String    @id @default(cuid())
+  employeeId    String
+  dailyRate     Decimal?  @db.Decimal(10, 2)
+  effectiveFrom DateTime  @default(now())
+  reason        String?
+  createdAt     DateTime  @default(now())
+  employee      Employee  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  @@unique([employeeId, effectiveFrom])
+  @@index([effectiveFrom])
+}
+
 // ======== SCHEDULE AND SHIFTS ========= //
 
 /// A reusable shift template. Keep it small and only add more fields once needed.
@@ -222,10 +238,10 @@ model WeeklyPattern {
 
 /// Assigns a weekly pattern to an employee starting on a date.
 model EmployeePatternAssignment {
-  id            String   @id @default(cuid())
-  employeeId    String
-  effectiveDate DateTime // changeover date; latest <= target date applies
-  patternId     String
+  id                 String   @id @default(cuid())
+  employeeId         String
+  effectiveDate      DateTime // changeover date; latest <= target date applies
+  patternId          String
   // Immutable snapshot of weekday shift IDs at assignment time.
   sunShiftIdSnapshot Int?
   monShiftIdSnapshot Int?
@@ -234,9 +250,9 @@ model EmployeePatternAssignment {
   thuShiftIdSnapshot Int?
   friShiftIdSnapshot Int?
   satShiftIdSnapshot Int?
-  reason        String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  reason             String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   employee Employee      @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
   pattern  WeeklyPattern @relation(fields: [patternId], references: [id])
@@ -250,7 +266,7 @@ model EmployeeShiftOverride {
   employeeId String
   workDate   DateTime // date anchor (use start day for overnight)
   shiftId    Int? // null = mark as rest day
-  source     String // e.g., "MANUAL", "APPROVED_REQUEST"
+  source     String // "MANUAL", "APPROVED_REQUEST"
   note       String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -276,11 +292,15 @@ model Attendance {
   paidHoursPerDay       Decimal? @db.Decimal(5, 2)
 
   // Actuals
-  actualInAt    DateTime?
-  actualOutAt   DateTime?
-  workedMinutes Int?
-  breakMinutes  Int       @default(0)
-  breakCount    Int       @default(0)
+  actualInAt           DateTime?
+  actualOutAt          DateTime?
+  workedMinutes        Int?
+  breakMinutes         Int       @default(0)
+  // Break minutes deducted for payroll (policy-driven, e.g. max(scheduled, actual)).
+  deductedBreakMinutes Int       @default(0)
+  // Net payable minutes after deducted break.
+  netWorkedMinutes     Int?
+  breakCount           Int       @default(0)
 
   // Variances
   lateMinutes             Int @default(0)
@@ -327,37 +347,40 @@ model Punch {
   @@index([attendanceId])
 }
 
+model EmployeeViolation {
+  id                   String    @id @default(cuid())
+  employeeId           String
+  violationId          String
+  violationDate        DateTime
+  strikePointsSnapshot Int       @default(1)
+  isAcknowledged       Boolean   @default(false)
+  acknowledgedAt       DateTime?
+  remarks              String?
+  isCountedForStrike   Boolean   @default(true)
+  voidedAt             DateTime?
+  voidReason           String?
+  createdAt            DateTime  @default(now())
+
+  violation Violation @relation(fields: [violationId], references: [violationId], onDelete: Cascade)
+  employee  Employee  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  @@index([employeeId, violationDate])
+  @@index([violationId])
+  @@index([isCountedForStrike, voidedAt])
+}
+
 model Violation {
-  id                String           @id @default(cuid())
-  employeeId        String
-  violationType     VIOLATION_TYPE
-  violationDate     DateTime
-  amount            Decimal?
-  paidAmount        Decimal          @default(0) @db.Decimal(10, 2)
-  remainingAmount   Decimal          @default(0) @db.Decimal(10, 2)
-  installmentAmount Decimal
-  status            VIOLATION_STATUS
-  remarks           String?
-  createdAt         DateTime
+  violationId         String   @id @default(cuid())
+  name                String
+  description         String
+  defaultStrikePoints Int      @default(1)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
 
-  // employee Employee @relation(fields[employeeId], references: [employeeId], onDelete: Cascade);
+  employeeViolations EmployeeViolation[]
 
-  employee           Employee? @relation(fields: [employeeEmployeeId], references: [employeeId])
-  employeeEmployeeId String?
-
-  @@index([createdAt])
-}
-
-enum VIOLATION_STATUS {
-  PENDING
-  DEDUCTED
-  WAIVED
-}
-
-enum VIOLATION_TYPE {
-  AWOL
-  LATE
-  ABSENT
+  @@index([name])
 }
 
 enum ATTENDANCE_STATUS {

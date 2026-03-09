@@ -53,6 +53,7 @@ export default function EmployeesCards({
   const router = useRouter();
   const pathname = usePathname();
   const basePath = pathname.replace(/\/$/, "");
+  const roleRoot = pathname.split("/")[1] ?? "";
   const { refreshEmployees, showArchived } = useEmployees();
   // State for pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -80,7 +81,7 @@ export default function EmployeesCards({
   const handleArchiveClick = (employee: Employee) => {
     if (!employee.employeeId) return;
     const confirmed = window.confirm(
-      `Archive ${employee.firstName ?? ""} ${employee.lastName ?? ""}?`
+      `Archive ${employee.firstName ?? ""} ${employee.lastName ?? ""}?`,
     );
     if (!confirmed) return;
 
@@ -94,7 +95,7 @@ export default function EmployeesCards({
       .catch((err) => {
         console.error("Archive failed:", err);
         alert(
-          err instanceof Error ? err.message : "Failed to archive employee"
+          err instanceof Error ? err.message : "Failed to archive employee",
         );
       });
   };
@@ -111,7 +112,7 @@ export default function EmployeesCards({
       .catch((err) => {
         console.error("Unarchive failed:", err);
         alert(
-          err instanceof Error ? err.message : "Failed to unarchive employee"
+          err instanceof Error ? err.message : "Failed to unarchive employee",
         );
       });
   };
@@ -121,7 +122,7 @@ export default function EmployeesCards({
     const confirmed = window.confirm(
       `Permanently delete ${employee.firstName ?? ""} ${
         employee.lastName ?? ""
-      }?`
+      }?`,
     );
     if (!confirmed) return;
 

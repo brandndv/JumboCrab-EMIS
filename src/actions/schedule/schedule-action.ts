@@ -2,7 +2,13 @@
 
 import { db } from "@/lib/db";
 import { getDailySchedule } from "@/lib/schedule";
-import { endOfZonedDay, startOfZonedDay, zonedNow } from "@/lib/timezone";
+import { getExpectedShiftForDate } from "@/lib/attendance";
+import {
+  endOfZonedDay,
+  startOfZonedDay,
+  TZ,
+  zonedNow,
+} from "@/lib/timezone";
 import { serializePattern, serializeShift } from "@/lib/serializers/schedule";
 
 const shiftSelect = {
@@ -28,6 +34,8 @@ type DayShiftKey =
   | "friShiftId"
   | "satShiftId";
 type DayShiftMap = Record<DayShiftKey, number | null>;
+const toTzDateKey = (value: Date) =>
+  value.toLocaleDateString("en-CA", { timeZone: TZ });
 
 export async function getScheduleSnapshot(dateParam?: string) {
   try {
@@ -40,6 +48,7 @@ export async function getScheduleSnapshot(dateParam?: string) {
       getDailySchedule(date),
       db.weeklyPattern.findMany({
         where: {
+          isActive: true,
           code: {
             not: {
               startsWith: "OVR-",
@@ -78,6 +87,68 @@ export async function getScheduleSnapshot(dateParam?: string) {
   } catch (error) {
     console.error("Failed to fetch schedule", error);
     return { success: false, error: "Failed to load schedule" };
+  }
+}
+
+export async function getEmployeeMonthSchedule(input: {
+  employeeId: string;
+  anchorDate?: string | null;
+}) {
+  try {
+    const employeeId =
+      typeof input?.employeeId === "string" ? input.employeeId.trim() : "";
+    const anchorDateRaw =
+      typeof input?.anchorDate === "string" ? input.anchorDate : "";
+
+    if (!employeeId) {
+      return { success: false, error: "employeeId is required" };
+    }
+
+    const employee = await db.employee.findUnique({
+      where: { employeeId },
+      select: { employeeId: true },
+    });
+    if (!employee) {
+      return { success: false, error: "Employee not found" };
+    }
+
+    const anchorDate = anchorDateRaw ? new Date(anchorDateRaw) : zonedNow();
+    if (Number.isNaN(anchorDate.getTime())) {
+      return { success: false, error: "Invalid anchorDate" };
+    }
+
+    const anchorInTz = new Date(
+      anchorDate.toLocaleString("en-US", { timeZone: TZ }),
+    );
+    const year = anchorInTz.getFullYear();
+    const monthIndex = anchorInTz.getMonth();
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+
+    const monthDates = Array.from({ length: daysInMonth }, (_, index) =>
+      new Date(Date.UTC(year, monthIndex, index + 1, 12, 0, 0)),
+    );
+
+    const days = await Promise.all(
+      monthDates.map(async (date) => {
+        const expected = await getExpectedShiftForDate(employeeId, date);
+        return {
+          date: toTzDateKey(date),
+          shift: expected.shift ? serializeShift(expected.shift) : null,
+          source: expected.source,
+          scheduledStartMinutes: expected.scheduledStartMinutes,
+          scheduledEndMinutes: expected.scheduledEndMinutes,
+        };
+      }),
+    );
+
+    return {
+      success: true,
+      month: `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
+      days,
+    };
+  } catch (error) {
+    console.error("Failed to fetch employee month schedule", error);
+    return { success: false, error: "Failed to load employee schedule" };
   }
 }
 
@@ -271,6 +342,7 @@ export async function assignPatternToEmployee(input: {
         where: { id: patternId },
         select: {
           id: true,
+          isActive: true,
           sunShiftId: true,
           monShiftId: true,
           tueShiftId: true,
@@ -287,6 +359,9 @@ export async function assignPatternToEmployee(input: {
     }
     if (!pattern) {
       return { success: false, error: "Pattern not found" };
+    }
+    if (!pattern.isActive) {
+      return { success: false, error: "Pattern is inactive" };
     }
 
     const dayStart = new Date(effectiveDate);

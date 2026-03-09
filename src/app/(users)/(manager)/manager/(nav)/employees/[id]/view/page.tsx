@@ -5,6 +5,8 @@ import Link from "next/link";
 import { getEmployeeById } from "@/actions/employees/employees-action";
 import EmployeeProfileTabs from "@/components/dasboard/manage-empoyees/employee-profile-tabs";
 
+export const dynamic = "force-dynamic";
+
 export default async function EmployeeViewPage({
   params,
 }: {
@@ -19,6 +21,11 @@ export default async function EmployeeViewPage({
   if (!employee) {
     notFound();
   }
+
+  const employeeForClient = {
+    ...employee,
+    dailyRate: employee.dailyRate == null ? null : Number(employee.dailyRate),
+  };
 
   return (
     <div className="px-4 py-8 sm:px-8 lg:px-12">
@@ -36,7 +43,7 @@ export default async function EmployeeViewPage({
           </Button>
         )}
       </div>
-      <EmployeeProfileTabs employee={employee} />
+      <EmployeeProfileTabs employee={employeeForClient} />
     </div>
   );
 }

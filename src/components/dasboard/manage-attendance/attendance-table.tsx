@@ -25,10 +25,18 @@ type AttendanceRow = {
   expectedShiftName?: string | null;
   scheduledStartMinutes?: number | null;
   scheduledEndMinutes?: number | null;
+  scheduledBreakMinutes?: number | null;
   actualInAt?: string | null;
   actualOutAt?: string | null;
   forgotToTimeOut?: boolean;
   workedMinutes?: number | null;
+  workedHoursAndMinutes?: string | null;
+  dailyRate?: number | null;
+  ratePerMinute?: number | null;
+  payableAmount?: number | null;
+  deductedBreakMinutes?: number | null;
+  netWorkedMinutes?: number | null;
+  netWorkedHoursAndMinutes?: string | null;
   lateMinutes?: number | null;
   undertimeMinutes?: number | null;
   overtimeMinutesRaw?: number | null;
@@ -296,6 +304,12 @@ export function AttendanceHistoryTable() {
                           runningMinutes,
                           false
                         )} (running)`
+                      : row.netWorkedHoursAndMinutes
+                      ? row.netWorkedHoursAndMinutes
+                      : row.workedHoursAndMinutes
+                      ? row.workedHoursAndMinutes
+                      : row.netWorkedMinutes != null
+                      ? formatMinutesToTime(row.netWorkedMinutes, false)
                       : row.workedMinutes != null
                       // Use stored total minutes when shift is closed.
                       ? formatMinutesToTime(row.workedMinutes, false)

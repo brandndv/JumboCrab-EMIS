@@ -21,6 +21,7 @@ export async function listPatterns() {
   try {
     const patterns = await db.weeklyPattern.findMany({
       where: {
+        isActive: true,
         code: {
           not: {
             startsWith: "OVR-",
@@ -95,7 +96,7 @@ export async function createPattern(input: {
       },
     });
 
-    return { success: true, data: serializePattern({ ...pattern } as any) };
+    return { success: true, data: serializePattern(pattern) };
   } catch (error) {
     console.error("Failed to create pattern", error);
     return { success: false, error: "Failed to create pattern" };
@@ -124,6 +125,9 @@ export async function updatePattern(input: {
     if (!existing) {
       return { success: false, error: "Pattern not found" };
     }
+    if (!existing.isActive) {
+      return { success: false, error: "Pattern is inactive" };
+    }
 
     const code =
       typeof input.code === "string" && input.code.trim()
@@ -134,35 +138,42 @@ export async function updatePattern(input: {
         ? input.name.trim()
         : existing.name;
 
+    // Keep existing value only when a day field is not included in the payload.
+    // This allows explicit `null` from the UI to persist "Rest day".
+    const getDayShiftValue = (
+      key:
+        | "sunShiftId"
+        | "monShiftId"
+        | "tueShiftId"
+        | "wedShiftId"
+        | "thuShiftId"
+        | "friShiftId"
+        | "satShiftId",
+      existingValue: number | null
+    ): number | null => {
+      if (!Object.prototype.hasOwnProperty.call(input, key)) {
+        return existingValue;
+      }
+
+      const nextValue = input[key];
+      if (typeof nextValue === "number") {
+        return nextValue;
+      }
+      if (nextValue === null) {
+        return null;
+      }
+
+      return existingValue;
+    };
+
     const shiftIds: Record<string, number | null> = {
-      sunShiftId:
-        typeof input.sunShiftId === "number"
-          ? input.sunShiftId
-          : existing.sunShiftId,
-      monShiftId:
-        typeof input.monShiftId === "number"
-          ? input.monShiftId
-          : existing.monShiftId,
-      tueShiftId:
-        typeof input.tueShiftId === "number"
-          ? input.tueShiftId
-          : existing.tueShiftId,
-      wedShiftId:
-        typeof input.wedShiftId === "number"
-          ? input.wedShiftId
-          : existing.wedShiftId,
-      thuShiftId:
-        typeof input.thuShiftId === "number"
-          ? input.thuShiftId
-          : existing.thuShiftId,
-      friShiftId:
-        typeof input.friShiftId === "number"
-          ? input.friShiftId
-          : existing.friShiftId,
-      satShiftId:
-        typeof input.satShiftId === "number"
-          ? input.satShiftId
-          : existing.satShiftId,
+      sunShiftId: getDayShiftValue("sunShiftId", existing.sunShiftId),
+      monShiftId: getDayShiftValue("monShiftId", existing.monShiftId),
+      tueShiftId: getDayShiftValue("tueShiftId", existing.tueShiftId),
+      wedShiftId: getDayShiftValue("wedShiftId", existing.wedShiftId),
+      thuShiftId: getDayShiftValue("thuShiftId", existing.thuShiftId),
+      friShiftId: getDayShiftValue("friShiftId", existing.friShiftId),
+      satShiftId: getDayShiftValue("satShiftId", existing.satShiftId),
     };
 
     if (!code || !name) {
@@ -191,7 +202,7 @@ export async function updatePattern(input: {
       },
     });
 
-    return { success: true, data: serializePattern({ ...pattern } as any) };
+    return { success: true, data: serializePattern(pattern) };
   } catch (error) {
     console.error("Failed to update pattern", error);
     return { success: false, error: "Failed to update pattern" };
@@ -210,11 +221,17 @@ export async function deletePattern(id: string) {
     if (!existing) {
       return { success: false, error: "Pattern not found" };
     }
-    await db.weeklyPattern.delete({ where: { id: patternId } });
+    if (!existing.isActive) {
+      return { success: true };
+    }
+    await db.weeklyPattern.update({
+      where: { id: patternId },
+      data: { isActive: false },
+    });
     return { success: true };
   } catch (error) {
-    console.error("Failed to delete pattern", error);
-    return { success: false, error: "Failed to delete pattern" };
+    console.error("Failed to disable pattern", error);
+    return { success: false, error: "Failed to disable pattern" };
   }
 }
 

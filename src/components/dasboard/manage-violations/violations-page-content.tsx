@@ -1,23 +1,20 @@
 "use client";
 
 import ViolationsTable from "./violations-table";
-import { Card } from "@/components/ui/card";
 
 const ViolationsPageContent = () => {
   return (
-    <Card className="px-4 py-8 sm:px-6 lg:px-12 space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Violations</h1>
-          <p className="text-muted-foreground text-sm">
-            Manage violation records
-          </p>
-        </div>
+    <div className="px-4 py-8 sm:px-8 lg:px-12">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold">Violations</h1>
+        <p className="text-sm text-muted-foreground">
+          Create and manage violation definitions for assignment.
+        </p>
       </div>
-      <div>
+      <div className="grid gap-6">
         <ViolationsTable />
       </div>
-    </Card>
+    </div>
   );
 };
 

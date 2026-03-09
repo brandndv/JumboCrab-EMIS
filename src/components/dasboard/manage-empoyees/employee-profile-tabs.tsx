@@ -6,7 +6,14 @@ import {
   upsertGovernmentId,
   type GovernmentIdRecord,
 } from "@/actions/contributions/government-ids-action";
+import {
+  getEmployeeRateHistory,
+  type EmployeeActionRecord,
+  type EmployeeRateHistoryItem,
+  updateEmployee,
+} from "@/actions/employees/employees-action";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,16 +34,26 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { Employee as PrismaEmployee } from "@prisma/client";
 import { IdCard, Loader2, Plus } from "lucide-react";
 import EmployeeForm from "./employee-form";
 
-type TabKey = "profile" | "govIds";
+type EmployeeProfileData = EmployeeActionRecord;
+
+type TabKey = "profile" | "dailyRate" | "govIds";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "profile", label: "Profile" },
+  { key: "dailyRate", label: "Daily Rate" },
   { key: "govIds", label: "Government IDs" },
 ];
+
+const getTodayDateInput = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 const govIdFields: {
   key: keyof Pick<
@@ -71,9 +88,29 @@ const govIdFields: {
 export function EmployeeProfileTabs({
   employee,
 }: {
-  employee: PrismaEmployee;
+  employee: EmployeeProfileData;
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
+  const [currentDailyRate, setCurrentDailyRate] = useState<number | null>(
+    employee.dailyRate ?? null,
+  );
+  const [dailyRateInput, setDailyRateInput] = useState<string>(
+    employee.dailyRate == null ? "" : String(employee.dailyRate),
+  );
+  const [dailyRateEffectiveFrom, setDailyRateEffectiveFrom] = useState<string>(
+    getTodayDateInput(),
+  );
+  const [dailyRateReason, setDailyRateReason] = useState<string>("");
+  const [isDailyRateEditorOpen, setIsDailyRateEditorOpen] =
+    useState<boolean>(false);
+  const [savingDailyRate, setSavingDailyRate] = useState<boolean>(false);
+  const [dailyRateSaveError, setDailyRateSaveError] = useState<string | null>(
+    null,
+  );
+  const [dailyRateSaveSuccess, setDailyRateSaveSuccess] = useState<string | null>(
+    null,
+  );
   const [governmentId, setGovernmentId] = useState<GovernmentIdRecord | null>(
     null
   );
@@ -91,6 +128,12 @@ export function EmployeeProfileTabs({
   } | null>(null);
   const [loadingContribution, setLoadingContribution] = useState<boolean>(true);
   const [contributionError, setContributionError] = useState<string | null>(null);
+  const [rateHistory, setRateHistory] = useState<EmployeeRateHistoryItem[]>([]);
+  const [loadingRateHistory, setLoadingRateHistory] = useState<boolean>(true);
+  const [rateHistoryError, setRateHistoryError] = useState<string | null>(null);
+  const [rateHistoryWarning, setRateHistoryWarning] = useState<string | null>(
+    null,
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formState, setFormState] = useState<
@@ -132,6 +175,37 @@ export function EmployeeProfileTabs({
     };
 
     fetchGovId();
+  }, [employee.employeeId]);
+
+  useEffect(() => {
+    setCurrentDailyRate(employee.dailyRate ?? null);
+    setDailyRateInput(employee.dailyRate == null ? "" : String(employee.dailyRate));
+    setDailyRateEffectiveFrom(getTodayDateInput());
+    setDailyRateReason("");
+    setIsDailyRateEditorOpen(false);
+  }, [employee.employeeId, employee.dailyRate]);
+
+  useEffect(() => {
+    const fetchRateHistory = async () => {
+      try {
+        setLoadingRateHistory(true);
+        setRateHistoryError(null);
+        setRateHistoryWarning(null);
+        const result = await getEmployeeRateHistory(employee.employeeId);
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load rate history");
+        }
+        setRateHistory(result.data ?? []);
+        setRateHistoryWarning(result.warning ?? null);
+      } catch (error) {
+        console.error("Error loading rate history:", error);
+        setRateHistoryError("Failed to load rate history");
+      } finally {
+        setLoadingRateHistory(false);
+      }
+    };
+
+    fetchRateHistory();
   }, [employee.employeeId]);
 
   useEffect(() => {
@@ -185,6 +259,88 @@ export function EmployeeProfileTabs({
     !!governmentId?.philHealthNumber ||
     !!governmentId?.pagIbigNumber;
 
+  const reloadRateHistory = async () => {
+    try {
+      setLoadingRateHistory(true);
+      setRateHistoryError(null);
+      setRateHistoryWarning(null);
+      const result = await getEmployeeRateHistory(employee.employeeId);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load rate history");
+      }
+      setRateHistory(result.data ?? []);
+      setRateHistoryWarning(result.warning ?? null);
+    } catch (error) {
+      console.error("Error loading rate history:", error);
+      setRateHistoryError("Failed to load rate history");
+    } finally {
+      setLoadingRateHistory(false);
+    }
+  };
+
+  const handleSaveDailyRate = async () => {
+    const trimmed = dailyRateInput.trim();
+    const parsed = trimmed === "" ? null : Number.parseFloat(trimmed);
+    const effectiveFrom = dailyRateEffectiveFrom.trim();
+    const normalizedReason = dailyRateReason.trim();
+
+    if (!effectiveFrom) {
+      setDailyRateSaveError("Effective date is required.");
+      setDailyRateSaveSuccess(null);
+      return;
+    }
+
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
+      setDailyRateSaveError("Daily rate must be a valid non-negative number.");
+      setDailyRateSaveSuccess(null);
+      return;
+    }
+
+    try {
+      setSavingDailyRate(true);
+      setDailyRateSaveError(null);
+      setDailyRateSaveSuccess(null);
+      const result = await updateEmployee({
+        employeeId: employee.employeeId,
+        dailyRate: parsed,
+        rateEffectiveFrom: effectiveFrom,
+        rateReason: normalizedReason === "" ? null : normalizedReason,
+      } as Parameters<typeof updateEmployee>[0]);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update daily rate");
+      }
+
+      const savedRate = result.data?.dailyRate ?? null;
+      setCurrentDailyRate(savedRate);
+      setDailyRateInput(savedRate == null ? "" : String(savedRate));
+      setDailyRateSaveSuccess(
+        `Daily rate updated to ${formatRate(savedRate)} (effective ${new Date(
+          `${effectiveFrom}T00:00:00`,
+        ).toLocaleDateString()}).`,
+      );
+      setDailyRateReason("");
+      await reloadRateHistory();
+      router.refresh();
+    } catch (error) {
+      console.error("Failed to update daily rate:", error);
+      setDailyRateSaveError(
+        error instanceof Error ? error.message : "Failed to update daily rate",
+      );
+      setDailyRateSaveSuccess(null);
+    } finally {
+      setSavingDailyRate(false);
+    }
+  };
+
+  const formatRate = (value: number | null | undefined) => {
+    if (value == null) return "—";
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
   return (
     <div className="mt-6 rounded-xl border bg-card shadow-sm">
       <div className="flex flex-wrap gap-2 border-b px-4 py-3">
@@ -206,8 +362,176 @@ export function EmployeeProfileTabs({
           <EmployeeForm
             employeeId={employee.employeeId}
             mode="view"
-            initialData={employee}
+            initialData={{
+              ...employee,
+              dailyRate: currentDailyRate,
+            }}
           />
+        )}
+
+        {activeTab === "dailyRate" && (
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Current Daily Rate</CardTitle>
+                <CardDescription>
+                  This is the active rate used as default for new computations.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-2xl font-semibold tracking-tight">
+                  {formatRate(currentDailyRate)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Employee: {employee.employeeCode}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base">Edit Daily Rate</CardTitle>
+                    <CardDescription>
+                      Update the employee&apos;s base daily pay and save the reason.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={isDailyRateEditorOpen ? "secondary" : "outline"}
+                    onClick={() =>
+                      setIsDailyRateEditorOpen((prevOpen) => !prevOpen)
+                    }
+                  >
+                    {isDailyRateEditorOpen ? "Hide Editor" : "Edit Rate"}
+                  </Button>
+                </div>
+              </CardHeader>
+              {isDailyRateEditorOpen && (
+                <CardContent className="space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="dailyRateTabInput">Daily Rate (PHP)</Label>
+                      <Input
+                        id="dailyRateTabInput"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={dailyRateInput}
+                        onChange={(e) => setDailyRateInput(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="dailyRateEffectiveFrom">
+                        Effective From
+                      </Label>
+                      <Input
+                        id="dailyRateEffectiveFrom"
+                        type="date"
+                        value={dailyRateEffectiveFrom}
+                        onChange={(e) =>
+                          setDailyRateEffectiveFrom(e.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="dailyRateReason">Reason (optional)</Label>
+                    <textarea
+                      id="dailyRateReason"
+                      value={dailyRateReason}
+                      onChange={(e) => setDailyRateReason(e.target.value)}
+                      placeholder="Ex: Promotion increase, correction, or policy adjustment"
+                      className="min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      onClick={handleSaveDailyRate}
+                      disabled={savingDailyRate}
+                      className="gap-2"
+                      type="button"
+                    >
+                      {savingDailyRate && (
+                        <Loader2 className="size-4 animate-spin" />
+                      )}
+                      Save Rate
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setIsDailyRateEditorOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  {dailyRateSaveSuccess && (
+                    <p className="text-sm text-green-600">{dailyRateSaveSuccess}</p>
+                  )}
+                  {dailyRateSaveError && (
+                    <p className="text-sm text-destructive">{dailyRateSaveError}</p>
+                  )}
+                </CardContent>
+              )}
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Rate History</CardTitle>
+                <CardDescription>
+                  Historical changes are append-only and ordered by effective date.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {loadingRateHistory ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading rate history...
+                  </div>
+                ) : rateHistoryError ? (
+                  <p className="text-sm text-destructive">{rateHistoryError}</p>
+                ) : rateHistory.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No rate history yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {rateHistory.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="rounded-lg border bg-background/60 px-3 py-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold">
+                            {formatRate(entry.dailyRate)}
+                          </p>
+                          <Badge variant="outline">
+                            {new Date(entry.effectiveFrom).toLocaleDateString()}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Effective:{" "}
+                          {new Date(entry.effectiveFrom).toLocaleString()}
+                        </p>
+                        {entry.reason && (
+                          <p className="text-xs text-muted-foreground">
+                            Reason: {entry.reason}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {rateHistoryWarning && (
+                  <p className="text-xs text-amber-600">{rateHistoryWarning}</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {activeTab === "govIds" && (

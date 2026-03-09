@@ -27,6 +27,7 @@ import {
   CalendarClock,
   ChevronDown,
   ChevronRight,
+  Eye,
   Pencil,
   Plus,
   RefreshCcw,
@@ -200,6 +201,11 @@ export function PatternsSection({
   const [assignmentOverrideDate, setAssignmentOverrideDate] = useState("");
   const [assignmentOverrideDayShifts, setAssignmentOverrideDayShifts] =
     useState<Record<string, string>>(emptyDayShifts());
+  const [assignmentOverrideViewOnly, setAssignmentOverrideViewOnly] =
+    useState(false);
+  const [weeklyPatternView, setWeeklyPatternView] = useState<Pattern | null>(
+    null
+  );
   const [assignmentOverrideSaving, setAssignmentOverrideSaving] =
     useState(false);
   const [assignmentOverrideError, setAssignmentOverrideError] = useState<
@@ -272,7 +278,11 @@ export function PatternsSection({
     return useSnapshotValues ? snapshotValue : patternValue;
   };
 
-  const openOverrideEditor = (assignment: PatternAssignment) => {
+  const openOverrideDialog = (
+    assignment: PatternAssignment,
+    viewOnly: boolean
+  ) => {
+    setAssignmentOverrideViewOnly(viewOnly);
     setAssignmentOverrideEdit(assignment);
     const parsed = new Date(assignment.effectiveDate);
     setAssignmentOverrideDate(
@@ -304,6 +314,14 @@ export function PatternsSection({
         : "",
     });
     setAssignmentOverrideError(null);
+  };
+
+  const openOverrideEditor = (assignment: PatternAssignment) => {
+    openOverrideDialog(assignment, false);
+  };
+
+  const openOverrideViewer = (assignment: PatternAssignment) => {
+    openOverrideDialog(assignment, true);
   };
 
   const saveAssignmentOverride = async () => {
@@ -576,27 +594,27 @@ export function PatternsSection({
             </p>
           ) : (
             <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Employee</th>
-                    <th className="px-3 py-2 text-left">Pattern</th>
-                    <th className="px-3 py-2 text-left">Effective</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead className="px-3 py-2 text-left">Employee</TableHead>
+                    <TableHead className="px-3 py-2 text-left">Pattern</TableHead>
+                    <TableHead className="px-3 py-2 text-left">Effective</TableHead>
+                    <TableHead className="px-3 py-2 text-left">Status</TableHead>
+                    <TableHead className="px-3 py-2 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {groupedAssignments.map(({ employee, latest, older }) => {
                     const expanded =
                       expandedEmployees[employee.employeeId] ?? false;
                     return (
                       <React.Fragment key={employee.employeeId}>
-                        <tr
+                        <TableRow
                           key={`${employee.employeeId}-${latest.effectiveDate}`}
                           className="border-t"
                         >
-                          <td className="px-3 py-2">
+                          <TableCell className="px-3 py-2">
                             <div className="flex items-start gap-2">
                               {older.length > 0 && (
                                 <button
@@ -626,19 +644,28 @@ export function PatternsSection({
                                 </span>
                               </div>
                             </div>
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="px-3 py-2 text-muted-foreground">
                             {latest.pattern ? latest.pattern.name : "—"}
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="px-3 py-2 text-muted-foreground">
                             {formatDateDisplay(latest.effectiveDate)}
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="px-3 py-2 text-muted-foreground">
                             <span className="rounded-full bg-primary/10 text-primary px-2 py-1 text-xs">
                               Latest
                             </span>
-                          </td>
-                          <td className="px-3 py-2 text-right">
+                          </TableCell>
+                          <TableCell className="px-3 py-2 text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1"
+                              onClick={() => openOverrideViewer(latest)}
+                            >
+                              <Eye className="h-4 w-4" />
+                              View
+                            </Button>
                             <Button
                               size="sm"
                               variant="ghost"
@@ -657,29 +684,38 @@ export function PatternsSection({
                               <Trash2 className="h-4 w-4" />
                               Delete
                             </Button>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                         {expanded &&
                           older.map((a) => (
-                            <tr
+                            <TableRow
                               key={`${employee.employeeId}-${a.effectiveDate}`}
                               className="border-t bg-muted/30"
                             >
-                              <td className="px-3 py-2 pl-10 text-sm text-muted-foreground">
+                              <TableCell className="px-3 py-2 pl-10 text-sm text-muted-foreground">
                                 Older assignment
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground">
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-muted-foreground">
                                 {a.pattern ? a.pattern.name : "—"}
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground">
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-muted-foreground">
                                 {formatDateDisplay(a.effectiveDate)}
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground">
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-muted-foreground">
                                 <span className="rounded-full bg-muted px-2 py-1 text-xs">
                                   Older
                                 </span>
-                              </td>
-                              <td className="px-3 py-2 text-right">
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-right">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="gap-1"
+                                  onClick={() => openOverrideViewer(a)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  View
+                                </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -698,14 +734,14 @@ export function PatternsSection({
                                   <Trash2 className="h-4 w-4" />
                                   Delete
                                 </Button>
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           ))}
                       </React.Fragment>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
@@ -713,11 +749,20 @@ export function PatternsSection({
 
       <Dialog
         open={!!assignmentOverrideEdit}
-        onOpenChange={(open) => !open && setAssignmentOverrideEdit(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAssignmentOverrideEdit(null);
+            setAssignmentOverrideViewOnly(false);
+          }
+        }}
       >
         <DialogContent className="w-[95vw] max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Override selected weekly pattern</DialogTitle>
+            <DialogTitle>
+              {assignmentOverrideViewOnly
+                ? "View selected weekly pattern"
+                : "Override selected weekly pattern"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="text-sm text-muted-foreground">
@@ -743,6 +788,7 @@ export function PatternsSection({
                   <select
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                     value={assignmentOverrideDayShifts[d.key] ?? ""}
+                    disabled={assignmentOverrideViewOnly}
                     onChange={(e) =>
                       setAssignmentOverrideDayShifts((prev) => ({
                         ...prev,
@@ -770,16 +816,21 @@ export function PatternsSection({
           <DialogFooter className="gap-2">
             <Button
               variant="ghost"
-              onClick={() => setAssignmentOverrideEdit(null)}
+              onClick={() => {
+                setAssignmentOverrideEdit(null);
+                setAssignmentOverrideViewOnly(false);
+              }}
             >
-              Cancel
+              {assignmentOverrideViewOnly ? "Close" : "Cancel"}
             </Button>
-            <Button
-              onClick={saveAssignmentOverride}
-              disabled={assignmentOverrideSaving}
-            >
-              {assignmentOverrideSaving ? "Saving..." : "Save override"}
-            </Button>
+            {!assignmentOverrideViewOnly && (
+              <Button
+                onClick={saveAssignmentOverride}
+                disabled={assignmentOverrideSaving}
+              >
+                {assignmentOverrideSaving ? "Saving..." : "Save override"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -861,8 +912,8 @@ export function PatternsSection({
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="text-lg">Weekly Patterns</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                View and edit weekly patterns.
+            <p className="text-sm text-muted-foreground">
+                View, edit, and disable weekly patterns.
               </p>
             </div>
             <Button
@@ -879,19 +930,12 @@ export function PatternsSection({
               <p className="text-sm text-muted-foreground">No patterns yet.</p>
             ) : (
               <div className="overflow-x-auto rounded-lg border">
-                <Table>
+                <Table className="table-fixed min-w-[560px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[10%]">Code</TableHead>
-                      <TableHead className="w-[14%]">Name</TableHead>
-                      <TableHead className="w-[8%]">Mon</TableHead>
-                      <TableHead className="w-[8%]">Tue</TableHead>
-                      <TableHead className="w-[8%]">Wed</TableHead>
-                      <TableHead className="w-[8%]">Thu</TableHead>
-                      <TableHead className="w-[8%]">Fri</TableHead>
-                      <TableHead className="w-[8%]">Sat</TableHead>
-                      <TableHead className="w-[8%]">Sun</TableHead>
-                      <TableHead className="w-[16%] text-right">
+                      <TableHead className="w-[160px]">Code</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="w-[260px] text-right">
                         Actions
                       </TableHead>
                     </TableRow>
@@ -901,36 +945,15 @@ export function PatternsSection({
                       <TableRow key={p.id}>
                         <TableCell className="text-sm">{p.code}</TableCell>
                         <TableCell className="text-sm">{p.name}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {shiftLabel(p.monShiftId)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {shiftLabel(p.tueShiftId)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {shiftLabel(p.wedShiftId)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {shiftLabel(p.thuShiftId)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {shiftLabel(p.friShiftId)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {shiftLabel(p.satShiftId)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {shiftLabel(p.sunShiftId)}
-                        </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex flex-wrap items-center justify-end gap-2">
+                          <div className="inline-flex items-center justify-end gap-2 whitespace-nowrap">
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="gap-1 text-destructive"
-                              onClick={() => onDeletePattern(p.id)}
+                              className="gap-1"
+                              onClick={() => setWeeklyPatternView(p)}
                             >
-                              <Trash2 className="h-4 w-4" /> Delete
+                              <Eye className="h-4 w-4" /> View
                             </Button>
                             <Button
                               size="sm"
@@ -939,6 +962,14 @@ export function PatternsSection({
                               onClick={() => onStartEditPattern(p)}
                             >
                               <Pencil className="h-4 w-4" /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1 text-destructive"
+                              onClick={() => onDeletePattern(p.id)}
+                            >
+                              <Trash2 className="h-4 w-4" /> Disable
                             </Button>
                           </div>
                         </TableCell>
@@ -1045,7 +1076,7 @@ export function PatternsSection({
               }
             >
               <Trash2 className="h-4 w-4" />
-              Delete
+              Disable
             </Button>
             <div className="flex gap-2 sm:justify-end">
               <Button
@@ -1062,6 +1093,50 @@ export function PatternsSection({
                 {patternEditSaving ? "Saving..." : "Save changes"}
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!weeklyPatternView}
+        onOpenChange={(open) => !open && setWeeklyPatternView(null)}
+      >
+        <DialogContent className="w-[95vw] max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>View weekly pattern</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Code</label>
+                <Input value={weeklyPatternView?.code ?? ""} readOnly disabled />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Name</label>
+                <Input value={weeklyPatternView?.name ?? ""} readOnly disabled />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+              {dayFields.map((d) => (
+                <div className="space-y-2" key={`view-${d.key}`}>
+                  <label className="text-sm font-medium">{d.label}</label>
+                  <Input
+                    value={
+                      weeklyPatternView
+                        ? shiftLabel(weeklyPatternView[d.key])
+                        : "Rest day"
+                    }
+                    readOnly
+                    disabled
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setWeeklyPatternView(null)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
