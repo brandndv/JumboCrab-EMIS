@@ -73,6 +73,7 @@ model Employee {
   supervisorUser               User?                 @relation("EmployeeSupervisorUser", fields: [supervisorUserId], references: [userId])
   governmentId                 GovernmentId?         @relation("EmployeeGovernmentId")
   contribution                 EmployeeContribution?
+  rateHistory                  EmployeeRateHistory[]
 
   // Scheduling links
   patternAssignments EmployeePatternAssignment[]
@@ -155,6 +156,19 @@ model EmployeeContribution {
   updatedById         String?
   createdBy           User?    @relation("EmployeeContributionCreatedBy", fields: [createdById], references: [userId])
   updatedBy           User?    @relation("EmployeeContributionUpdatedBy", fields: [updatedById], references: [userId])
+}
+
+model EmployeeRateHistory {
+  id            String    @id @default(cuid())
+  employeeId    String
+  dailyRate     Decimal?  @db.Decimal(10, 2)
+  effectiveFrom DateTime  @default(now())
+  reason        String?
+  createdAt     DateTime  @default(now())
+  employee      Employee  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  @@unique([employeeId, effectiveFrom])
+  @@index([effectiveFrom])
 }
 
 // ======== SCHEDULE AND SHIFTS ========= //

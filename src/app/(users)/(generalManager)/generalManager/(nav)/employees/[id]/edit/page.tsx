@@ -45,6 +45,8 @@ function EmployeeEditPageContent({
         // Normalize nullable fields from Prisma to match the Employee form type
         setEmployee({
           ...data,
+          dailyRate:
+            data.dailyRate == null ? null : Number(data.dailyRate),
           isEnded: data.isEnded ?? false,
           img: data.img ?? null,
           emergencyContactName: data.emergencyContactName ?? null,
@@ -93,7 +95,7 @@ function EmployeeEditPageContent({
           </p>
         </div>
         <Button asChild variant="outline" className="gap-2">
-          <Link href={`/admin/employees/${employee.employeeId}/view`}>
+          <Link href={`/generalManager/employees/${employee.employeeId}/view`}>
             <ArrowLeft className="h-4 w-4" />
             Back to View
           </Link>

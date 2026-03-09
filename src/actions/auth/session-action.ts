@@ -3,6 +3,15 @@
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+const toRateNumber = (value: unknown): number | null => {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  const parsed = Number.parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 export async function fetchSession() {
   try {
     const session = await getSession();
@@ -37,6 +46,7 @@ export async function fetchSession() {
     const normalizedEmployee = user.employee
       ? {
           ...user.employee,
+          dailyRate: toRateNumber(user.employee.dailyRate),
           position: user.employee.position?.name ?? null,
           department: user.employee.department?.name ?? null,
         }

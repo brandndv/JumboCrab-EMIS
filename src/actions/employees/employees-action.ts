@@ -12,12 +12,108 @@ import {
 import { generateUniqueEmployeeCode } from "@/lib/employees/employee-code";
 import type { Employee as PrismaEmployee, Prisma } from "@prisma/client";
 
+const toRateNumber = (value: unknown): number | null => {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  const parsed = Number.parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseDateInput = (value: unknown): Date | null => {
+  if (value == null || value === "") return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day, 12, 0, 0, 0);
+  }
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const isSameRate = (left: number | null, right: number | null) => {
+  if (left == null && right == null) return true;
+  if (left == null || right == null) return false;
+  return Math.abs(left - right) < 0.000001;
+};
+
+const isMissingRateHistoryTableError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+  const maybeCode = (error as { code?: unknown }).code;
+  return maybeCode === "P2021";
+};
+
+export type EmployeeActionRecord = Omit<PrismaEmployee, "dailyRate"> & {
+  dailyRate: number | null;
+  department?: string | null;
+  position?: string | null;
+};
+
+const serializeEmployeeRecord = (
+  employee: PrismaEmployee,
+): EmployeeActionRecord => ({
+  ...employee,
+  dailyRate: toRateNumber(employee.dailyRate),
+});
+
+const getFallbackRateHistory = async (
+  employeeId: string,
+  reason: string,
+): Promise<EmployeeRateHistoryItem[]> => {
+  const employee = await db.employee.findUnique({
+    where: { employeeId },
+    select: {
+      employeeId: true,
+      dailyRate: true,
+      startDate: true,
+      updatedAt: true,
+    },
+  });
+
+  const fallbackRate = toRateNumber(employee?.dailyRate);
+  if (!employee || fallbackRate == null) {
+    return [];
+  }
+
+  return [
+    {
+      id: `fallback-${employee.employeeId}`,
+      employeeId: employee.employeeId,
+      dailyRate: fallbackRate,
+      effectiveFrom: employee.startDate.toISOString(),
+      reason,
+      createdAt: employee.updatedAt.toISOString(),
+    },
+  ];
+};
+
+const EMPLOYEE_ROUTE_PREFIXES = [
+  "/admin/employees",
+  "/manager/employees",
+  "/generalManager/employees",
+] as const;
+
+const revalidateEmployeePages = (employeeId?: string) => {
+  revalidatePath("/dashboard/employees");
+  EMPLOYEE_ROUTE_PREFIXES.forEach((prefix) => {
+    revalidatePath(prefix);
+    if (employeeId) {
+      revalidatePath(`${prefix}/${employeeId}/view`);
+      revalidatePath(`${prefix}/${employeeId}/edit`);
+    }
+  });
+};
+
 // ... (getEmployees and getEmployeeById headers omitted as they are unchanged)
 
 // ========== GET EMPLOYEES ========= //
 export async function getEmployees(): Promise<{
   success: boolean;
-  data?: PrismaEmployee[];
+  data?: EmployeeActionRecord[];
   error?: string;
 }> {
   try {
@@ -29,11 +125,15 @@ export async function getEmployees(): Promise<{
         position: { select: { positionId: true, name: true } },
       },
     });
-    const normalized = employees.map((emp) => ({
-      ...emp,
-      department: (emp as any).department?.name ?? null,
-      position: (emp as any).position?.name ?? null,
-    })) as unknown as PrismaEmployee[];
+    const normalized = employees.map(
+      (emp) =>
+        ({
+          ...emp,
+          dailyRate: toRateNumber(emp.dailyRate),
+          department: (emp as any).department?.name ?? null,
+          position: (emp as any).position?.name ?? null,
+        }) as EmployeeActionRecord,
+    );
     console.log(`Fetched ${employees.length} employees`);
     return { success: true, data: normalized };
   } catch (error) {
@@ -51,7 +151,7 @@ export async function getEmployees(): Promise<{
 // ========== GET EMPLOYEE BY ID ========= //
 export async function getEmployeeById(id: string | undefined): Promise<{
   success: boolean;
-  data?: PrismaEmployee | null;
+  data?: EmployeeActionRecord | null;
   error?: string;
 }> {
   try {
@@ -80,9 +180,10 @@ export async function getEmployeeById(id: string | undefined): Promise<{
     const normalized = employee
       ? ({
           ...employee,
+          dailyRate: toRateNumber(employee.dailyRate),
           department: (employee as any).department?.name ?? null,
           position: (employee as any).position?.name ?? null,
-        } as unknown as PrismaEmployee)
+        } as EmployeeActionRecord)
       : employee;
 
     return { success: true, data: normalized };
@@ -91,6 +192,85 @@ export async function getEmployeeById(id: string | undefined): Promise<{
     return {
       success: false,
       error: "An error occurred while fetching the employee",
+    };
+  }
+}
+
+export type EmployeeRateHistoryItem = {
+  id: string;
+  employeeId: string;
+  dailyRate: number | null;
+  effectiveFrom: string;
+  reason: string | null;
+  createdAt: string;
+};
+
+export async function getEmployeeRateHistory(
+  employeeId: string | undefined,
+): Promise<{
+  success: boolean;
+  data?: EmployeeRateHistoryItem[];
+  warning?: string;
+  error?: string;
+}> {
+  if (!employeeId) {
+    return { success: false, error: "Employee ID is required" };
+  }
+
+  try {
+    const rows = await db.employeeRateHistory.findMany({
+      where: { employeeId },
+      orderBy: { effectiveFrom: "desc" },
+      select: {
+        id: true,
+        employeeId: true,
+        dailyRate: true,
+        effectiveFrom: true,
+        reason: true,
+        createdAt: true,
+      },
+    });
+
+    if (rows.length === 0) {
+      return {
+        success: true,
+        data: await getFallbackRateHistory(employeeId, "Current employee rate"),
+      };
+    }
+
+    return {
+      success: true,
+      data: rows.map((row) => ({
+        id: row.id,
+        employeeId: row.employeeId,
+        dailyRate: toRateNumber(row.dailyRate),
+        effectiveFrom: row.effectiveFrom.toISOString(),
+        reason: row.reason ?? null,
+        createdAt: row.createdAt.toISOString(),
+      })),
+    };
+  } catch (error) {
+    if (isMissingRateHistoryTableError(error)) {
+      console.warn(
+        "EmployeeRateHistory table is not available yet. Returning empty history.",
+      );
+      const fallback = await getFallbackRateHistory(
+        employeeId,
+        "Current employee rate (history table not yet migrated)",
+      );
+      return {
+        success: true,
+        data: fallback,
+        warning: "Rate history table not found. Run database migration.",
+      };
+    }
+    console.error(
+      `Error fetching rate history for employee ${employeeId}:`,
+      error,
+    );
+    return {
+      success: false,
+      error: "An error occurred while fetching employee rate history",
     };
   }
 }
@@ -113,7 +293,7 @@ export async function getGeneratedEmployeeCode(): Promise<{
 // ========== CREATE EMPLOYEE ========= //
 export async function createEmployee(employeeData: Employee): Promise<{
   success: boolean;
-  data?: PrismaEmployee;
+  data?: EmployeeActionRecord;
   error?: string;
 }> {
   try {
@@ -183,16 +363,34 @@ export async function createEmployee(employeeData: Employee): Promise<{
     } satisfies Prisma.EmployeeUncheckedCreateInput;
     console.log("Final validated create data:", employeeCreateData);
 
-    // 4. Create in Database
+    // 4. Create employee first; history write is best-effort and must not block creation.
     const newEmployee = await db.employee.create({
       data: employeeCreateData,
-      include: {
-        user: true,
-      },
     });
 
-    revalidatePath("/dashboard/employees");
-    return { success: true, data: newEmployee };
+    const initialRate = toRateNumber(employeeCreateData.dailyRate);
+    if (initialRate != null) {
+      try {
+        await db.employeeRateHistory.create({
+          data: {
+            employeeId: newEmployee.employeeId,
+            dailyRate: initialRate,
+            effectiveFrom: employeeCreateData.startDate ?? new Date(),
+            reason: "Initial daily rate",
+          },
+        });
+      } catch (error) {
+        if (!isMissingRateHistoryTableError(error)) {
+          throw error;
+        }
+        console.warn(
+          "EmployeeRateHistory table is not available yet. Skipping initial rate history write.",
+        );
+      }
+    }
+
+    revalidateEmployeePages(newEmployee.employeeId);
+    return { success: true, data: serializeEmployeeRecord(newEmployee) };
   } catch (error) {
     console.error("Error in createEmployee:", error);
     return {
@@ -206,10 +404,14 @@ export async function createEmployee(employeeData: Employee): Promise<{
 
 // ========== UPDATE EMPLOYEE ========= //
 export async function updateEmployee(
-  employeeData: Partial<PrismaEmployee> & { employeeId: string }
+  employeeData: Partial<PrismaEmployee> & {
+    employeeId: string;
+    rateEffectiveFrom?: string | Date | null;
+    rateReason?: string | null;
+  }
 ): Promise<{
   success: boolean;
-  data?: PrismaEmployee;
+  data?: EmployeeActionRecord;
   error?: string;
 }> {
   const isConnected = await checkConnection();
@@ -219,8 +421,10 @@ export async function updateEmployee(
 
   try {
     const data = JSON.parse(JSON.stringify(employeeData));
-    const { employeeId } = data;
+    const { employeeId, rateEffectiveFrom, rateReason } = data;
     delete data.employeeId;
+    delete data.rateEffectiveFrom;
+    delete data.rateReason;
 
     if ("employeeCode" in data) {
       delete data.employeeCode;
@@ -233,9 +437,14 @@ export async function updateEmployee(
         firstName: true,
         lastName: true,
         nationality: true,
+        dailyRate: true,
         updatedAt: true,
       },
     });
+
+    if (!currentData) {
+      return { success: false, error: "Employee not found" };
+    }
 
     console.log(
       "[SERVER] Current employee data in DB:",
@@ -257,7 +466,7 @@ export async function updateEmployee(
       "civilStatus",
       "departmentId",
       "positionId",
-      "supervisorId",
+      "supervisorUserId",
       "employmentStatus",
       "currentStatus",
       "nationality",
@@ -308,6 +517,21 @@ export async function updateEmployee(
       delete updateData.suffix;
     }
 
+    const parsedRateEffectiveFrom = parseDateInput(rateEffectiveFrom);
+    if (
+      rateEffectiveFrom != null &&
+      rateEffectiveFrom !== "" &&
+      !parsedRateEffectiveFrom
+    ) {
+      return {
+        success: false,
+        error: "Rate effective date is invalid",
+      };
+    }
+    const rateHistoryEffectiveFrom = parsedRateEffectiveFrom ?? new Date();
+    const normalizedRateReason =
+      typeof rateReason === "string" ? rateReason.trim() : "";
+
     if ("dailyRate" in updateData) {
       const value = updateData.dailyRate;
       if (value == null || value === "") {
@@ -316,20 +540,74 @@ export async function updateEmployee(
         const parsed =
           typeof value === "number" ? value : Number.parseFloat(String(value));
         if (Number.isNaN(parsed) || parsed < 0) {
-          delete updateData.dailyRate;
+          return {
+            success: false,
+            error: "Daily rate must be a valid non-negative number",
+          };
         } else {
           updateData.dailyRate = parsed;
         }
       }
     }
 
+    const hasDailyRateUpdate = Object.prototype.hasOwnProperty.call(
+      updateData,
+      "dailyRate",
+    );
+    const previousDailyRate = toRateNumber(currentData.dailyRate);
+    const nextDailyRate = hasDailyRateUpdate
+      ? toRateNumber(updateData.dailyRate)
+      : null;
+
+    // Save employee first so rate changes persist even if history table is unavailable.
     const updatedEmployee = await db.employee.update({
       where: { employeeId },
       data: updateData,
     });
 
-    revalidatePath("/dashboard/employees");
-    return { success: true, data: updatedEmployee };
+    if (
+      hasDailyRateUpdate &&
+      !isSameRate(previousDailyRate, nextDailyRate)
+    ) {
+      try {
+        await db.employeeRateHistory.upsert({
+          where: {
+            employeeId_effectiveFrom: {
+              employeeId,
+              effectiveFrom: rateHistoryEffectiveFrom,
+            },
+          },
+          create: {
+            employeeId,
+            dailyRate: nextDailyRate,
+            effectiveFrom: rateHistoryEffectiveFrom,
+            reason:
+              normalizedRateReason ||
+              (nextDailyRate == null
+                ? "Daily rate cleared"
+                : "Daily rate updated"),
+          },
+          update: {
+            dailyRate: nextDailyRate,
+            reason:
+              normalizedRateReason ||
+              (nextDailyRate == null
+                ? "Daily rate cleared (corrected)"
+                : "Daily rate corrected"),
+          },
+        });
+      } catch (error) {
+        if (!isMissingRateHistoryTableError(error)) {
+          throw error;
+        }
+        console.warn(
+          "EmployeeRateHistory table is not available yet. Skipping rate history write.",
+        );
+      }
+    }
+
+    revalidateEmployeePages(employeeId);
+    return { success: true, data: serializeEmployeeRecord(updatedEmployee) };
   } catch (error) {
     console.error("Error in updateEmployee:", error);
     return {
@@ -384,6 +662,7 @@ export async function setEmployeeArchiveStatus(
       userUpdated = true;
     }
 
+    revalidateEmployeePages(employee.employeeId);
     return {
       success: true,
       data: { employeeId: employee.employeeId, isArchived: employee.isArchived, userUpdated },
@@ -425,7 +704,7 @@ export async function deleteEmployee(id: string): Promise<{
       await tx.employee.delete({ where: { employeeId: id } });
     });
 
-    revalidatePath("/dashboard/employees");
+    revalidateEmployeePages(id);
     return { success: true };
   } catch (error) {
     console.error(`Error deleting employee with ID ${id}:`, error);
@@ -441,7 +720,7 @@ export async function deleteEmployee(id: string): Promise<{
 // ========== GET EMPLOYEE BY CODE ========= //
 export async function getEmployeeByCode(code: string): Promise<{
   success: boolean;
-  data?: PrismaEmployee | null;
+  data?: EmployeeActionRecord | null;
   error?: string;
 }> {
   try {
@@ -456,7 +735,7 @@ export async function getEmployeeByCode(code: string): Promise<{
       };
     }
 
-    return { success: true, data: employee };
+    return { success: true, data: serializeEmployeeRecord(employee) };
   } catch (error) {
     console.error(`Error fetching employee with code ${code}:`, error);
     return {
@@ -469,7 +748,7 @@ export async function getEmployeeByCode(code: string): Promise<{
 // ========== GET EMPLOYEE BY USER ID ========= //
 export async function getEmployeeByUserId(userId: string): Promise<{
   success: boolean;
-  data?: PrismaEmployee | null;
+  data?: EmployeeActionRecord | null;
   error?: string;
 }> {
   try {
@@ -484,7 +763,7 @@ export async function getEmployeeByUserId(userId: string): Promise<{
       };
     }
 
-    return { success: true, data: employee };
+    return { success: true, data: serializeEmployeeRecord(employee) };
   } catch (error) {
     console.error(`Error fetching employee with user ID ${userId}:`, error);
     return {

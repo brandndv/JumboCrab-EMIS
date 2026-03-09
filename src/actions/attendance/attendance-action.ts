@@ -119,6 +119,104 @@ const toNumberOrNull = (value: unknown) => {
   return null;
 };
 
+const isMissingRateHistoryTableError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+  const maybeCode = (error as { code?: unknown }).code;
+  return maybeCode === "P2021";
+};
+
+const buildRateLookupKey = (employeeId: string, workDate: Date | string) =>
+  `${employeeId}::${typeof workDate === "string" ? workDate : workDate.toISOString()}`;
+
+const resolveEffectiveDailyRates = async ({
+  employeeDates,
+  fallbackDailyRates,
+}: {
+  employeeDates: Map<string, Date[]>;
+  fallbackDailyRates?: Map<string, unknown>;
+}) => {
+  const employeeIds = [...employeeDates.keys()];
+  if (employeeIds.length === 0) return new Map<string, number | null>();
+
+  const allDates = [...employeeDates.values()].flat();
+  if (allDates.length === 0) return new Map<string, number | null>();
+
+  const maxWorkDate = allDates.reduce(
+    (latest, current) => (current.getTime() > latest.getTime() ? current : latest),
+    allDates[0],
+  );
+
+  let historyRows: Array<{
+    employeeId: string;
+    dailyRate: unknown;
+    effectiveFrom: Date;
+  }> = [];
+  try {
+    historyRows = await db.employeeRateHistory.findMany({
+      where: {
+        employeeId: { in: employeeIds },
+        effectiveFrom: { lte: maxWorkDate },
+      },
+      orderBy: [{ employeeId: "asc" }, { effectiveFrom: "asc" }],
+      select: {
+        employeeId: true,
+        dailyRate: true,
+        effectiveFrom: true,
+      },
+    });
+  } catch (error) {
+    if (!isMissingRateHistoryTableError(error)) {
+      throw error;
+    }
+    console.warn(
+      "EmployeeRateHistory table is not available yet. Falling back to Employee.dailyRate.",
+    );
+  }
+
+  const historyByEmployee = new Map<
+    string,
+    { effectiveFrom: Date; dailyRate: unknown }[]
+  >();
+  historyRows.forEach((row) => {
+    if (!historyByEmployee.has(row.employeeId)) {
+      historyByEmployee.set(row.employeeId, []);
+    }
+    historyByEmployee.get(row.employeeId)!.push({
+      effectiveFrom: row.effectiveFrom,
+      dailyRate: row.dailyRate,
+    });
+  });
+
+  const resolved = new Map<string, number | null>();
+
+  employeeDates.forEach((dates, id) => {
+    const uniqueDateIsos = [...new Set(dates.map((date) => date.toISOString()))].sort();
+    const history = historyByEmployee.get(id) ?? [];
+    const fallbackRate = toNumberOrNull(fallbackDailyRates?.get(id));
+
+    let historyIndex = 0;
+    let currentRate: number | null = history.length === 0 ? fallbackRate : null;
+
+    uniqueDateIsos.forEach((iso) => {
+      const dateMs = new Date(iso).getTime();
+      while (
+        historyIndex < history.length &&
+        history[historyIndex].effectiveFrom.getTime() <= dateMs
+      ) {
+        currentRate = toNumberOrNull(history[historyIndex].dailyRate);
+        historyIndex += 1;
+      }
+
+      const rate =
+        currentRate ?? (history.length === 0 ? fallbackRate : null);
+
+      resolved.set(buildRateLookupKey(id, iso), rate);
+    });
+  });
+
+  return resolved;
+};
+
 const formatWorkedHoursAndMinutes = (minutes: number | null | undefined) => {
   if (minutes == null) return null;
   const normalizedMinutes = Math.max(0, Math.round(minutes));
@@ -410,10 +508,31 @@ export async function listAttendance(input?: {
       },
     });
 
+    const recordDatesByEmployee = new Map<string, Date[]>();
+    const recordFallbackRates = new Map<string, unknown>();
+    records.forEach((record) => {
+      if (!recordDatesByEmployee.has(record.employeeId)) {
+        recordDatesByEmployee.set(record.employeeId, []);
+      }
+      recordDatesByEmployee.get(record.employeeId)!.push(record.workDate);
+      if (!recordFallbackRates.has(record.employeeId)) {
+        recordFallbackRates.set(record.employeeId, record.employee?.dailyRate ?? null);
+      }
+    });
+    const effectiveDailyRates = await resolveEffectiveDailyRates({
+      employeeDates: recordDatesByEmployee,
+      fallbackDailyRates: recordFallbackRates,
+    });
+
     //#2
     // Enrich each row with punch values and expected schedule values.
     const enriched = await Promise.all(
       records.map(async (record) => {
+        const effectiveDailyRate =
+          effectiveDailyRates.get(
+            buildRateLookupKey(record.employeeId, record.workDate),
+          ) ?? toNumberOrNull(record.employee?.dailyRate ?? null);
+
         // Rebuild local day boundaries in configured timezone before querying punches.
         const localDisplay = new Date(
           new Date(record.workDate).toLocaleString("en-US", { timeZone: TZ }),
@@ -503,7 +622,7 @@ export async function listAttendance(input?: {
               })
             : { undertimeMinutes: null, overtimeMinutesRaw: null };
         const ratePerMinute = computeRatePerMinute({
-          dailyRate: record.employee?.dailyRate ?? null,
+          dailyRate: effectiveDailyRate,
           scheduledPaidMinutes,
         });
         const payableAmount = computePayableAmountFromNetMinutes({
@@ -529,7 +648,7 @@ export async function listAttendance(input?: {
           breakMinutes: mergedBreakMinutes,
           deductedBreakMinutes,
           netWorkedMinutes,
-          dailyRate: record.employee?.dailyRate ?? null,
+          dailyRate: effectiveDailyRate,
           ratePerMinute,
           payableAmount,
           breakStartAt,
@@ -574,6 +693,17 @@ export async function listAttendance(input?: {
       }
       const dayStart = startOfZonedDay(parsedStart);
       const dayEnd = endOfZonedDay(parsedStart);
+
+      const includeAllDatesByEmployee = new Map<string, Date[]>();
+      const includeAllFallbackRates = new Map<string, unknown>();
+      employees.forEach((emp) => {
+        includeAllDatesByEmployee.set(emp.employeeId, [dayStart]);
+        includeAllFallbackRates.set(emp.employeeId, emp.dailyRate ?? null);
+      });
+      const includeAllEffectiveRates = await resolveEffectiveDailyRates({
+        employeeDates: includeAllDatesByEmployee,
+        fallbackDailyRates: includeAllFallbackRates,
+      });
 
       const employeeIds = employees.map((employee) => employee.employeeId);
       const punches = await db.punch.findMany({
@@ -674,8 +804,12 @@ export async function listAttendance(input?: {
           scheduledEndMinutes: scheduledEnd,
           scheduledBreakMinutes,
         });
+        const effectiveDailyRate =
+          includeAllEffectiveRates.get(
+            buildRateLookupKey(emp.employeeId, dayStart),
+          ) ?? toNumberOrNull(emp.dailyRate ?? null);
         const ratePerMinute = computeRatePerMinute({
-          dailyRate: emp.dailyRate ?? null,
+          dailyRate: effectiveDailyRate,
           scheduledPaidMinutes,
         });
         const expectedShiftId =
@@ -686,8 +820,7 @@ export async function listAttendance(input?: {
         if (existing) {
           return {
             ...existing,
-            dailyRate:
-              existing.dailyRate ?? toNumberOrNull(emp.dailyRate ?? null),
+            dailyRate: existing.dailyRate ?? effectiveDailyRate,
             ratePerMinute: existing.ratePerMinute ?? ratePerMinute ?? null,
             scheduledStartMinutes: scheduledStart,
             scheduledEndMinutes: scheduledEnd,
@@ -721,7 +854,7 @@ export async function listAttendance(input?: {
           actualOutAt: null,
           workedMinutes: null,
           workedHoursAndMinutes: null,
-          dailyRate: toNumberOrNull(emp.dailyRate ?? null),
+          dailyRate: effectiveDailyRate,
           ratePerMinute,
           payableAmount: null,
           deductedBreakMinutes: 0,
