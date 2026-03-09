@@ -224,6 +224,26 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           path: "/patterns",
           roles: ["admin", "generalManager", "manager", "supervisor"],
         },
+        {
+          label: "Attendance Locks",
+          path: "/locks",
+          roles: ["admin", "manager"],
+        },
+        {
+          label: "My Attendance",
+          path: "",
+          roles: ["employee"],
+        },
+        {
+          label: "View Schedule",
+          path: "/schedule",
+          roles: ["employee"],
+        },
+        {
+          label: "History",
+          path: "/history",
+          roles: ["employee"],
+        },
       ],
       // ========== ATTENDANCE ACCESS ========= //
       roles: [
@@ -316,6 +336,11 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           label: "Violation Directory",
           path: "",
           roles: ["admin", "manager", "supervisor", "clerk", "employee"],
+        },
+        {
+          label: "Add Violation",
+          path: "/add",
+          roles: ["admin"],
         },
       ],
       // ========== VIOLATION ACCESS ========= //

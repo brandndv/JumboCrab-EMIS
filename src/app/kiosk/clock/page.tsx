@@ -1,4 +1,4 @@
-  "use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCcw, LogIn, LogOut, Coffee, Clock, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatZonedDate, formatZonedTime, startOfZonedDay, zonedNow } from "@/lib/timezone";
+import {
+  formatZonedDate,
+  formatZonedTime,
+  startOfZonedDay,
+  zonedNow,
+} from "@/lib/timezone";
 import { KioskQrPanel } from "@/components/kiosk/kiosk-qr-panel";
 import {
   type KioskAuthMode,
@@ -35,7 +40,12 @@ type StatusPayload = {
     department?: { name: string | null } | null;
     position?: { name: string | null } | null;
   };
-  expected: { start: number | null; end: number | null; shiftName: string | null; source: string };
+  expected: {
+    start: number | null;
+    end: number | null;
+    shiftName: string | null;
+    source: string;
+  };
   punches: Punch[];
   lastPunch: Punch | null;
   breakCount: number;
@@ -159,26 +169,44 @@ export default function KioskClockPage() {
     setMounted(true);
   }, []);
 
-const nextActions = useMemo(() => {
+  const nextActions = useMemo(() => {
     const last = status?.lastPunch?.punchType;
-    const allowedNext: Record<Punch["punchType"] | "NONE", Punch["punchType"]> = {
-      NONE: "TIME_IN",
-      TIME_OUT: "TIME_IN",
-      TIME_IN: "BREAK_IN",
-      BREAK_IN: "BREAK_OUT",
-      BREAK_OUT: "TIME_OUT",
-    };
+    const allowedNext: Record<Punch["punchType"] | "NONE", Punch["punchType"]> =
+      {
+        NONE: "TIME_IN",
+        TIME_OUT: "TIME_IN",
+        TIME_IN: "BREAK_IN",
+        BREAK_IN: "BREAK_OUT",
+        BREAK_OUT: "TIME_OUT",
+      };
     const key = (last as Punch["punchType"]) ?? "NONE";
     const expected = allowedNext[key as keyof typeof allowedNext];
     const all = [
-      { type: "TIME_IN", label: "TIME IN", icon: <LogIn className="h-5 w-5" /> },
-      { type: "BREAK_IN", label: "BREAK START", icon: <Coffee className="h-5 w-5" /> },
-      { type: "BREAK_OUT", label: "BREAK END", icon: <Clock className="h-5 w-5" /> },
-      { type: "TIME_OUT", label: "TIME OUT", icon: <LogOut className="h-5 w-5" /> },
+      {
+        type: "TIME_IN",
+        label: "TIME IN",
+        icon: <LogIn className="h-5 w-5" />,
+      },
+      {
+        type: "BREAK_IN",
+        label: "BREAK START",
+        icon: <Coffee className="h-5 w-5" />,
+      },
+      {
+        type: "BREAK_OUT",
+        label: "BREAK END",
+        icon: <Clock className="h-5 w-5" />,
+      },
+      {
+        type: "TIME_OUT",
+        label: "TIME OUT",
+        icon: <LogOut className="h-5 w-5" />,
+      },
     ];
     return all.map((a) => ({ ...a, enabled: a.type === expected }));
   }, [status?.lastPunch?.punchType]);
 
+  // PUNCHING LOGIC IN KIOSK
   const punch = async (punchType: Punch["punchType"]) => {
     try {
       if (authMode === "password" && (!username || !password)) {
@@ -186,14 +214,19 @@ const nextActions = useMemo(() => {
         return;
       }
       if (authMode === "qr") {
-        setError("QR mode uses employee scan flow. Kiosk-side manual punch is disabled.");
+        setError(
+          "QR mode uses employee scan flow. Kiosk-side manual punch is disabled.",
+        );
         return;
       }
-      // Front-end validation mirrors API reasons for faster feedback
       const now = zonedNow();
-      const todayISO = new Date(now).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+      const todayISO = new Date(now).toLocaleDateString("en-CA", {
+        timeZone: "Asia/Manila",
+      });
       const dayStart = startOfZonedDay(now);
-      const minutesSinceStart = Math.round((now.getTime() - dayStart.getTime()) / 60000);
+      const minutesSinceStart = Math.round(
+        (now.getTime() - dayStart.getTime()) / 60000,
+      );
 
       if (punchType === "TIME_IN") {
         if (selectedDate && selectedDate !== todayISO) {
@@ -208,7 +241,10 @@ const nextActions = useMemo(() => {
           setError(reasonMessage("too_early"));
           return;
         }
-        if (status.expected.end != null && minutesSinceStart > status.expected.end) {
+        if (
+          status.expected.end != null &&
+          minutesSinceStart > status.expected.end
+        ) {
           setError(reasonMessage("too_late"));
           return;
         }
@@ -221,7 +257,7 @@ const nextActions = useMemo(() => {
       if (!result.success) {
         const msg = reasonMessage(
           result.reason,
-          result.error || "Failed to punch"
+          result.error || "Failed to punch",
         );
         throw new Error(msg);
       }
@@ -238,15 +274,24 @@ const nextActions = useMemo(() => {
   };
 
   return (
-      <div className="min-h-screen bg-muted/20 flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen bg-muted/20 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-5xl space-y-8">
         <div className="text-center space-y-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Kiosk</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Kiosk
+          </p>
           <h1 className="text-4xl font-semibold">Clock</h1>
-          <p className="text-sm text-muted-foreground">Time in/out and breaks from this device only.</p>
+          <p className="text-sm text-muted-foreground">
+            Time in/out and breaks from this device only.
+          </p>
           <div className="text-6xl font-semibold tracking-tight">
             {mounted
-              ? formatZonedTime(now, { hour12: true, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+              ? formatZonedTime(now, {
+                  hour12: true,
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })
               : "— — : — —"}
           </div>
           <div className="text-sm text-muted-foreground">
@@ -268,7 +313,9 @@ const nextActions = useMemo(() => {
             </p>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Shield className="h-4 w-4" />
-              <span>Only allowed IPs can punch (configure ALLOWED_PUNCH_IPS env).</span>
+              <span>
+                Only allowed IPs can punch (configure ALLOWED_PUNCH_IPS env).
+              </span>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -292,18 +339,18 @@ const nextActions = useMemo(() => {
                 setSuggestions([]);
               }}
             />
-            {authMode === "qr" ? (
-              <KioskQrPanel />
-            ) : null}
+            {authMode === "qr" ? <KioskQrPanel /> : null}
             <div className="flex flex-wrap items-center gap-3 justify-center">
               {nextActions.map((action) => (
                 <Button
                   key={action.type}
                   className={cn(
                     "gap-3 text-lg px-8 py-6",
-                    !action.enabled && "opacity-60 cursor-not-allowed"
+                    !action.enabled && "opacity-60 cursor-not-allowed",
                   )}
-                  disabled={!!punching || !action.enabled || authMode !== "password"}
+                  disabled={
+                    !!punching || !action.enabled || authMode !== "password"
+                  }
                   onClick={() => punch(action.type)}
                   size="lg"
                 >
@@ -311,24 +358,24 @@ const nextActions = useMemo(() => {
                   {punching === action.type ? "Working..." : action.label}
                 </Button>
               ))}
-                <Button
-                  variant="ghost"
-                  size="lg"
-                  className="gap-2 px-6 py-6"
-                  onClick={() => username && loadStatus(username)}
-                  aria-label="Reload"
-                >
-                  <RefreshCcw className="h-5 w-5" /> Refresh
-                </Button>
-                <Input
-                  type="date"
-                  className="w-40"
-                  value={selectedDate}
-                  onChange={(e) => {
-                    setSelectedDate(e.target.value);
-                    if (username) loadStatus(username);
-                  }}
-                />
+              <Button
+                variant="ghost"
+                size="lg"
+                className="gap-2 px-6 py-6"
+                onClick={() => username && loadStatus(username)}
+                aria-label="Reload"
+              >
+                <RefreshCcw className="h-5 w-5" /> Refresh
+              </Button>
+              <Input
+                type="date"
+                className="w-40"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  if (username) loadStatus(username);
+                }}
+              />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             {info && <p className="text-sm text-green-600">{info}</p>}
@@ -337,7 +384,9 @@ const nextActions = useMemo(() => {
 
         {loadingStatus ? (
           <Card className="shadow-sm">
-            <CardContent className="p-4 text-sm text-muted-foreground">Loading status...</CardContent>
+            <CardContent className="p-4 text-sm text-muted-foreground">
+              Loading status...
+            </CardContent>
           </Card>
         ) : status ? (
           <Card className="shadow-sm">
@@ -345,7 +394,8 @@ const nextActions = useMemo(() => {
               <div>
                 <CardTitle className="text-lg">Status</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  {status.employee.firstName} {status.employee.lastName} ({status.employee.employeeCode})
+                  {status.employee.firstName} {status.employee.lastName} (
+                  {status.employee.employeeCode})
                 </p>
               </div>
               <Badge variant="outline" className="uppercase">
@@ -357,42 +407,66 @@ const nextActions = useMemo(() => {
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Expected</p>
                   <p className="text-sm">
-                    {status.expected.start != null && status.expected.end != null
+                    {status.expected.start != null &&
+                    status.expected.end != null
                       ? `${minutesToTime(status.expected.start)} - ${minutesToTime(status.expected.end)}`
                       : "No schedule"}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {status.expected.shiftName || "Day off"} ({status.expected.source || "none"})
+                    {status.expected.shiftName || "Day off"} (
+                    {status.expected.source || "none"})
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Last punch</p>
                   <p className="text-sm font-medium">
-                    {status.lastPunch ? formatPunchLabel(status.lastPunch.punchType) : "None"}
+                    {status.lastPunch
+                      ? formatPunchLabel(status.lastPunch.punchType)
+                      : "None"}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {status.lastPunch ? formatZonedTime(status.lastPunch.punchTime, { hour12: true, hour: "2-digit", minute: "2-digit" }) : "—"}
+                    {status.lastPunch
+                      ? formatZonedTime(status.lastPunch.punchTime, {
+                          hour12: true,
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "—"}
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Breaks</p>
                   <p className="text-sm">
-                    {status.breakMinutes} mins {status.breakCount ? `(${status.breakCount}x)` : ""}
+                    {status.breakMinutes} mins{" "}
+                    {status.breakCount ? `(${status.breakCount}x)` : ""}
                   </p>
                 </div>
               </div>
               <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Today&apos;s punches</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Today&apos;s punches
+                </p>
                 {status.punches.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No punches yet today.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No punches yet today.
+                  </p>
                 ) : (
                   <div className="rounded-lg border">
                     <div className="divide-y">
                       {status.punches.map((p, idx) => (
-                        <div key={idx} className="flex items-center justify-between px-3 py-2">
-                          <span className="text-sm font-medium">{formatPunchLabel(p.punchType)}</span>
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between px-3 py-2"
+                        >
+                          <span className="text-sm font-medium">
+                            {formatPunchLabel(p.punchType)}
+                          </span>
                           <span className="text-xs text-muted-foreground">
-                            {formatZonedTime(p.punchTime, { hour12: true, hour: "2-digit", minute: "2-digit" })}
+                            {formatZonedTime(p.punchTime, {
+                              hour12: true,
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </span>
                         </div>
                       ))}

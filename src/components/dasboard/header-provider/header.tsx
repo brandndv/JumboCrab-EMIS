@@ -13,6 +13,7 @@ import { Separator } from "@radix-ui/react-separator";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect } from "react";
 import { ModeToggle } from "@/components/theme-provider/mode-toggle";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 /**
  * NavHeader Component
@@ -98,7 +99,7 @@ const NavHeader = () => {
                 // Generate breadcrumb items for each path segment
                 return rest.map((seg, idx) => {
                   const href = `/${[role, ...rest.slice(0, idx + 1)].join(
-                    "/"
+                    "/",
                   )}`;
                   const isLast = idx === rest.length - 1;
                   return (
@@ -138,13 +139,27 @@ const NavHeader = () => {
                   ? `${employee.firstName} ${employee.lastName}`
                   : user.username}
               </span>
-              <span className="text-xs text-muted-foreground">{user.role}</span>
-            </div>
-            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-              <span className="text-sm font-medium text-muted-foreground">
-                {user.username?.charAt(0).toUpperCase()}
+              <span className="text-xs text-muted-foreground">
+                {employee?.position}
               </span>
             </div>
+            <Avatar className="h-9 w-9  ">
+              {(user?.image || user?.employee?.img) && (
+                <AvatarImage
+                  src={
+                    (user?.image as string) || (user?.employee?.img as string)
+                  }
+                  alt={
+                    employee
+                      ? `${employee.firstName} ${employee.lastName}`
+                      : `${user.username}`
+                  }
+                />
+              )}
+              <AvatarFallback className="bg-primary/10 text-primary font-semibold uppercase">
+                {user ? (user.username?.[0] ?? "U") : "U"}
+              </AvatarFallback>
+            </Avatar>
           </div>
         </div>
       </div>

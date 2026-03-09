@@ -10,13 +10,296 @@ type ExpectedShift = {
 };
 
 type DayKey = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
-const AUTO_TIMEOUT_GRACE_MINUTES = 60;
+const AUTO_TIMEOUT_GRACE_MINUTES = 60; //AUTO TIME OUT DURATION AFTER SCHEDULE END
+const DEFAULT_LATE_GRACE_MINUTES = 0;
+
+const parseNonNegativeMinutes = (
+  value: string | undefined,
+  fallback: number,
+) => {
+  if (typeof value !== "string" || value.trim() === "") return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) return fallback;
+  return Math.max(0, parsed);
+};
+
+// Configurable grace before an employee is marked late.
+// Example: ATTENDANCE_LATE_GRACE_MINUTES=10 means first 10 minutes are not late.
+export const LATE_GRACE_MINUTES = parseNonNegativeMinutes(
+  process.env.ATTENDANCE_LATE_GRACE_MINUTES,
+  DEFAULT_LATE_GRACE_MINUTES,
+);
 
 const minutesBetween = (a: Date, b: Date) =>
   Math.round((b.getTime() - a.getTime()) / 60000);
 
+// Converts Decimal/number-like values into a finite number.
+const toFiniteNumber = (value: unknown): number | null => {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof value === "object") {
+    const withToString = value as { toString?: () => string };
+    if (typeof withToString.toString === "function") {
+      const parsed = Number.parseFloat(withToString.toString());
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+  return null;
+};
+
+type ScheduledPaidMinutesInput = {
+  paidHoursPerDay: unknown;
+  scheduledStartMinutes: number | null | undefined;
+  scheduledEndMinutes: number | null | undefined;
+  scheduledBreakMinutes: number | null | undefined;
+};
+
+// Returns target paid minutes for payroll comparisons.
+// Priority:
+// 1) Shift paidHoursPerDay (explicit payroll target)
+// 2) Scheduled span minus scheduled unpaid break (fallback)
+export const computeScheduledPaidMinutes = ({
+  paidHoursPerDay,
+  scheduledStartMinutes,
+  scheduledEndMinutes,
+  scheduledBreakMinutes,
+}: ScheduledPaidMinutesInput): number | null => {
+  const paidHours = toFiniteNumber(paidHoursPerDay);
+  if (paidHours != null && paidHours > 0) {
+    return Math.max(0, Math.round(paidHours * 60));
+  }
+
+  if (
+    typeof scheduledStartMinutes !== "number" ||
+    typeof scheduledEndMinutes !== "number"
+  ) {
+    return null;
+  }
+
+  let scheduledSpanMinutes = scheduledEndMinutes - scheduledStartMinutes;
+  if (scheduledSpanMinutes < 0) {
+    scheduledSpanMinutes += 24 * 60;
+  }
+
+  const scheduledBreak =
+    typeof scheduledBreakMinutes === "number" &&
+    Number.isFinite(scheduledBreakMinutes)
+      ? Math.max(0, Math.round(scheduledBreakMinutes))
+      : 0;
+
+  return Math.max(0, scheduledSpanMinutes - scheduledBreak);
+};
+
+type PayrollVarianceInput = {
+  netWorkedMinutes: number | null | undefined;
+  scheduledPaidMinutes: number | null | undefined;
+};
+
+// Payroll-accurate variance:
+// - overtime is minutes above paid target
+// - undertime is minutes below paid target
+export const computePayrollVariance = ({
+  netWorkedMinutes,
+  scheduledPaidMinutes,
+}: PayrollVarianceInput) => {
+  if (
+    typeof netWorkedMinutes !== "number" ||
+    !Number.isFinite(netWorkedMinutes) ||
+    typeof scheduledPaidMinutes !== "number" ||
+    !Number.isFinite(scheduledPaidMinutes)
+  ) {
+    return { undertimeMinutes: 0, overtimeMinutesRaw: 0 };
+  }
+
+  const net = Math.max(0, Math.round(netWorkedMinutes));
+  const target = Math.max(0, Math.round(scheduledPaidMinutes));
+
+  return {
+    undertimeMinutes: Math.max(0, target - net),
+    overtimeMinutesRaw: Math.max(0, net - target),
+  };
+};
+
+type MinuteRateInput = {
+  dailyRate: unknown;
+  scheduledPaidMinutes: number | null | undefined;
+};
+
+// Per-minute payroll rate from daily base pay.
+// Formula: dailyRate / scheduledPaidMinutes
+export const computeRatePerMinute = ({
+  dailyRate,
+  scheduledPaidMinutes,
+}: MinuteRateInput): number | null => {
+  const normalizedDailyRate = toFiniteNumber(dailyRate);
+  if (
+    normalizedDailyRate == null ||
+    normalizedDailyRate < 0 ||
+    typeof scheduledPaidMinutes !== "number" ||
+    !Number.isFinite(scheduledPaidMinutes) ||
+    scheduledPaidMinutes <= 0
+  ) {
+    return null;
+  }
+
+  return normalizedDailyRate / scheduledPaidMinutes;
+};
+
+type PayableAmountInput = {
+  netWorkedMinutes: number | null | undefined;
+  ratePerMinute: number | null | undefined;
+};
+
+// Pro-rated payable amount from net payable minutes.
+// Formula: netWorkedMinutes * ratePerMinute
+export const computePayableAmountFromNetMinutes = ({
+  netWorkedMinutes,
+  ratePerMinute,
+}: PayableAmountInput): number | null => {
+  if (
+    typeof netWorkedMinutes !== "number" ||
+    !Number.isFinite(netWorkedMinutes) ||
+    typeof ratePerMinute !== "number" ||
+    !Number.isFinite(ratePerMinute)
+  ) {
+    return null;
+  }
+
+  const gross = Math.max(0, netWorkedMinutes) * Math.max(0, ratePerMinute);
+  return Math.round(gross * 100) / 100;
+};
+
+export const computeLateMinutes = (
+  scheduledStartMinutes: number | null | undefined,
+  actualInMinutes: number | null | undefined,
+) => {
+  if (scheduledStartMinutes == null || actualInMinutes == null) return null;
+  const lateStartMinute = scheduledStartMinutes + LATE_GRACE_MINUTES;
+  return Math.max(0, actualInMinutes - lateStartMinute);
+};
+
+type BreakDeductionInput = {
+  workedMinutes: number | null | undefined;
+  actualBreakMinutes: number | null | undefined;
+  scheduledBreakMinutes: number | null | undefined;
+  breakStartMinutes: number | null | undefined;
+  breakEndMinutes: number | null | undefined;
+  actualInMinutes: number | null | undefined;
+  actualOutMinutes: number | null | undefined;
+};
+
+// Computes policy break deduction and net work minutes.
+// Rule:
+// - If a configured break window is fully covered by the worked span, enforce at least scheduled break.
+// - Otherwise, only deduct actual recorded break punches.
+export const computeBreakDeduction = ({
+  workedMinutes,
+  actualBreakMinutes,
+  scheduledBreakMinutes,
+  breakStartMinutes,
+  breakEndMinutes,
+  actualInMinutes,
+  actualOutMinutes,
+}: BreakDeductionInput) => {
+  if (workedMinutes == null) {
+    // Incomplete shift: net time cannot be computed yet.
+    return {
+      deductedBreakMinutes: 0,
+      netWorkedMinutes: null,
+      fixedBreakApplied: false,
+    };
+  }
+
+  let grossWorkedMinutes = Math.round(workedMinutes); // Gross = clock-out minus clock-in.
+  if (grossWorkedMinutes < 0) grossWorkedMinutes = 0;
+
+  let actualBreak = 0;
+  if (
+    typeof actualBreakMinutes === "number" &&
+    Number.isFinite(actualBreakMinutes)
+  ) {
+    // Normalize punch derived break.
+    actualBreak = Math.round(actualBreakMinutes);
+    if (actualBreak < 0) actualBreak = 0;
+  }
+
+  let scheduledBreak = 0;
+  if (
+    typeof scheduledBreakMinutes === "number" &&
+    Number.isFinite(scheduledBreakMinutes)
+  ) {
+    // Normalize shift-configured break minutes.
+    scheduledBreak = Math.round(scheduledBreakMinutes);
+    if (scheduledBreak < 0) scheduledBreak = 0;
+  }
+
+  if (scheduledBreak === 0) {
+    // No shift break policy: deduct only actual break punches.
+    let netWorkedMinutes = grossWorkedMinutes - actualBreak;
+    if (netWorkedMinutes < 0) netWorkedMinutes = 0;
+    return {
+      deductedBreakMinutes: actualBreak,
+      netWorkedMinutes,
+      fixedBreakApplied: false,
+    };
+  }
+
+  let fixedBreakApplied = false;
+  const hasBreakWindow = // Shift has explicit break window and we have in/out times to compare.
+    typeof breakStartMinutes === "number" &&
+    typeof breakEndMinutes === "number" &&
+    typeof actualInMinutes === "number" &&
+    typeof actualOutMinutes === "number";
+
+  if (hasBreakWindow) {
+    const inMinutes = actualInMinutes;
+    let outMinutes = actualOutMinutes;
+    let breakStart = breakStartMinutes;
+    let breakEnd = breakEndMinutes;
+
+    if (outMinutes < inMinutes) outMinutes += 24 * 60; // Handle overnight worked span.
+    if (breakEnd < breakStart) breakEnd += 24 * 60; // Handle overnight break window.
+
+    while (breakStart > outMinutes) {
+      // Shift break window backward until it can intersect work span.
+      breakStart -= 24 * 60;
+      breakEnd -= 24 * 60;
+    }
+    while (breakEnd < inMinutes) {
+      // Shift break window forward until it can intersect work span.
+      breakStart += 24 * 60;
+      breakEnd += 24 * 60;
+    }
+
+    fixedBreakApplied = inMinutes <= breakStart && outMinutes >= breakEnd; // Worked span fully covers break window.
+  } else {
+    // Fallback when break window is not configured.
+    if (grossWorkedMinutes > scheduledBreak) {
+      fixedBreakApplied = true;
+    }
+  }
+
+  let deductedBreakMinutes = actualBreak; // Default deduction is actual break only.
+  if (fixedBreakApplied) {
+    deductedBreakMinutes = Math.max(scheduledBreak, actualBreak); // Enforce minimum scheduled deduction.
+  }
+
+  let netWorkedMinutes = grossWorkedMinutes - deductedBreakMinutes; // Net payable minutes.
+  if (netWorkedMinutes < 0) netWorkedMinutes = 0;
+
+  return { deductedBreakMinutes, netWorkedMinutes, fixedBreakApplied };
+};
+
 const dayKey = (date: Date): DayKey => {
-  const dayStr = date.toLocaleDateString("en-US", { weekday: "short", timeZone: TZ }).toLowerCase();
+  const dayStr = date
+    .toLocaleDateString("en-US", { weekday: "short", timeZone: TZ })
+    .toLowerCase();
   switch (dayStr.slice(0, 3)) {
     case "sun":
       return "sun";
@@ -37,7 +320,10 @@ const dayKey = (date: Date): DayKey => {
   }
 };
 
-export async function getExpectedShiftForDate(employeeId: string, workDate: Date): Promise<ExpectedShift> {
+export async function getExpectedShiftForDate(
+  employeeId: string,
+  workDate: Date,
+): Promise<ExpectedShift> {
   const dayStart = startOfZonedDay(workDate);
   const dayEnd = endOfZonedDay(workDate);
 
@@ -62,7 +348,12 @@ export async function getExpectedShiftForDate(employeeId: string, workDate: Date
   });
 
   if (!patternAssignment?.pattern) {
-    return { shift: null, scheduledStartMinutes: null, scheduledEndMinutes: null, source: "none" };
+    return {
+      shift: null,
+      scheduledStartMinutes: null,
+      scheduledEndMinutes: null,
+      source: "none",
+    };
   }
 
   const pattern = patternAssignment.pattern;
@@ -100,9 +391,11 @@ export async function getExpectedShiftForDate(employeeId: string, workDate: Date
       fromPattern: pattern.satShiftId,
     },
   };
-  const snapshotValues = Object.values(shiftIdsByDay).map((entry) => entry.snapshot);
+  const snapshotValues = Object.values(shiftIdsByDay).map(
+    (entry) => entry.snapshot,
+  );
   const patternValues = Object.values(shiftIdsByDay).map(
-    (entry) => entry.fromPattern
+    (entry) => entry.fromPattern,
   );
   const hasAnySnapshotValue = snapshotValues.some((value) => value !== null);
   const patternHasAnyValue = patternValues.some((value) => value !== null);
@@ -116,12 +409,22 @@ export async function getExpectedShiftForDate(employeeId: string, workDate: Date
     : shiftIdsByDay[key].fromPattern;
 
   if (!shiftId) {
-    return { shift: null, scheduledStartMinutes: null, scheduledEndMinutes: null, source: "none" };
+    return {
+      shift: null,
+      scheduledStartMinutes: null,
+      scheduledEndMinutes: null,
+      source: "none",
+    };
   }
 
   const shift = await db.shift.findUnique({ where: { id: shiftId } });
   if (!shift) {
-    return { shift: null, scheduledStartMinutes: null, scheduledEndMinutes: null, source: "none" };
+    return {
+      shift: null,
+      scheduledStartMinutes: null,
+      scheduledEndMinutes: null,
+      source: "none",
+    };
   }
 
   return {
@@ -134,7 +437,7 @@ export async function getExpectedShiftForDate(employeeId: string, workDate: Date
 
 export async function recomputeAttendanceForDay(
   employeeId: string,
-  workDate: Date
+  workDate: Date,
 ) {
   const dayStart = startOfZonedDay(workDate);
   const dayEnd = endOfZonedDay(workDate);
@@ -152,11 +455,14 @@ export async function recomputeAttendanceForDay(
   const expected = await getExpectedShiftForDate(employeeId, dayStart);
   const paidHoursPerDay = expected.shift?.paidHoursPerDay ?? null;
 
-  let firstClockIn = punches.find((p) => p.punchType === PUNCH_TYPE.TIME_IN) ?? null;
+  let firstClockIn =
+    punches.find((p) => p.punchType === PUNCH_TYPE.TIME_IN) ?? null;
   let lastClockOut =
-    [...punches].reverse().find((p) => p.punchType === PUNCH_TYPE.TIME_OUT) ?? null;
+    [...punches].reverse().find((p) => p.punchType === PUNCH_TYPE.TIME_OUT) ??
+    null;
 
-  // Auto-timeout rule: after scheduled end + 60 minutes, create a synthetic TIME_OUT.
+  //!AUTO TIMEOUT LOGIC
+  // Auto timeout rule: after scheduled end + 60 minutes, and create AUTO TIME OUT.
   // This keeps attendance from staying INCOMPLETE forever when someone forgets to clock out.
   const autoTimeoutCutoffMinutes =
     expected.scheduledEndMinutes != null
@@ -171,12 +477,12 @@ export async function recomputeAttendanceForDay(
 
   if (shouldAutoTimeout && expected.scheduledEndMinutes != null) {
     const autoTimeoutAt = new Date(
-      dayStart.getTime() + expected.scheduledEndMinutes * 60 * 1000
+      dayStart.getTime() + expected.scheduledEndMinutes * 60 * 1000, //expected timeout * 60sec per min* 1000ms = 60,000 ms
     );
     const hasTimeoutAtScheduledEnd = punches.some(
       (p) =>
         p.punchType === PUNCH_TYPE.TIME_OUT &&
-        p.punchTime.getTime() === autoTimeoutAt.getTime()
+        p.punchTime.getTime() === autoTimeoutAt.getTime(),
     );
 
     if (!hasTimeoutAtScheduledEnd) {
@@ -197,17 +503,23 @@ export async function recomputeAttendanceForDay(
       },
       orderBy: { punchTime: "asc" },
     });
-    firstClockIn = punches.find((p) => p.punchType === PUNCH_TYPE.TIME_IN) ?? null;
+    firstClockIn =
+      punches.find((p) => p.punchType === PUNCH_TYPE.TIME_IN) ?? null;
     lastClockOut =
-      [...punches].reverse().find((p) => p.punchType === PUNCH_TYPE.TIME_OUT) ?? null;
+      [...punches].reverse().find((p) => p.punchType === PUNCH_TYPE.TIME_OUT) ??
+      null;
   }
 
-  // Compute breaks by pairing consecutive break punches (BREAK_IN/OUT in any order)
+  //! BREAK LOGIC - pairs break start and break end then it
+  // computes the duration of the break.
   let breakCount = 0;
   let breakMinutes = 0;
   let breakStart: Date | null = null;
   punches.forEach((p) => {
-    if (p.punchType === PUNCH_TYPE.BREAK_IN || p.punchType === PUNCH_TYPE.BREAK_OUT) {
+    if (
+      p.punchType === PUNCH_TYPE.BREAK_IN ||
+      p.punchType === PUNCH_TYPE.BREAK_OUT
+    ) {
       if (!breakStart) {
         breakStart = p.punchTime;
       } else {
@@ -220,32 +532,52 @@ export async function recomputeAttendanceForDay(
 
   // Lock and mark incomplete once we're 5 minutes after scheduled end (clamped to 0).
   const cutoffMinutes =
-    expected.scheduledEndMinutes != null ? Math.max(0, expected.scheduledEndMinutes + 5) : null;
-  const cutoffPassed = cutoffMinutes != null ? nowMinutes >= cutoffMinutes : false;
+    expected.scheduledEndMinutes != null
+      ? Math.max(0, expected.scheduledEndMinutes + 5)
+      : null;
+  const cutoffPassed =
+    cutoffMinutes != null ? nowMinutes >= cutoffMinutes : false;
 
   const actualInAt = firstClockIn?.punchTime ?? punches[0]?.punchTime ?? null;
   const actualOutAt = lastClockOut?.punchTime ?? null;
-  const actualInMinutes = actualInAt ? minutesBetween(dayStart, actualInAt) : null;
-  const actualOutMinutes = actualOutAt ? minutesBetween(dayStart, actualOutAt) : null;
+  const actualInMinutes = actualInAt
+    ? minutesBetween(dayStart, actualInAt)
+    : null;
+  const actualOutMinutes = actualOutAt
+    ? minutesBetween(dayStart, actualOutAt)
+    : null;
 
   const workedMinutes =
-    actualInAt && actualOutAt ? Math.max(0, minutesBetween(actualInAt, actualOutAt)) : null;
+    actualInAt && actualOutAt
+      ? Math.max(0, minutesBetween(actualInAt, actualOutAt))
+      : null;
+  const scheduledBreakMinutes = Math.max(
+    0,
+    expected.shift?.breakMinutesUnpaid ?? 0,
+  );
+  const { deductedBreakMinutes, netWorkedMinutes } = computeBreakDeduction({
+    workedMinutes,
+    actualBreakMinutes: breakMinutes,
+    scheduledBreakMinutes,
+    breakStartMinutes: expected.shift?.breakStartMinutes ?? null,
+    breakEndMinutes: expected.shift?.breakEndMinutes ?? null,
+    actualInMinutes,
+    actualOutMinutes,
+  });
+  const scheduledPaidMinutes = computeScheduledPaidMinutes({
+    paidHoursPerDay,
+    scheduledStartMinutes: expected.scheduledStartMinutes,
+    scheduledEndMinutes: expected.scheduledEndMinutes,
+    scheduledBreakMinutes,
+  });
+  const { undertimeMinutes, overtimeMinutesRaw } = computePayrollVariance({
+    netWorkedMinutes,
+    scheduledPaidMinutes,
+  });
 
   const lateMinutes =
-    expected.scheduledStartMinutes != null && actualInMinutes != null
-      ? Math.max(0, actualInMinutes - expected.scheduledStartMinutes)
-      : 0;
-
-  const undertimeMinutes =
-    expected.scheduledEndMinutes != null && actualOutMinutes != null
-      ? Math.max(0, expected.scheduledEndMinutes - actualOutMinutes)
-      : 0;
-
-  const overtimeMinutesRaw =
-    expected.scheduledEndMinutes != null && actualOutMinutes != null
-      ? Math.max(0, actualOutMinutes - expected.scheduledEndMinutes)
-      : 0;
-
+    computeLateMinutes(expected.scheduledStartMinutes, actualInMinutes) ?? 0;
+  // ATTENDANCE - Rest Day / Day Off Logic
   // If no schedule exists for the day, treat it as REST by default.
   let status: ATTENDANCE_STATUS = expected.shift
     ? ATTENDANCE_STATUS.ABSENT
@@ -254,11 +586,23 @@ export async function recomputeAttendanceForDay(
     if (!actualOutAt && cutoffPassed) {
       status = ATTENDANCE_STATUS.INCOMPLETE;
     } else {
-      status = lateMinutes > 0 ? ATTENDANCE_STATUS.LATE : ATTENDANCE_STATUS.PRESENT;
+      status =
+        lateMinutes > 0 ? ATTENDANCE_STATUS.LATE : ATTENDANCE_STATUS.PRESENT;
     }
   }
 
-  const shouldLock = cutoffPassed;
+  // Locking is manual now; recompute must not auto-lock by elapsed time.
+  // Preserve current lock state for existing rows.
+  const existingAttendance = await db.attendance.findUnique({
+    where: {
+      employeeId_workDate: {
+        employeeId,
+        workDate: dayStart,
+      },
+    },
+    select: { isLocked: true },
+  });
+  const shouldLock = existingAttendance?.isLocked ?? false;
 
   const attendance = await db.attendance.upsert({
     where: { employeeId_workDate: { employeeId, workDate: dayStart } },
@@ -272,6 +616,8 @@ export async function recomputeAttendanceForDay(
       actualOutAt,
       workedMinutes,
       breakMinutes,
+      deductedBreakMinutes,
+      netWorkedMinutes,
       breakCount,
       lateMinutes,
       undertimeMinutes,
@@ -290,6 +636,8 @@ export async function recomputeAttendanceForDay(
       actualOutAt,
       workedMinutes,
       breakMinutes,
+      deductedBreakMinutes,
+      netWorkedMinutes,
       breakCount,
       lateMinutes,
       undertimeMinutes,
@@ -328,7 +676,10 @@ export async function createPunchAndMaybeRecompute(options: {
 
   let attendance = null;
   if (recompute) {
-    const { attendance: updated } = await recomputeAttendanceForDay(employeeId, punchTime);
+    const { attendance: updated } = await recomputeAttendanceForDay(
+      employeeId,
+      punchTime,
+    );
     attendance = updated;
   }
 

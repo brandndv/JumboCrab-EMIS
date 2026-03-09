@@ -41,7 +41,9 @@ function parseKioskQr(text: string): KioskParsed | null {
   }
 }
 
-function parseKioskQuery(searchParams: { get: (name: string) => string | null }): KioskParsed | null {
+function parseKioskQuery(searchParams: {
+  get: (name: string) => string | null;
+}): KioskParsed | null {
   const kioskId = searchParams.get("k") ?? "";
   const nonce = searchParams.get("n") ?? "";
   const e = searchParams.get("e") ?? "";
@@ -189,7 +191,8 @@ export default function EmployeeScanPage() {
 
         let preferredDeviceId: string | undefined;
         try {
-          const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+          const devices =
+            await BrowserMultiFormatReader.listVideoInputDevices();
           preferredDeviceId =
             devices.find((d) => /back|rear|environment/i.test(d.label))
               ?.deviceId ?? devices[0]?.deviceId;
@@ -225,7 +228,10 @@ export default function EmployeeScanPage() {
           controls.stop();
         }
       } catch (err) {
-        const msg = toErrorMessage(err, "Camera error. Please allow permission.");
+        const msg = toErrorMessage(
+          err,
+          "Camera error. Please allow permission.",
+        );
         if (
           /enumerate devices|method not supported|mediaDevices|getUserMedia/i.test(
             msg,
@@ -268,7 +274,8 @@ export default function EmployeeScanPage() {
         <CardHeader>
           <CardTitle className="text-xl">Employee QR Scan</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Use your personal phone to scan the kiosk QR and record your next attendance punch.
+            Use your personal phone to scan the kiosk QR and record your next
+            attendance punch.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -296,8 +303,8 @@ export default function EmployeeScanPage() {
               </p>
               <video ref={videoRef} className="w-full rounded-xl bg-black" />
               <p className="text-xs text-muted-foreground">
-                If camera doesn&apos;t open, check browser permission and use HTTPS
-                on real devices.
+                If camera doesn&apos;t open, check browser permission and use
+                HTTPS on real devices.
               </p>
             </div>
           ) : null}

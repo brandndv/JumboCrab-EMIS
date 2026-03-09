@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "react-big-calendar/lib/css/react-big-calendar.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -140,5 +141,182 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+.employee-schedule-calendar--modern .rbc-calendar {
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.employee-schedule-calendar--modern .rbc-month-view {
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  border-radius: 1rem;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  width: 100%;
+  min-width: 0;
+}
+
+.employee-schedule-calendar--modern .rbc-header {
+  padding: 0.7rem 0.5rem;
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.employee-schedule-calendar--modern .rbc-month-row + .rbc-month-row,
+.employee-schedule-calendar--modern .rbc-day-bg + .rbc-day-bg {
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+.employee-schedule-calendar--modern .rbc-month-row {
+  min-height: 9.1rem;
+}
+
+.employee-schedule-calendar--modern .rbc-date-cell {
+  padding: 0.35rem 0.45rem 0.15rem;
+  text-align: right;
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+
+.employee-schedule-calendar--modern .rbc-off-range-bg {
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+}
+
+.employee-schedule-calendar--modern .rbc-off-range .rbc-date-cell {
+  opacity: 0.45;
+}
+
+.employee-schedule-calendar--modern .rbc-day-bg.rbc-selected-day {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+
+.employee-schedule-calendar--modern .rbc-day-bg.rbc-focus-today {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.employee-schedule-calendar--modern .rbc-day-bg.rbc-override-day {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.employee-schedule-calendar--modern .rbc-event {
+  border-radius: 0.65rem;
+  padding: 0;
+  min-height: 5.85rem;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.employee-schedule-calendar--modern .rbc-row-segment {
+  padding: 0 2px 2px;
+  min-width: 0;
+}
+
+.employee-schedule-calendar--modern .rbc-row-content .rbc-row:last-child {
+  margin-top: 0.05rem;
+}
+
+.employee-schedule-calendar--modern .rbc-row-segment .rbc-event-content {
+  height: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  min-width: 0;
+}
+
+.employee-schedule-calendar--modern .employee-day-event {
+  display: flex;
+  height: 100%;
+  min-height: 5.85rem;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.45rem 0.5rem;
+  min-width: 0;
+}
+
+.employee-schedule-calendar--modern .employee-day-event-code {
+  margin: 0;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employee-schedule-calendar--modern .employee-day-event-time {
+  margin: 0;
+  font-size: 0.68rem;
+  opacity: 0.92;
+  line-height: 1.25;
+}
+
+.employee-schedule-calendar--modern .rbc-event.rbc-shift-event {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+.employee-schedule-calendar--modern .rbc-event.rbc-shift-event.rbc-override-event {
+  border: 1px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  box-shadow: none;
+}
+
+.employee-schedule-calendar--modern .rbc-event.rbc-rest-event {
+  border: 1px dashed color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+  color: var(--muted-foreground);
+}
+
+@media (max-width: 640px) {
+  .employee-schedule-calendar--modern .rbc-header {
+    padding: 0.45rem 0.25rem;
+    letter-spacing: 0.04em;
+    font-size: 0.62rem;
+  }
+
+  .employee-schedule-calendar--modern .rbc-month-row {
+    min-height: 6.4rem;
+  }
+
+  .employee-schedule-calendar--modern .rbc-date-cell {
+    padding: 0.2rem 0.3rem 0.1rem;
+    font-size: 0.68rem;
+  }
+
+  .employee-schedule-calendar--modern .rbc-row-segment {
+    padding: 0 1px 1px;
+  }
+
+  .employee-schedule-calendar--modern .rbc-event {
+    min-height: 3rem;
+    border-radius: 0.5rem;
+  }
+
+  .employee-schedule-calendar--modern .employee-day-event {
+    min-height: 3rem;
+    justify-content: flex-start;
+    gap: 0.12rem;
+    padding: 0.3rem 0.35rem;
+  }
+
+  .employee-schedule-calendar--modern .employee-day-event-code {
+    font-size: 0.63rem;
+    line-height: 1.15;
   }
 }

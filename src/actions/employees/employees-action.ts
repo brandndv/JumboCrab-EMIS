@@ -277,6 +277,7 @@ export async function updateEmployee(
       "emergencyContactRelationship",
       "emergencyContactPhone",
       "emergencyContactEmail",
+      "dailyRate",
       "userId",
     ];
 
@@ -305,6 +306,21 @@ export async function updateEmployee(
 
     if (data.suffix && !SUFFIX.includes(data.suffix)) {
       delete updateData.suffix;
+    }
+
+    if ("dailyRate" in updateData) {
+      const value = updateData.dailyRate;
+      if (value == null || value === "") {
+        updateData.dailyRate = null;
+      } else {
+        const parsed =
+          typeof value === "number" ? value : Number.parseFloat(String(value));
+        if (Number.isNaN(parsed) || parsed < 0) {
+          delete updateData.dailyRate;
+        } else {
+          updateData.dailyRate = parsed;
+        }
+      }
     }
 
     const updatedEmployee = await db.employee.update({

@@ -334,10 +334,13 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
     try {
       const result = await deletePatternAction(id);
       if (!result.success) {
-        throw new Error(result.error || "Failed to delete pattern");
+        throw new Error(result.error || "Failed to disable pattern");
       }
     } catch (err) {
-      console.error(err);
+      const message =
+        err instanceof Error ? err.message : "Failed to disable pattern";
+      setPatternError(message);
+      setPatternEditError(message);
     } finally {
       if (editingPatternId === id) cancelPatternEdit();
       await load();

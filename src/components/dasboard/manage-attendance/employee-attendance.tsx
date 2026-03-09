@@ -15,7 +15,7 @@ import {
 import { useSession } from "@/hooks/use-session";
 import { listAttendance } from "@/actions/attendance/attendance-action";
 import type { AttendanceRow } from "@/hooks/use-attendance";
-import { CalendarRange, Table2 } from "lucide-react";
+import { Table2 } from "lucide-react";
 import { TZ } from "@/lib/timezone";
 
 type BimonthlyPeriod = "first" | "second";
@@ -214,6 +214,7 @@ const EmployeeAttendance = () => {
       ? employee.department
       : "No department assigned";
   const employeeCode = employee?.employeeCode || "No employee code";
+  const profileMeta = `${positionLabel} • ${departmentLabel}`;
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -221,26 +222,25 @@ const EmployeeAttendance = () => {
         <h1 className="text-2xl font-semibold">My Attendance</h1>
         <p className="text-sm text-muted-foreground">Track daily attendance</p>
       </div>
-      <Card className="overflow-hidden">
-        <CardHeader className="bg-muted/20">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-            <Avatar className="h-28 w-28 shrink-0 ring-2 ring-primary/15">
+      <Card className="overflow-hidden border-border/60 shadow-sm">
+        <CardHeader className="bg-muted/20 p-4 sm:p-5">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <Avatar className="h-14 w-14 shrink-0 ring-2 ring-primary/15 sm:h-16 sm:w-16">
               {avatarSrc && <AvatarImage src={avatarSrc} alt={displayName} />}
               <AvatarFallback className="bg-primary/10 text-xl font-semibold uppercase text-primary">
                 {getInitials(displayName)}
               </AvatarFallback>
             </Avatar>
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-row gap-2">
-                <h2 className="truncate text-2xl font-semibold">
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="max-w-full truncate text-xl font-semibold leading-tight sm:text-2xl">
                   {displayName}
                 </h2>
-                <span className="rounded-full font-semibold text-sm border border-border bg-orange-500 px-2 py-1 text-white">
+                <span className="inline-flex w-fit rounded-full border border-border bg-orange-500 px-2.5 py-0.5 text-xs font-semibold text-white">
                   {employeeCode}
                 </span>
               </div>
-              <p className="text-sm text-muted-foreground">{positionLabel}</p>
-              <p className="text-sm text-muted-foreground">{departmentLabel}</p>
+              <p className="truncate text-sm text-muted-foreground">{profileMeta}</p>
             </div>
           </div>
         </CardHeader>
@@ -257,19 +257,30 @@ const EmployeeAttendance = () => {
               Showing attendance for the selected half of the current month.
             </p>
           </div>
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <CalendarRange className="h-4 w-4 text-muted-foreground" />
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value as BimonthlyPeriod)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 sm:w-72"
-            >
-              {periodOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+          <div className="w-full sm:w-auto sm:min-w-[24rem]">
+            <div className="grid grid-cols-2 rounded-lg border bg-muted/30 p-1">
+              {periodOptions.map((option) => {
+                const active = period === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setPeriod(option.value)}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+                      active
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {option.value === "first" ? "1st Half" : "2nd Half"}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground sm:text-right">
+              {selectedRange?.label}
+            </p>
           </div>
         </CardHeader>
         <CardContent>
@@ -298,6 +309,7 @@ const EmployeeAttendance = () => {
                     <TableHead>Late</TableHead>
                     <TableHead>Over/Under</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Work Hours</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -329,22 +341,39 @@ const EmployeeAttendance = () => {
                             : "—"}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            row?.status === "PRESENT"
-                              ? "success"
-                              : row?.status === "LATE"
-                                ? "warning"
-                                : row?.status === "INCOMPLETE"
-                                  ? "info"
-                                  : row?.status === "ABSENT"
-                                    ? "destructive"
-                                    : "outline"
-                          }
-                          className="uppercase tracking-wide"
-                        >
-                          {row?.status || "NO RECORD"}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge
+                            variant={
+                              row?.status === "PRESENT"
+                                ? "success"
+                                : row?.status === "LATE"
+                                  ? "warning"
+                                  : row?.status === "INCOMPLETE"
+                                    ? "info"
+                                    : row?.status === "ABSENT"
+                                      ? "destructive"
+                                      : "outline"
+                            }
+                            className="w-fit uppercase tracking-wide"
+                          >
+                            {row?.status || "NO RECORD"}
+                          </Badge>
+                          {row?.forgotToTimeOut ? (
+                            <Badge
+                              className="w-fit uppercase tracking-wide"
+                              variant="destructive"
+                            >
+                              Forgot time out
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {row?.netWorkedHoursAndMinutes ??
+                          row?.workedHoursAndMinutes ??
+                          formatMinutesToDuration(
+                            row?.netWorkedMinutes ?? row?.workedMinutes,
+                          )}
                       </TableCell>
                     </TableRow>
                   ))}

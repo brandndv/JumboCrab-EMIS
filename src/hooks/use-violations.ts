@@ -13,7 +13,7 @@ export function useViolationsState() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [violationType, setViolationType] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<
-    "ALL" | "PENDING" | "WAIVED" | "DEDUCTED"
+    "ALL" | "ACKNOWLEDGED" | "UNACKNOWLEDGED"
   >("ALL");
 
   useEffect(() => {
@@ -24,13 +24,18 @@ export function useViolationsState() {
     const term = searchTerm.trim().toLowerCase();
     return violations.filter((row) => {
       const matchesSearch = term
-        ? `${row.employeeName} ${row.employeeCode}`.toLowerCase().includes(term)
+        ? `${row.employeeName} ${row.employeeCode} ${row.violationName}`
+            .toLowerCase()
+            .includes(term)
         : true;
       const matchesViolationType =
         violationType === "ALL" ||
-        row.violationType.toLowerCase() === violationType.toLowerCase();
+        row.violationName.toLowerCase() === violationType.toLowerCase();
       const matchesStatus =
-        statusFilter === "ALL" || row.status.toUpperCase() === statusFilter;
+        statusFilter === "ALL" ||
+        (statusFilter === "ACKNOWLEDGED"
+          ? row.isAcknowledged
+          : !row.isAcknowledged);
       return matchesSearch && matchesViolationType && matchesStatus;
     });
   }, [searchTerm, statusFilter, violationType, violations]);

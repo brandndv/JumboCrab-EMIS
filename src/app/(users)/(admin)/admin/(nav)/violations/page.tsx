@@ -1,12 +1,7 @@
 import ViolationsPageContent from "@/components/dasboard/manage-violations/violations-page-content";
-import ViolationsProvider from "@/components/dasboard/manage-violations/violations-provider";
 
 const ViolationsPage = () => {
-  return (
-    <ViolationsProvider>
-      <ViolationsPageContent />
-    </ViolationsProvider>
-  );
+  return <ViolationsPageContent />;
 };
 
 export default ViolationsPage;
