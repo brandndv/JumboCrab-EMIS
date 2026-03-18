@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import {
   computeBreakDeduction,
+  computeLateGraceCreditMinutes,
   computeLateMinutes,
   computePayableAmountFromNetMinutes,
   computePayrollVariance,
@@ -38,8 +39,14 @@ type EmployeeSummary = {
 type AttendanceRecord = Attendance & {
   employee?: EmployeeSummary | null;
   expectedShift?: {
+    id: number;
     name: string | null;
+    startMinutes: number;
+    endMinutes: number;
+    breakStartMinutes: number | null;
+    breakEndMinutes: number | null;
     breakMinutesUnpaid?: number | null;
+    paidHoursPerDay?: unknown;
   } | null;
 };
 
@@ -70,9 +77,12 @@ type AttendanceOverrides = {
   payableAmount?: number | null;
   punchesCount?: number;
   lateMinutes?: number | null;
+  lateGraceCreditMinutes?: number | null;
   undertimeMinutes?: number | null;
   overtimeMinutesRaw?: number | null;
   workedMinutes?: number | null;
+  payableWorkedMinutes?: number | null;
+  payableWorkedHoursAndMinutes?: string | null;
 };
 
 // Checks whether a key exists on overrides, even if the value is null.
@@ -87,6 +97,12 @@ const toIsoString = (value: Date | string | null | undefined) => {
   if (typeof value === "string") return value;
   if (value instanceof Date) return value.toISOString();
   return null;
+};
+
+const toDateOrNull = (value: Date | string | null | undefined) => {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
 // Safely converts Decimal/number/string-like values to string for JSON responses.
@@ -127,6 +143,9 @@ const isMissingRateHistoryTableError = (error: unknown) => {
 
 const buildRateLookupKey = (employeeId: string, workDate: Date | string) =>
   `${employeeId}::${typeof workDate === "string" ? workDate : workDate.toISOString()}`;
+
+const buildEmployeeDayKey = (employeeId: string, date: Date) =>
+  `${employeeId}::${toDayKey(date)}`;
 
 const resolveEffectiveDailyRates = async ({
   employeeDates,
@@ -227,6 +246,19 @@ const formatWorkedHoursAndMinutes = (minutes: number | null | undefined) => {
   return `${hours}hr ${mins} min${mins === 1 ? "" : "s"}`;
 };
 
+const serializeEmployeeSummary = (employee?: EmployeeSummary | null) => {
+  if (!employee) return null;
+  return {
+    employeeId: employee.employeeId,
+    employeeCode: employee.employeeCode,
+    firstName: employee.firstName,
+    lastName: employee.lastName,
+    dailyRate: toNumberOrNull(employee.dailyRate ?? null),
+    department: employee.department ?? null,
+    position: employee.position ?? null,
+  };
+};
+
 // Canonical serializer for punch records returned by server actions.
 const serializePunch = (punch: PunchRecord) => {
   return {
@@ -239,7 +271,7 @@ const serializePunch = (punch: PunchRecord) => {
     deviceId: punch.deviceId ?? null,
     createdAt: punch.createdAt.toISOString(),
     updatedAt: punch.updatedAt.toISOString(),
-    employee: punch.employee ?? null,
+    employee: serializeEmployeeSummary(punch.employee),
   };
 };
 
@@ -324,9 +356,49 @@ const serializeAttendance = (
   const netWorkedMinutes = hasOverride(overrides, "netWorkedMinutes")
     ? (overrides?.netWorkedMinutes ?? null)
     : (record.netWorkedMinutes ?? null);
+  const dayStart = startOfZonedDay(record.workDate);
+  const actualInDate = toDateOrNull(actualInAt);
+  const actualInMinutes = actualInDate
+    ? Math.round((actualInDate.getTime() - dayStart.getTime()) / 60000)
+    : null;
+  const scheduledPaidMinutes = computeScheduledPaidMinutes({
+    paidHoursPerDay: record.paidHoursPerDay ?? null,
+    scheduledStartMinutes,
+    scheduledEndMinutes,
+    scheduledBreakMinutes,
+  });
+  const computedLateGraceCreditMinutes = computeLateGraceCreditMinutes({
+    scheduledStartMinutes,
+    actualInMinutes,
+  });
+  const lateGraceCreditMinutes = hasOverride(overrides, "lateGraceCreditMinutes")
+    ? Math.max(0, overrides?.lateGraceCreditMinutes ?? 0)
+    : computedLateGraceCreditMinutes;
+  const computedPayableWorkedMinutes =
+    typeof netWorkedMinutes === "number" && Number.isFinite(netWorkedMinutes)
+      ? typeof scheduledPaidMinutes === "number" &&
+        Number.isFinite(scheduledPaidMinutes)
+        ? Math.max(
+            0,
+            Math.min(
+              Math.round(scheduledPaidMinutes),
+              Math.round(netWorkedMinutes) + lateGraceCreditMinutes,
+            ),
+          )
+        : Math.max(0, Math.round(netWorkedMinutes))
+      : null;
+  const payableWorkedMinutes = hasOverride(overrides, "payableWorkedMinutes")
+    ? Math.max(0, overrides?.payableWorkedMinutes ?? 0)
+    : computedPayableWorkedMinutes;
   const workedHoursAndMinutes = formatWorkedHoursAndMinutes(workedMinutes);
   const netWorkedHoursAndMinutes =
     formatWorkedHoursAndMinutes(netWorkedMinutes);
+  const payableWorkedHoursAndMinutes = hasOverride(
+    overrides,
+    "payableWorkedHoursAndMinutes",
+  )
+    ? (overrides?.payableWorkedHoursAndMinutes ?? null)
+    : formatWorkedHoursAndMinutes(payableWorkedMinutes);
 
   return {
     id: record.id,
@@ -353,6 +425,9 @@ const serializeAttendance = (
     deductedBreakMinutes,
     netWorkedMinutes,
     netWorkedHoursAndMinutes,
+    payableWorkedMinutes,
+    payableWorkedHoursAndMinutes,
+    lateGraceCreditMinutes,
     breakCount,
     lateMinutes,
     undertimeMinutes,
@@ -362,8 +437,19 @@ const serializeAttendance = (
     isLocked: record.isLocked,
     payrollPeriodId: record.payrollPeriodId ?? null,
     punchesCount,
-    employee: record.employee ?? null,
-    expectedShift: record.expectedShift ?? null,
+    employee: serializeEmployeeSummary(record.employee),
+    expectedShift: record.expectedShift
+      ? {
+          id: record.expectedShift.id,
+          name: record.expectedShift.name,
+          startMinutes: record.expectedShift.startMinutes,
+          endMinutes: record.expectedShift.endMinutes,
+          breakStartMinutes: record.expectedShift.breakStartMinutes,
+          breakEndMinutes: record.expectedShift.breakEndMinutes,
+          breakMinutesUnpaid: record.expectedShift.breakMinutesUnpaid ?? null,
+          paidHoursPerDay: toStringOrNull(record.expectedShift.paidHoursPerDay),
+        }
+      : null,
   };
 };
 
@@ -425,7 +511,12 @@ const getRangeBounds = (start: Date, end?: Date) => {
   return { rangeStart, rangeEnd };
 };
 
-const isAttendanceLockedForMoment = async (
+type AttendanceFreezeState = {
+  isLocked: boolean;
+  payrollPeriodId: string | null;
+};
+
+const getAttendanceFreezeStateForMoment = async (
   employeeId: string,
   punchTime: Date,
 ) => {
@@ -436,9 +527,30 @@ const isAttendanceLockedForMoment = async (
       employeeId,
       workDate: { gte: dayStart, lt: dayEnd },
     },
-    select: { isLocked: true },
+    select: {
+      isLocked: true,
+      payrollPeriodId: true,
+    },
   });
-  return Boolean(attendance?.isLocked);
+  if (!attendance) return null;
+  return {
+    isLocked: Boolean(attendance.isLocked),
+    payrollPeriodId: attendance.payrollPeriodId ?? null,
+  } satisfies AttendanceFreezeState;
+};
+
+const getAttendanceFreezeError = (
+  state: AttendanceFreezeState | null,
+  lockedMessage: string,
+) => {
+  if (!state) return null;
+  if (state.payrollPeriodId) {
+    return "Attendance is already linked to payroll. Use payroll adjustments instead of editing punches.";
+  }
+  if (state.isLocked) {
+    return lockedMessage;
+  }
+  return null;
 };
 
 export async function listAttendance(input?: {
@@ -446,6 +558,12 @@ export async function listAttendance(input?: {
   end?: string | null;
   employeeId?: string | null;
   status?: string | null;
+  query?: string | null;
+  departmentId?: string | null;
+  positionId?: string | null;
+  variance?: "OT" | "UT" | "LATE" | null;
+  page?: number | null;
+  pageSize?: number | null;
   includeAll?: boolean;
 }) {
   try {
@@ -453,15 +571,34 @@ export async function listAttendance(input?: {
     const start = typeof input?.start === "string" ? input.start : null;
     const end = typeof input?.end === "string" ? input.end : null;
     const employeeId =
-      typeof input?.employeeId === "string" ? input.employeeId : null;
+      typeof input?.employeeId === "string" ? input.employeeId.trim() : null;
     const status = typeof input?.status === "string" ? input.status : null;
+    const query =
+      typeof input?.query === "string" ? input.query.trim() : "";
+    const queryTokens = query.split(/\s+/).filter(Boolean);
+    const departmentId =
+      typeof input?.departmentId === "string" ? input.departmentId.trim() : "";
+    const positionId =
+      typeof input?.positionId === "string" ? input.positionId.trim() : "";
+    const variance = input?.variance ?? null;
     const includeAll = Boolean(input?.includeAll);
     const singleDay = Boolean(start && end && start === end);
+    const pageRaw =
+      typeof input?.page === "number" && Number.isFinite(input.page)
+        ? Math.floor(input.page)
+        : 1;
+    const pageSizeRaw =
+      typeof input?.pageSize === "number" && Number.isFinite(input.pageSize)
+        ? Math.floor(input.pageSize)
+        : 100;
+    const page = Math.max(1, pageRaw);
+    const pageSize = Math.max(10, Math.min(200, pageSizeRaw));
+    const shouldPaginate = !includeAll;
 
-    const where: Record<string, any> = {};
+    const where: Prisma.AttendanceWhereInput = {};
     if (start || end) {
       // Convert date boundaries into timezone-aware day boundaries for DB filtering.
-      const workDate: Record<string, Date> = {};
+      const workDate: Prisma.DateTimeFilter = {};
       if (start) {
         const parsedStart = new Date(start);
         if (!Number.isNaN(parsedStart.getTime())) {
@@ -487,11 +624,59 @@ export async function listAttendance(input?: {
     ) {
       where.status = status as ATTENDANCE_STATUS;
     }
+    if (variance === "OT") where.overtimeMinutesRaw = { gt: 0 };
+    if (variance === "UT") where.undertimeMinutes = { gt: 0 };
+    if (variance === "LATE") where.lateMinutes = { gt: 0 };
+    if (departmentId || positionId || queryTokens.length > 0) {
+      const employeeWhere: Prisma.EmployeeWhereInput = {
+        isArchived: false,
+      };
+      if (departmentId) {
+        employeeWhere.departmentId = departmentId;
+      }
+      if (positionId) {
+        employeeWhere.positionId = positionId;
+      }
+      if (queryTokens.length > 0) {
+        employeeWhere.AND = queryTokens.map((token) => ({
+          OR: [
+            { employeeCode: { contains: token, mode: "insensitive" } },
+            { firstName: { contains: token, mode: "insensitive" } },
+            { middleName: { contains: token, mode: "insensitive" } },
+            { lastName: { contains: token, mode: "insensitive" } },
+            {
+              department: {
+                is: { name: { contains: token, mode: "insensitive" } },
+              },
+            },
+            {
+              position: {
+                is: { name: { contains: token, mode: "insensitive" } },
+              },
+            },
+          ],
+        }));
+      }
+      where.employee = { is: employeeWhere };
+    }
+
+    const totalCount = shouldPaginate
+      ? await db.attendance.count({ where })
+      : 0;
+    const totalPages = shouldPaginate
+      ? Math.max(1, Math.ceil(totalCount / pageSize))
+      : 1;
+    const safePage = shouldPaginate ? Math.min(page, totalPages) : 1;
+    const skip = shouldPaginate ? (safePage - 1) * pageSize : undefined;
+    const take = shouldPaginate ? pageSize : undefined;
+
     //#1
     // Base attendance rows from DB ( record.blank ).
     const records = await db.attendance.findMany({
       where,
       orderBy: { workDate: "desc" },
+      skip,
+      take,
       include: {
         employee: {
           select: {
@@ -504,7 +689,18 @@ export async function listAttendance(input?: {
             position: { select: { name: true } },
           },
         },
-        expectedShift: { select: { name: true, breakMinutesUnpaid: true } },
+        expectedShift: {
+          select: {
+            id: true,
+            name: true,
+            startMinutes: true,
+            endMinutes: true,
+            breakStartMinutes: true,
+            breakEndMinutes: true,
+            breakMinutesUnpaid: true,
+            paidHoursPerDay: true,
+          },
+        },
       },
     });
 
@@ -524,151 +720,175 @@ export async function listAttendance(input?: {
       fallbackDailyRates: recordFallbackRates,
     });
 
+    const punchesByEmployeeDay = new Map<string, Punch[]>();
+    if (records.length > 0) {
+      const employeeIds = [...new Set(records.map((record) => record.employeeId))];
+      const workDates = records.map((record) => record.workDate.getTime());
+      const minWorkDate = new Date(Math.min(...workDates));
+      const maxWorkDate = new Date(Math.max(...workDates));
+      const rangeStart = startOfZonedDay(minWorkDate);
+      const rangeEnd = endOfZonedDay(maxWorkDate);
+
+      const allPunches = await db.punch.findMany({
+        where: {
+          employeeId: { in: employeeIds },
+          punchTime: { gte: rangeStart, lt: rangeEnd },
+        },
+        orderBy: { punchTime: "asc" },
+      });
+
+      allPunches.forEach((punch) => {
+        const key = buildEmployeeDayKey(punch.employeeId, punch.punchTime);
+        if (!punchesByEmployeeDay.has(key)) {
+          punchesByEmployeeDay.set(key, []);
+        }
+        punchesByEmployeeDay.get(key)!.push(punch);
+      });
+    }
+
     //#2
     // Enrich each row with punch values and expected schedule values.
-    const enriched = await Promise.all(
-      records.map(async (record) => {
-        const effectiveDailyRate =
-          effectiveDailyRates.get(
-            buildRateLookupKey(record.employeeId, record.workDate),
-          ) ?? toNumberOrNull(record.employee?.dailyRate ?? null);
+    const enriched = records.map((record) => {
+      const effectiveDailyRate =
+        effectiveDailyRates.get(
+          buildRateLookupKey(record.employeeId, record.workDate),
+        ) ?? toNumberOrNull(record.employee?.dailyRate ?? null);
 
-        // Rebuild local day boundaries in configured timezone before querying punches.
-        const localDisplay = new Date(
-          new Date(record.workDate).toLocaleString("en-US", { timeZone: TZ }),
-        );
-        localDisplay.setHours(0, 0, 0, 0);
-        const dayStart = startOfZonedDay(localDisplay); //declare day start - 00:00
-        const dayEnd = endOfZonedDay(localDisplay); // 23:59
+      const dayStart = startOfZonedDay(record.workDate);
+      const punches =
+        punchesByEmployeeDay.get(
+          buildEmployeeDayKey(record.employeeId, record.workDate),
+        ) ?? [];
+      const { breakCount, breakMinutes, breakStartAt, breakEndAt } =
+        computeBreakStats(punches);
 
-        const punches = await db.punch.findMany({
-          where: {
-            employeeId: record.employeeId,
-            punchTime: { gte: dayStart, lt: dayEnd }, // include greater than or equals to day start and less than dayEnd
-          },
-          orderBy: { punchTime: "asc" },
-        });
-        const { breakCount, breakMinutes, breakStartAt, breakEndAt } =
-          computeBreakStats(punches);
+      const expectedShift = record.expectedShift ?? null;
+      const expectedStart = record.scheduledStartMinutes ?? null;
+      const expectedEnd = record.scheduledEndMinutes ?? null;
+      const scheduledBreakMinutes = expectedShift?.breakMinutesUnpaid ?? null;
 
-        const expected = await getExpectedShiftForDate(
-          record.employeeId,
-          dayStart,
-        );
-        const expectedStart = expected.scheduledStartMinutes ?? null;
-        const expectedEnd = expected.scheduledEndMinutes ?? null;
-        const scheduledBreakMinutes =
-          expected.shift?.breakMinutesUnpaid ?? null;
+      const firstClockIn = punches.find((p) => p.punchType === "TIME_IN") ?? null;
+      const lastClockOut =
+        [...punches].reverse().find((p) => p.punchType === "TIME_OUT") ?? null;
+      // Synthetic TIME_OUT generated by auto-timeout logic in lib/attendance.ts.
+      const autoTimeoutPunch =
+        [...punches]
+          .reverse()
+          .find(
+            (p) =>
+              p.punchType === PUNCH_TYPE.TIME_OUT &&
+              p.source === "AUTO_TIMEOUT",
+          ) ?? null;
 
-        const firstClockIn =
-          punches.find((p) => p.punchType === "TIME_IN") ?? null;
-        const lastClockOut =
-          [...punches].reverse().find((p) => p.punchType === "TIME_OUT") ??
-          null;
-        // Synthetic TIME_OUT generated by auto-timeout logic in lib/attendance.ts.
-        const autoTimeoutPunch =
-          [...punches]
-            .reverse()
-            .find(
-              (p) =>
-                p.punchType === PUNCH_TYPE.TIME_OUT &&
-                p.source === "AUTO_TIMEOUT",
-            ) ?? null;
+      const actualInAt = firstClockIn?.punchTime ?? record.actualInAt ?? null;
+      const actualOutAt = lastClockOut?.punchTime ?? null;
+      const actualInMinutes = actualInAt
+        ? Math.round((actualInAt.getTime() - dayStart.getTime()) / 60000)
+        : null;
+      const actualOutMinutes = actualOutAt
+        ? Math.round((actualOutAt.getTime() - dayStart.getTime()) / 60000)
+        : null;
 
-        const actualInAt = firstClockIn?.punchTime ?? record.actualInAt ?? null;
-        const actualOutAt = lastClockOut?.punchTime ?? null;
-        const actualInMinutes = actualInAt
-          ? Math.round((actualInAt.getTime() - dayStart.getTime()) / 60000)
+      const lateMinutes =
+        computeLateMinutes(expectedStart, actualInMinutes) ??
+        record.lateMinutes ??
+        null;
+      const workedMinutes =
+        actualInAt && actualOutAt
+          ? Math.max(
+              0,
+              Math.round((actualOutAt.getTime() - actualInAt.getTime()) / 60000),
+            )
           : null;
-        const actualOutMinutes = actualOutAt
-          ? Math.round((actualOutAt.getTime() - dayStart.getTime()) / 60000)
-          : null;
-
-        const lateMinutes =
-          computeLateMinutes(expectedStart, actualInMinutes) ??
-          record.lateMinutes ??
-          null;
-        const workedMinutes =
-          actualInAt && actualOutAt
+      const mergedBreakMinutes = breakMinutes || record.breakMinutes || 0;
+      const { deductedBreakMinutes, netWorkedMinutes } = computeBreakDeduction({
+        workedMinutes,
+        actualBreakMinutes: mergedBreakMinutes,
+        scheduledBreakMinutes,
+        breakStartMinutes: expectedShift?.breakStartMinutes ?? null,
+        breakEndMinutes: expectedShift?.breakEndMinutes ?? null,
+        actualInMinutes,
+        actualOutMinutes,
+      });
+      const scheduledPaidMinutes = computeScheduledPaidMinutes({
+        paidHoursPerDay:
+          record.paidHoursPerDay ?? expectedShift?.paidHoursPerDay ?? null,
+        scheduledStartMinutes: expectedStart,
+        scheduledEndMinutes: expectedEnd,
+        scheduledBreakMinutes,
+      });
+      const lateGraceCreditMinutes = computeLateGraceCreditMinutes({
+        scheduledStartMinutes: expectedStart,
+        actualInMinutes,
+      });
+      const payableWorkedMinutes =
+        netWorkedMinutes != null && Number.isFinite(netWorkedMinutes)
+          ? scheduledPaidMinutes != null && Number.isFinite(scheduledPaidMinutes)
             ? Math.max(
                 0,
-                Math.round(
-                  (actualOutAt.getTime() - actualInAt.getTime()) / 60000,
+                Math.min(
+                  Math.round(scheduledPaidMinutes),
+                  Math.round(netWorkedMinutes) + lateGraceCreditMinutes,
                 ),
               )
-            : null;
-        const mergedBreakMinutes = breakMinutes || record.breakMinutes || 0;
-        const { deductedBreakMinutes, netWorkedMinutes } =
-          computeBreakDeduction({
-            workedMinutes,
-            actualBreakMinutes: mergedBreakMinutes,
-            scheduledBreakMinutes,
-            breakStartMinutes: expected.shift?.breakStartMinutes ?? null,
-            breakEndMinutes: expected.shift?.breakEndMinutes ?? null,
-            actualInMinutes,
-            actualOutMinutes,
-          });
-        const scheduledPaidMinutes = computeScheduledPaidMinutes({
-          paidHoursPerDay: expected.shift?.paidHoursPerDay ?? record.paidHoursPerDay,
-          scheduledStartMinutes: expectedStart,
-          scheduledEndMinutes: expectedEnd,
-          scheduledBreakMinutes,
-        });
-        const { undertimeMinutes, overtimeMinutesRaw } =
-          netWorkedMinutes != null && scheduledPaidMinutes != null
-            ? computePayrollVariance({
-                netWorkedMinutes,
-                scheduledPaidMinutes,
-              })
-            : { undertimeMinutes: null, overtimeMinutesRaw: null };
-        const ratePerMinute = computeRatePerMinute({
-          dailyRate: effectiveDailyRate,
-          scheduledPaidMinutes,
-        });
-        const payableAmount = computePayableAmountFromNetMinutes({
-          netWorkedMinutes,
-          ratePerMinute,
-        });
-        const normalizedStatus =
-          !expected.shift && !actualInAt && !actualOutAt && punches.length === 0
-            ? ATTENDANCE_STATUS.REST
-            : record.status;
-        // "Forgot to timeout" is true when system auto-closed the shift,
-        // or when a shift is still incomplete with no TIME_OUT.
-        const forgotToTimeOut =
-          Boolean(autoTimeoutPunch) ||
-          (normalizedStatus === ATTENDANCE_STATUS.INCOMPLETE &&
-            Boolean(actualInAt) &&
-            !actualOutAt);
+            : Math.max(0, Math.round(netWorkedMinutes))
+          : null;
+      const { undertimeMinutes, overtimeMinutesRaw } =
+        netWorkedMinutes != null && scheduledPaidMinutes != null
+          ? computePayrollVariance({
+              netWorkedMinutes,
+              scheduledPaidMinutes,
+              lateGraceCreditMinutes,
+            })
+          : { undertimeMinutes: null, overtimeMinutesRaw: null };
+      const ratePerMinute = computeRatePerMinute({
+        dailyRate: effectiveDailyRate,
+        scheduledPaidMinutes,
+      });
+      const payableAmount = computePayableAmountFromNetMinutes({
+        netWorkedMinutes,
+        ratePerMinute,
+      });
+      const normalizedStatus =
+        !expectedShift && !actualInAt && !actualOutAt && punches.length === 0
+          ? ATTENDANCE_STATUS.REST
+          : record.status;
+      // "Forgot to timeout" is true when system auto-closed the shift,
+      // or when a shift is still incomplete with no TIME_OUT.
+      const forgotToTimeOut =
+        Boolean(autoTimeoutPunch) ||
+        (normalizedStatus === ATTENDANCE_STATUS.INCOMPLETE &&
+          Boolean(actualInAt) &&
+          !actualOutAt);
 
-        return serializeAttendance(record, {
-          status: normalizedStatus,
-          forgotToTimeOut,
-          breakCount: breakCount || record.breakCount || 0,
-          breakMinutes: mergedBreakMinutes,
-          deductedBreakMinutes,
-          netWorkedMinutes,
-          dailyRate: effectiveDailyRate,
-          ratePerMinute,
-          payableAmount,
-          breakStartAt,
-          breakEndAt,
-          actualInAt,
-          actualOutAt,
-          expectedShiftId: expected.shift?.id ?? record.expectedShiftId ?? null,
-          expectedShiftName:
-            expected.shift?.name ?? record.expectedShift?.name ?? null,
-          scheduledStartMinutes: expectedStart,
-          scheduledEndMinutes: expectedEnd,
-          scheduledBreakMinutes,
-          punchesCount: punches.length,
-          lateMinutes,
-          undertimeMinutes,
-          overtimeMinutesRaw,
-          workedMinutes,
-        });
-      }),
-    );
+      return serializeAttendance(record, {
+        status: normalizedStatus,
+        forgotToTimeOut,
+        breakCount: breakCount || record.breakCount || 0,
+        breakMinutes: mergedBreakMinutes,
+        deductedBreakMinutes,
+        netWorkedMinutes,
+        dailyRate: effectiveDailyRate,
+        ratePerMinute,
+        payableAmount,
+        breakStartAt,
+        breakEndAt,
+        actualInAt,
+        actualOutAt,
+        expectedShiftId: expectedShift?.id ?? record.expectedShiftId ?? null,
+        expectedShiftName: expectedShift?.name ?? record.expectedShift?.name ?? null,
+        scheduledStartMinutes: expectedStart,
+        scheduledEndMinutes: expectedEnd,
+        scheduledBreakMinutes,
+        punchesCount: punches.length,
+        lateMinutes,
+        lateGraceCreditMinutes,
+        undertimeMinutes,
+        overtimeMinutesRaw,
+        workedMinutes,
+        payableWorkedMinutes,
+      });
+    });
 
     // Include-all mode (single day only): include employees with no attendance row yet.
     // Used by Daily Attendance to show a complete employee roster for the selected day.
@@ -870,14 +1090,28 @@ export async function listAttendance(input?: {
           breakStartAt: breaks.startAt,
           breakEndAt: breaks.endAt,
           employeeId: emp.employeeId,
-          employee: emp,
+          employee: serializeEmployeeSummary(emp),
         };
       });
 
-      return { success: true, data: merged };
+      return {
+        success: true,
+        data: merged,
+        totalCount: merged.length,
+        page: 1,
+        pageSize: merged.length,
+        totalPages: 1,
+      };
     }
 
-    return { success: true, data: enriched };
+    return {
+      success: true,
+      data: enriched,
+      totalCount,
+      page: safePage,
+      pageSize,
+      totalPages,
+    };
   } catch (error) {
     console.error("Failed to fetch attendance", error);
     return { success: false, error: "Failed to load attendance" };
@@ -1093,10 +1327,12 @@ export async function setAttendanceLockState(input: {
     }
 
     let updatedCount = 0;
+    let blockedPayrollLinkedRows = 0;
     if (lock) {
       const incompleteUpdate = await db.attendance.updateMany({
         where: {
           ...whereBase,
+          actualInAt: { not: null },
           actualOutAt: null,
         },
         data: {
@@ -1104,17 +1340,26 @@ export async function setAttendanceLockState(input: {
           status: ATTENDANCE_STATUS.INCOMPLETE,
         },
       });
-      const completeUpdate = await db.attendance.updateMany({
+      const completeOrAbsentUpdate = await db.attendance.updateMany({
         where: {
           ...whereBase,
-          actualOutAt: { not: null },
+          OR: [{ actualInAt: null }, { actualOutAt: { not: null } }],
         },
         data: { isLocked: true },
       });
-      updatedCount = incompleteUpdate.count + completeUpdate.count;
+      updatedCount = incompleteUpdate.count + completeOrAbsentUpdate.count;
     } else {
+      blockedPayrollLinkedRows = await db.attendance.count({
+        where: {
+          ...whereBase,
+          payrollPeriodId: { not: null },
+        },
+      });
       const unlockResult = await db.attendance.updateMany({
-        where: whereBase,
+        where: {
+          ...whereBase,
+          payrollPeriodId: null,
+        },
         data: { isLocked: false },
       });
       updatedCount = unlockResult.count;
@@ -1136,6 +1381,7 @@ export async function setAttendanceLockState(input: {
         start: rangeStart.toISOString(),
         endExclusive: rangeEnd.toISOString(),
         updatedCount,
+        blockedPayrollLinkedRows,
         totalRows,
         lockedRows,
       },
@@ -1214,23 +1460,27 @@ export async function updatePunch(input: {
       return { success: false, error: "Punch not found" };
     }
 
-    const originalDayLocked = await isAttendanceLockedForMoment(
+    const originalDayState = await getAttendanceFreezeStateForMoment(
       existing.employeeId,
       existing.punchTime,
     );
-    if (originalDayLocked) {
+    const originalDayError = getAttendanceFreezeError(
+      originalDayState,
+      "Attendance is locked for this day. Unlock before editing punch.",
+    );
+    if (originalDayError) {
       return {
         success: false,
-        error: "Attendance is locked for this day. Unlock before editing punch.",
+        error: originalDayError,
       };
     }
 
-    const data: Record<string, any> = {};
+    const data: Prisma.PunchUncheckedUpdateInput = {};
     if (punchType) {
       if (!Object.values(PUNCH_TYPE).includes(punchType as PUNCH_TYPE)) {
         return { success: false, error: "Invalid punchType" };
       }
-      data.punchType = punchType;
+      data.punchType = punchType as PUNCH_TYPE;
     }
     if (punchTimeRaw) {
       const parsed = new Date(punchTimeRaw);
@@ -1239,15 +1489,18 @@ export async function updatePunch(input: {
       }
       // If punch is moved to another day, block edits when target day is locked.
       if (toDayKey(parsed) !== toDayKey(existing.punchTime)) {
-        const targetDayLocked = await isAttendanceLockedForMoment(
+        const targetDayState = await getAttendanceFreezeStateForMoment(
           existing.employeeId,
           parsed,
         );
-        if (targetDayLocked) {
+        const targetDayError = getAttendanceFreezeError(
+          targetDayState,
+          "Target attendance day is locked. Unlock before moving this punch.",
+        );
+        if (targetDayError) {
           return {
             success: false,
-            error:
-              "Target attendance day is locked. Unlock before moving this punch.",
+            error: targetDayError,
           };
         }
       }
@@ -1307,14 +1560,18 @@ export async function deletePunch(input: { id: string }) {
       return { success: false, error: "Punch not found" };
     }
 
-    const dayLocked = await isAttendanceLockedForMoment(
+    const dayState = await getAttendanceFreezeStateForMoment(
       existing.employeeId,
       existing.punchTime,
     );
-    if (dayLocked) {
+    const dayError = getAttendanceFreezeError(
+      dayState,
+      "Attendance is locked for this day. Unlock before deleting punch.",
+    );
+    if (dayError) {
       return {
         success: false,
-        error: "Attendance is locked for this day. Unlock before deleting punch.",
+        error: dayError,
       };
     }
 
@@ -1356,7 +1613,9 @@ export async function autoLockAttendance(input?: { date?: string }) {
     let lockedCount = 0;
     for (const att of candidates) {
       let status = att.status;
-      if (!att.actualOutAt) status = ATTENDANCE_STATUS.INCOMPLETE;
+      if (att.actualInAt && !att.actualOutAt) {
+        status = ATTENDANCE_STATUS.INCOMPLETE;
+      }
 
       await db.attendance.update({
         where: { id: att.id },
@@ -1501,11 +1760,19 @@ export async function recordSelfPunch(input: { punchType: string }) {
       employee.employeeId,
       todayStart,
     );
-    const dayLocked = await isAttendanceLockedForMoment(
+    const dayState = await getAttendanceFreezeStateForMoment(
       employee.employeeId,
       now,
     );
-    if (dayLocked) {
+    if (dayState?.payrollPeriodId) {
+      return {
+        success: false,
+        error:
+          "Attendance is already linked to payroll for today. Contact payroll admin for adjustment.",
+        reason: "payroll_linked",
+      };
+    }
+    if (dayState?.isLocked) {
       return {
         success: false,
         error: "Attendance is locked for today. Contact admin to unlock.",
@@ -1593,11 +1860,18 @@ export async function recordAttendancePunch(input: {
       return { success: false, error: "punchTime is invalid" };
     }
 
-    const dayLocked = await isAttendanceLockedForMoment(employeeId, punchTime);
-    if (dayLocked) {
+    const dayState = await getAttendanceFreezeStateForMoment(
+      employeeId,
+      punchTime,
+    );
+    const dayError = getAttendanceFreezeError(
+      dayState,
+      "Attendance is locked for this day. Unlock before recording punch.",
+    );
+    if (dayError) {
       return {
         success: false,
-        error: "Attendance is locked for this day. Unlock before recording punch.",
+        error: dayError,
       };
     }
 
@@ -1644,16 +1918,26 @@ export async function recomputeAttendance(input: {
       return { success: false, error: "workDate is invalid" };
     }
     const dayStart = startOfZonedDay(workDate);
-    const locked = await db.attendance.findUnique({
+    const frozen = await db.attendance.findUnique({
       where: {
         employeeId_workDate: {
           employeeId,
           workDate: dayStart,
         },
       },
-      select: { isLocked: true },
+      select: {
+        isLocked: true,
+        payrollPeriodId: true,
+      },
     });
-    if (locked?.isLocked) {
+    if (frozen?.payrollPeriodId) {
+      return {
+        success: false,
+        error:
+          "Attendance is already linked to payroll for this day. Use payroll adjustments.",
+      };
+    }
+    if (frozen?.isLocked) {
       return {
         success: false,
         error: "Attendance is locked for this day. Unlock before recomputing.",
@@ -1687,16 +1971,16 @@ export async function recomputeAttendanceForDate(input?: { date?: string }) {
       where: { isArchived: false },
       select: { employeeId: true },
     });
-    const lockedRows = await db.attendance.findMany({
+    const frozenRows = await db.attendance.findMany({
       where: {
         workDate: { gte: dayStart, lt: dayEnd },
-        isLocked: true,
+        OR: [{ isLocked: true }, { payrollPeriodId: { not: null } }],
       },
       select: { employeeId: true },
     });
-    const lockedSet = new Set(lockedRows.map((row) => row.employeeId));
+    const frozenSet = new Set(frozenRows.map((row) => row.employeeId));
     const targets = employees.filter(
-      (employee) => !lockedSet.has(employee.employeeId),
+      (employee) => !frozenSet.has(employee.employeeId),
     );
 
     await Promise.all(

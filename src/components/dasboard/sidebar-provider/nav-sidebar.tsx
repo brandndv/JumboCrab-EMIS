@@ -370,37 +370,34 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       href: `/${userRole}/payroll`,
       hasSubmenu: true,
       subItems: [
+        // {
+        //   label: "Dashboard",
+        //   path: "",
+        //   roles: ["admin", "generalManager", "clerk", "employee"],
+        // },
         {
-          label: "Dashboard",
-          path: "",
-          roles: ["admin", "generalManager", "clerk", "employee"],
+          label: "Review Payroll",
+          path: "/review-payroll",
+          roles: ["admin", "generalManager", "manager"],
+        },
+        // {
+        //   label: "Payslips",
+        //   path: "/payslips",
+        //   roles: ["admin", "employee"],
+        // },
+        {
+          label: "Generate Payroll",
+          path: "/generate-payroll",
+          roles: ["admin", "clerk"],
         },
         {
-          label: "Process Payroll",
-          path: "/process",
-          roles: ["admin", "generalManager", "clerk", "employee"],
-        },
-        {
-          label: "Payslips",
-          path: "/payslips",
-          roles: ["admin", "generalManager", "clerk", "employee"],
-        },
-        {
-          label: "Tax Settings",
-          path: "/tax",
-          roles: ["admin", "generalManager", "clerk", "employee"],
-        },
-        {
-          label: "Reports",
-          path: "/reports",
-          roles: ["admin", "generalManager", "clerk", "employee"],
+          label: "Payroll History",
+          path: "/payroll-history",
+          roles: ["admin", "manager", "generalManager", "clerk"],
         },
       ],
       // ========== PAYROLL ACCESS ========= //
-      roles: [
-        "admin",
-        // "generalManager", "clerk", "employee"
-      ],
+      roles: ["admin", "generalManager", "clerk", "manager"],
     },
     // ========== REQUEST MENU ========== //
     {

@@ -27,8 +27,8 @@ type EmployeeRow = {
   firstName: string;
   lastName: string;
   supervisorUserId?: string | null;
-  department?: { departmentId: string; name: string } | null;
-  position?: { positionId: string; name: string } | null;
+  department?: { departmentId: string; name: string; isActive: boolean } | null;
+  position?: { positionId: string; name: string; isActive: boolean } | null;
 };
 
 type SupervisorGroup = {

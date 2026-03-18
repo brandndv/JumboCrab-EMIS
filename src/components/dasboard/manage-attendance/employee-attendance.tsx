@@ -309,7 +309,7 @@ const EmployeeAttendance = () => {
                     <TableHead>Late</TableHead>
                     <TableHead>Over/Under</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Work Hours</TableHead>
+                    <TableHead>Worked / Payable</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -368,12 +368,26 @@ const EmployeeAttendance = () => {
                           ) : null}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {row?.netWorkedHoursAndMinutes ??
-                          row?.workedHoursAndMinutes ??
-                          formatMinutesToDuration(
-                            row?.netWorkedMinutes ?? row?.workedMinutes,
-                          )}
+                      <TableCell className="text-sm">
+                        <div className="flex flex-col leading-tight">
+                          <span>
+                            {row?.netWorkedHoursAndMinutes ??
+                              row?.workedHoursAndMinutes ??
+                              formatMinutesToDuration(
+                                row?.netWorkedMinutes ?? row?.workedMinutes,
+                              )}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Payable:{" "}
+                            {row?.payableWorkedHoursAndMinutes ??
+                              formatMinutesToDuration(
+                                row?.payableWorkedMinutes,
+                              )}
+                            {(row?.lateGraceCreditMinutes ?? 0) > 0
+                              ? ` (incl. ${formatMinutesToDuration(row?.lateGraceCreditMinutes)} grace)`
+                              : ""}
+                          </span>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

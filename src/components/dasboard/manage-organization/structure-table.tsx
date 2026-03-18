@@ -2,6 +2,7 @@
 
 import {
   getOrganizationStructure,
+  updateEmployeesSupervisorBulk,
   updateEmployeeSupervisor,
 } from "@/actions/organization/organization-structure-action";
 import { useEffect, useMemo, useState } from "react";
@@ -27,8 +28,8 @@ type StructureRow = {
   lastName: string;
   supervisorUserId?: string | null;
   role?: string | null;
-  department?: { departmentId: string; name: string } | null;
-  position?: { positionId: string; name: string } | null;
+  department?: { departmentId: string; name: string; isActive: boolean } | null;
+  position?: { positionId: string; name: string; isActive: boolean } | null;
 };
 
 export function StructureTable() {
@@ -47,6 +48,11 @@ export function StructureTable() {
   const [deptFilter, setDeptFilter] = useState<string>("");
   const [positionFilter, setPositionFilter] = useState<string>("");
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkSupervisorId, setBulkSupervisorId] = useState<string>("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -56,7 +62,11 @@ export function StructureTable() {
       if (!result.success) {
         throw new Error(result.error || "Failed to load structure");
       }
-      setRows(result.data ?? []);
+      const nextRows = result.data ?? [];
+      setRows(nextRows);
+      setSelectedEmployeeIds((prev) =>
+        prev.filter((id) => nextRows.some((row) => row.employeeId === id)),
+      );
       setSupervisors(result.supervisors ?? []);
     } catch (err) {
       console.error("Structure fetch failed", err);
@@ -90,7 +100,7 @@ export function StructureTable() {
         sup.includes(term);
       return textMatch && deptMatch && posMatch && unassignedMatch;
     });
-  }, [rows, filter, deptFilter, positionFilter, showUnassignedOnly]);
+  }, [rows, supervisors, filter, deptFilter, positionFilter, showUnassignedOnly]);
 
   const deptOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -103,7 +113,9 @@ export function StructureTable() {
   const positionOptions = useMemo(() => {
     const map = new Map<string, string>();
     rows.forEach((r) => {
-      if (r.position?.positionId) map.set(r.position.positionId, r.position.name);
+      if (r.position?.positionId && r.position.isActive) {
+        map.set(r.position.positionId, r.position.name);
+      }
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [rows]);
@@ -115,6 +127,33 @@ export function StructureTable() {
     setSelectedSupervisor(row.supervisorUserId ?? "");
     setFormError(null);
     setAssignOpen(true);
+  };
+
+  const selectedCount = selectedEmployeeIds.length;
+  const filteredIds = filtered.map((row) => row.employeeId);
+  const allFilteredSelected =
+    filteredIds.length > 0 &&
+    filteredIds.every((id) => selectedEmployeeIds.includes(id));
+
+  const toggleSelectedEmployee = (employeeId: string, checked: boolean) => {
+    setSelectedEmployeeIds((prev) =>
+      checked
+        ? prev.includes(employeeId)
+          ? prev
+          : [...prev, employeeId]
+        : prev.filter((id) => id !== employeeId),
+    );
+  };
+
+  const toggleSelectAllFiltered = (checked: boolean) => {
+    setSelectedEmployeeIds((prev) => {
+      if (checked) {
+        const merged = new Set([...prev, ...filteredIds]);
+        return Array.from(merged);
+      }
+      const filteredIdSet = new Set(filteredIds);
+      return prev.filter((id) => !filteredIdSet.has(id));
+    });
   };
 
   const handleAssign = async () => {
@@ -138,6 +177,33 @@ export function StructureTable() {
     }
   };
 
+  const handleBulkAssign = async () => {
+    if (selectedEmployeeIds.length === 0) {
+      setBulkError("Select at least one employee");
+      return;
+    }
+    try {
+      setBulkSaving(true);
+      setBulkError(null);
+      const result = await updateEmployeesSupervisorBulk({
+        employeeIds: selectedEmployeeIds,
+        supervisorUserId: bulkSupervisorId || null,
+      });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update supervisors");
+      }
+      await load();
+      setSelectedEmployeeIds([]);
+      setBulkAssignOpen(false);
+    } catch (err) {
+      setBulkError(
+        err instanceof Error ? err.message : "Failed to update supervisors",
+      );
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const eligibleSupervisors = useMemo(() => {
     const allowedRole = ["supervisor", "manager", "generalmanager", "admin"];
     return supervisors.filter((s) => allowedRole.includes((s.role ?? "").toLowerCase()));
@@ -145,34 +211,36 @@ export function StructureTable() {
 
   return (
     <Card className="shadow-sm">
-      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <CardHeader className="space-y-4">
+        <div className="max-w-2xl">
           <CardTitle className="text-lg">Structure</CardTitle>
           <p className="text-sm text-muted-foreground">
             See who reports to whom. Edit supervisor assignments next.
           </p>
         </div>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div className="rounded-lg border bg-muted/10 p-3">
+          <div className="space-y-3">
             <Input
               placeholder="Search by name, code, department, supervisor"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="w-full sm:w-72"
+              className="w-full"
             />
-            <div className="flex items-center gap-2">
+            <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[220px_220px_220px_44px_180px_170px]">
               <Button
                 variant={showUnassignedOnly ? "secondary" : "outline"}
                 size="sm"
                 onClick={() => setShowUnassignedOnly((prev) => !prev)}
                 disabled={loading}
-                className="whitespace-nowrap"
+                className="w-full justify-between"
               >
-                {showUnassignedOnly ? "Clear unassigned filter" : "Unassigned only"}{" "}
-                <Badge variant="secondary" className="ml-2">{unassignedRows.length}</Badge>
+                <span>Unassigned only</span>
+                <Badge variant="secondary" className="ml-2 min-w-7 justify-center tabular-nums">
+                  {unassignedRows.length}
+                </Badge>
               </Button>
               <select
-                className="w-40 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 value={deptFilter}
                 onChange={(e) => setDeptFilter(e.target.value)}
               >
@@ -184,7 +252,7 @@ export function StructureTable() {
                 ))}
               </select>
               <select
-                className="w-40 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 value={positionFilter}
                 onChange={(e) => setPositionFilter(e.target.value)}
               >
@@ -195,15 +263,47 @@ export function StructureTable() {
                   </option>
                 ))}
               </select>
-              <Button variant="ghost" size="icon" onClick={load} aria-label="Reload structure">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => void load()}
+                aria-label="Reload structure"
+                className="h-10 w-10"
+              >
                 <RefreshCcw className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={selectedCount === 0}
+                onClick={() => {
+                  setBulkSupervisorId("");
+                  setBulkError(null);
+                  setBulkAssignOpen(true);
+                }}
+                className="w-full justify-between"
+              >
+                <span>Bulk Assign</span>
+                <Badge variant="secondary" className="ml-2 min-w-7 justify-center tabular-nums">
+                  {selectedCount}
+                </Badge>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSelectedEmployeeIds([])}
+                disabled={selectedCount === 0}
+                className="w-full"
+              >
+                Clear Selection
               </Button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
             {deptFilter && <span className="rounded-full bg-muted px-3 py-1">Department filter on</span>}
             {positionFilter && <span className="rounded-full bg-muted px-3 py-1">Position filter on</span>}
             {showUnassignedOnly && <span className="rounded-full bg-muted px-3 py-1">Unassigned filter on</span>}
+            <span className="rounded-full bg-muted px-3 py-1">Selected {selectedCount}</span>
             {!deptFilter && !positionFilter && (
               <span className="rounded-full bg-muted px-3 py-1">All departments/positions</span>
             )}
@@ -215,6 +315,17 @@ export function StructureTable() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[44px]">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-border"
+                    checked={allFilteredSelected}
+                    onChange={(event) =>
+                      toggleSelectAllFiltered(event.currentTarget.checked)
+                    }
+                    aria-label="Select all visible employees"
+                  />
+                </TableHead>
                 <TableHead>Employee</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Position</TableHead>
@@ -225,21 +336,21 @@ export function StructureTable() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-sm text-muted-foreground">
                     Loading...
                   </TableCell>
                 </TableRow>
               )}
               {error && !loading && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-sm text-destructive">
+                  <TableCell colSpan={6} className="text-sm text-destructive">
                     {error}
                   </TableCell>
                 </TableRow>
               )}
               {!loading && !error && filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-sm text-muted-foreground">
                     No matches found.
                   </TableCell>
                 </TableRow>
@@ -248,6 +359,20 @@ export function StructureTable() {
                 !error &&
                 filtered.map((row) => (
                   <TableRow key={row.employeeId}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border border-border"
+                        checked={selectedEmployeeIds.includes(row.employeeId)}
+                        onChange={(event) =>
+                          toggleSelectedEmployee(
+                            row.employeeId,
+                            event.currentTarget.checked,
+                          )
+                        }
+                        aria-label={`Select ${row.firstName} ${row.lastName}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex flex-col">
                         <span>{row.firstName} {row.lastName}</span>
@@ -258,7 +383,13 @@ export function StructureTable() {
                       {row.department?.name || "—"}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {row.position?.name || "—"}
+                      {!row.position ? (
+                        "—"
+                      ) : row.position.isActive ? (
+                        row.position.name
+                      ) : (
+                        <Badge variant="outline">Archived position</Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {(() => {
@@ -316,6 +447,41 @@ export function StructureTable() {
           <DialogFooter>
             <Button onClick={handleAssign} disabled={saving || !target}>
               {saving ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Assign Supervisor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              Assign one supervisor to {selectedCount} selected employee
+              {selectedCount === 1 ? "" : "s"}.
+            </div>
+            <div>
+              <Label htmlFor="bulk-supervisor">Supervisor</Label>
+              <select
+                id="bulk-supervisor"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={bulkSupervisorId}
+                onChange={(e) => setBulkSupervisorId(e.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {eligibleSupervisors.map((sup) => (
+                  <option key={sup.userId} value={sup.userId}>
+                    {sup.username} ({sup.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {bulkError && <p className="text-sm text-destructive">{bulkError}</p>}
+          </div>
+          <DialogFooter>
+            <Button onClick={handleBulkAssign} disabled={bulkSaving || selectedCount === 0}>
+              {bulkSaving ? "Saving..." : "Apply"}
             </Button>
           </DialogFooter>
         </DialogContent>

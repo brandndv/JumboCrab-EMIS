@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 export type PositionDetail = {
   positionId: string;
   name: string;
+  isActive: boolean;
   description?: string | null;
   departmentId: string;
   department?: { departmentId: string; name: string } | null;
@@ -17,18 +18,76 @@ export type PositionDetail = {
   }[];
 };
 
-export async function listPositions(): Promise<{
+const isArchivedTokenName = (value: string) =>
+  value.includes("__deleted__") || value.includes("__archived__");
+
+const extractBaseName = (value: string) =>
+  value
+    .split("__archived__")[0]
+    .split("__deleted__")[0]
+    .trim();
+
+const resolvePositionRestoreName = async (
+  positionId: string,
+  departmentId: string,
+  baseName: string,
+) => {
+  const normalizedBase = baseName.trim() || "Position";
+  const directConflict = await db.position.findFirst({
+    where: {
+      positionId: { not: positionId },
+      departmentId,
+      isActive: true,
+      name: normalizedBase,
+    },
+    select: { positionId: true },
+  });
+  if (!directConflict) return normalizedBase;
+
+  let counter = 1;
+  while (counter <= 999) {
+    const candidate =
+      counter === 1
+        ? `${normalizedBase} (Restored)`
+        : `${normalizedBase} (Restored ${counter})`;
+    const conflict = await db.position.findFirst({
+      where: {
+        positionId: { not: positionId },
+        departmentId,
+        isActive: true,
+        name: candidate,
+      },
+      select: { positionId: true },
+    });
+    if (!conflict) return candidate;
+    counter += 1;
+  }
+
+  return `${normalizedBase} (${Date.now()})`;
+};
+
+const toDisplayName = (value: string) =>
+  value
+    .split("__archived__")[0]
+    .split("__deleted__")[0]
+    .trim() || "Archived position";
+
+export async function listPositions(input?: {
+  includeArchived?: boolean;
+}): Promise<{
   success: boolean;
   data?: PositionDetail[];
   error?: string;
 }> {
   try {
-    const positions = await db.position.findMany({
-      where: { isActive: true },
+    const includeArchived = Boolean(input?.includeArchived);
+    const rows = await db.position.findMany({
+      where: includeArchived ? undefined : { isActive: true },
       orderBy: [{ department: { name: "asc" } }, { name: "asc" }],
       select: {
         positionId: true,
         name: true,
+        isActive: true,
         description: true,
         departmentId: true,
         department: { select: { departmentId: true, name: true } },
@@ -43,6 +102,10 @@ export async function listPositions(): Promise<{
         },
       },
     });
+    const positions: PositionDetail[] = rows.map((row) => ({
+      ...row,
+      name: row.isActive ? row.name : toDisplayName(row.name),
+    }));
     return { success: true, data: positions };
   } catch (error) {
     console.error("Failed to fetch positions", error);
@@ -206,7 +269,7 @@ export async function updatePosition(input: {
   }
 }
 
-export async function deletePosition(positionId: string): Promise<{
+export async function archivePosition(positionId: string): Promise<{
   success: boolean;
   error?: string;
 }> {
@@ -224,17 +287,87 @@ export async function deletePosition(positionId: string): Promise<{
       return { success: false, error: "Position not found" };
     }
 
+    if (isArchivedTokenName(existing.name)) {
+      await db.position.update({
+        where: { positionId: id },
+        data: { isActive: false },
+      });
+      return { success: true };
+    }
+
     await db.position.update({
       where: { positionId: id },
       data: {
         isActive: false,
-        name: `${existing.name}__deleted__${existing.positionId}`,
+        name: `${existing.name}__archived__${existing.positionId}`,
       },
     });
 
     return { success: true };
   } catch (error) {
-    console.error("Failed to delete position", error);
-    return { success: false, error: "Failed to delete position" };
+    console.error("Failed to archive position", error);
+    return { success: false, error: "Failed to archive position" };
   }
+}
+
+export async function unarchivePosition(positionId: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const id = typeof positionId === "string" ? positionId.trim() : "";
+    if (!id) {
+      return { success: false, error: "Position ID is required" };
+    }
+
+    const existing = await db.position.findUnique({
+      where: { positionId: id },
+      select: {
+        positionId: true,
+        name: true,
+        isActive: true,
+        departmentId: true,
+        department: {
+          select: { departmentId: true, isActive: true },
+        },
+      },
+    });
+    if (!existing) {
+      return { success: false, error: "Position not found" };
+    }
+    if (existing.isActive) {
+      return { success: true };
+    }
+    if (!existing.department?.isActive) {
+      return {
+        success: false,
+        error: "Unarchive the department first before restoring this position",
+      };
+    }
+
+    const baseName = extractBaseName(existing.name);
+    const restoredName = await resolvePositionRestoreName(
+      id,
+      existing.departmentId,
+      baseName,
+    );
+
+    await db.position.update({
+      where: { positionId: id },
+      data: {
+        isActive: true,
+        name: restoredName,
+      },
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to unarchive position", error);
+    return { success: false, error: "Failed to unarchive position" };
+  }
+}
+
+// Backward-compatible export for callers still using deletePosition.
+export async function deletePosition(positionId: string) {
+  return archivePosition(positionId);
 }

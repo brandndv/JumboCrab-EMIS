@@ -17,8 +17,17 @@ type StructureEmployee = {
   lastName: string;
   supervisorUserId?: string | null;
   role?: string | null;
-  department?: { departmentId: string; name: string } | null;
-  position?: { positionId: string; name: string } | null;
+  department?: { departmentId: string; name: string; isActive: boolean } | null;
+  position?: { positionId: string; name: string; isActive: boolean } | null;
+};
+
+const normalizeArchivedLabel = (
+  value: { name: string; isActive: boolean },
+  fallback: string,
+) => {
+  const hasArchivedToken =
+    value.name.includes("__deleted__") || value.name.includes("__archived__");
+  return !value.isActive || hasArchivedToken ? fallback : value.name;
 };
 
 export async function getOrganizationStructure(): Promise<{
@@ -41,8 +50,8 @@ export async function getOrganizationStructure(): Promise<{
           lastName: true,
           supervisorUserId: true,
           user: { select: { userId: true, role: true, username: true, email: true } },
-          department: { select: { departmentId: true, name: true } },
-          position: { select: { positionId: true, name: true } },
+          department: { select: { departmentId: true, name: true, isActive: true } },
+          position: { select: { positionId: true, name: true, isActive: true } },
         },
       }),
       db.user.findMany({
@@ -68,8 +77,20 @@ export async function getOrganizationStructure(): Promise<{
       lastName: employee.lastName,
       supervisorUserId: employee.supervisorUserId,
       role: employee.user?.role ?? null,
-      department: employee.department ?? null,
-      position: employee.position ?? null,
+      department: employee.department
+        ? {
+            departmentId: employee.department.departmentId,
+            name: normalizeArchivedLabel(employee.department, "Archived department"),
+            isActive: employee.department.isActive,
+          }
+        : null,
+      position: employee.position
+        ? {
+            positionId: employee.position.positionId,
+            name: normalizeArchivedLabel(employee.position, "Archived position"),
+            isActive: employee.position.isActive,
+          }
+        : null,
     }));
 
     const supervisorGroups = supervisors.map((sup) => ({
@@ -148,5 +169,55 @@ export async function updateEmployeeSupervisor(input: {
   } catch (error) {
     console.error("Failed to update supervisor", error);
     return { success: false, error: "Failed to update supervisor" };
+  }
+}
+
+export async function updateEmployeesSupervisorBulk(input: {
+  employeeIds: string[];
+  supervisorUserId?: string | null;
+}): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
+  try {
+    const employeeIds = Array.isArray(input.employeeIds)
+      ? Array.from(
+          new Set(
+            input.employeeIds
+              .map((value) => (typeof value === "string" ? value.trim() : ""))
+              .filter(Boolean),
+          ),
+        )
+      : [];
+
+    const supervisorId =
+      typeof input.supervisorUserId === "string" &&
+      input.supervisorUserId.trim() !== ""
+        ? input.supervisorUserId.trim()
+        : null;
+
+    if (employeeIds.length === 0) {
+      return { success: false, error: "At least one employee must be selected" };
+    }
+
+    if (supervisorId) {
+      const supervisor = await db.user.findUnique({
+        where: { userId: supervisorId },
+        select: { userId: true },
+      });
+      if (!supervisor) {
+        return { success: false, error: "Supervisor not found" };
+      }
+    }
+
+    const result = await db.employee.updateMany({
+      where: {
+        employeeId: { in: employeeIds },
+        isArchived: false,
+      },
+      data: { supervisorUserId: supervisorId },
+    });
+
+    return { success: true, updatedCount: result.count };
+  } catch (error) {
+    console.error("Failed to bulk update supervisors", error);
+    return { success: false, error: "Failed to bulk update supervisors" };
   }
 }

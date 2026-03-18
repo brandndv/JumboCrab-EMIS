@@ -452,6 +452,8 @@ export default function EmployeeForm({
       // The schema will handle the img transformation}
       isEnded: Boolean(formData.isEnded),
       img: formData.img || null,
+      departmentId: formData.departmentId || null,
+      positionId: formData.positionId || null,
     };
 
     if (mode !== "create") {
