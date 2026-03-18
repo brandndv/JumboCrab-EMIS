@@ -274,7 +274,12 @@ export function AttendanceLocks() {
         throw new Error(result.error || "Failed to update lock state");
       }
       const updated = result.data?.updatedCount ?? 0;
-      setMessage(`${successPrefix} (${updated} row(s) affected)`);
+      const blocked = result.data?.blockedPayrollLinkedRows ?? 0;
+      setMessage(
+        blocked > 0
+          ? `${successPrefix} (${updated} row(s) affected, ${blocked} payroll-linked row(s) skipped)`
+          : `${successPrefix} (${updated} row(s) affected)`,
+      );
       await loadSummary();
       await loadEmployeeRows();
     } catch (err) {

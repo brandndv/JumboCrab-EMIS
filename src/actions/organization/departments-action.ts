@@ -10,10 +10,12 @@ export type DepartmentOption = {
 export type DepartmentDetail = {
   departmentId: string;
   name: string;
+  isActive: boolean;
   description?: string | null;
   positions: {
     positionId: string;
     name: string;
+    isActive: boolean;
     employees: {
       employeeId: string;
       employeeCode: string;
@@ -26,8 +28,34 @@ export type DepartmentDetail = {
     employeeCode: string;
     firstName: string;
     lastName: string;
-    position?: { name: string | null; positionId: string | null } | null;
+    position?: {
+      name: string | null;
+      positionId: string | null;
+      isActive: boolean | null;
+    } | null;
   }[];
+};
+
+const toPositionLabel = (position: {
+  name: string;
+  isActive: boolean;
+}) => {
+  const hasArchivedToken =
+    position.name.includes("__deleted__") ||
+    position.name.includes("__archived__");
+  return !position.isActive || hasArchivedToken
+    ? "Archived position"
+    : position.name;
+};
+
+const toDepartmentLabel = (name: string, isActive: boolean) => {
+  if (isActive) return name;
+  return (
+    name
+      .split("__archived__")[0]
+      .split("__deleted__")[0]
+      .trim() || "Archived department"
+  );
 };
 
 export async function listDepartments(): Promise<{
@@ -35,18 +63,32 @@ export async function listDepartments(): Promise<{
   data?: DepartmentDetail[];
   error?: string;
 }> {
+  return listDepartmentsWithOptions();
+}
+
+export async function listDepartmentsWithOptions(input?: {
+  includeArchived?: boolean;
+}): Promise<{
+  success: boolean;
+  data?: DepartmentDetail[];
+  error?: string;
+}> {
   try {
+    const includeArchived = Boolean(input?.includeArchived);
     const departments = await db.department.findMany({
-      where: { isActive: true },
+      where: includeArchived ? undefined : { isActive: true },
       orderBy: { name: "asc" },
       select: {
         departmentId: true,
         name: true,
+        isActive: true,
         description: true,
         positions: {
+          where: { isActive: true },
           select: {
             positionId: true,
             name: true,
+            isActive: true,
             employees: {
               select: {
                 employeeId: true,
@@ -63,13 +105,27 @@ export async function listDepartments(): Promise<{
             employeeCode: true,
             firstName: true,
             lastName: true,
-            position: { select: { name: true, positionId: true } },
+            position: { select: { name: true, positionId: true, isActive: true } },
           },
         },
       },
     });
+    const data: DepartmentDetail[] = departments.map((department) => ({
+      ...department,
+      name: toDepartmentLabel(department.name, department.isActive),
+      employees: department.employees.map((employee) => ({
+        ...employee,
+        position: employee.position
+          ? {
+              positionId: employee.position.positionId,
+              name: toPositionLabel(employee.position),
+              isActive: employee.position.isActive,
+            }
+          : null,
+      })),
+    }));
 
-    return { success: true, data: departments };
+    return { success: true, data };
   } catch (error) {
     console.error("Failed to fetch departments", error);
     return { success: false, error: "Failed to load departments" };
@@ -92,6 +148,134 @@ export async function listDepartmentOptions(): Promise<{
   } catch (error) {
     console.error("Failed to fetch department options", error);
     return { success: false, error: "Failed to load departments" };
+  }
+}
+
+const isArchivedTokenName = (value: string) =>
+  value.includes("__deleted__") || value.includes("__archived__");
+
+const extractBaseName = (value: string) =>
+  value
+    .split("__archived__")[0]
+    .split("__deleted__")[0]
+    .trim();
+
+const resolveDepartmentRestoreName = async (
+  departmentId: string,
+  baseName: string,
+) => {
+  const normalizedBase = baseName.trim() || "Department";
+  const directConflict = await db.department.findFirst({
+    where: {
+      departmentId: { not: departmentId },
+      isActive: true,
+      name: normalizedBase,
+    },
+    select: { departmentId: true },
+  });
+  if (!directConflict) return normalizedBase;
+
+  let counter = 1;
+  while (counter <= 999) {
+    const candidate =
+      counter === 1
+        ? `${normalizedBase} (Restored)`
+        : `${normalizedBase} (Restored ${counter})`;
+    const conflict = await db.department.findFirst({
+      where: {
+        departmentId: { not: departmentId },
+        isActive: true,
+        name: candidate,
+      },
+      select: { departmentId: true },
+    });
+    if (!conflict) return candidate;
+    counter += 1;
+  }
+
+  return `${normalizedBase} (${Date.now()})`;
+};
+
+export async function archiveDepartment(departmentId: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const id = typeof departmentId === "string" ? departmentId.trim() : "";
+    if (!id) {
+      return { success: false, error: "Department ID is required" };
+    }
+
+    const existing = await db.department.findUnique({
+      where: { departmentId: id },
+      select: { departmentId: true, name: true },
+    });
+    if (!existing) {
+      return { success: false, error: "Department not found" };
+    }
+
+    await db.$transaction(async (tx) => {
+      const nextName = isArchivedTokenName(existing.name)
+        ? existing.name
+        : `${existing.name}__archived__${existing.departmentId}`;
+
+      await tx.department.update({
+        where: { departmentId: id },
+        data: {
+          isActive: false,
+          name: nextName,
+        },
+      });
+
+      await tx.position.updateMany({
+        where: { departmentId: id },
+        data: { isActive: false },
+      });
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to archive department", error);
+    return { success: false, error: "Failed to archive department" };
+  }
+}
+
+export async function unarchiveDepartment(departmentId: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const id = typeof departmentId === "string" ? departmentId.trim() : "";
+    if (!id) {
+      return { success: false, error: "Department ID is required" };
+    }
+
+    const existing = await db.department.findUnique({
+      where: { departmentId: id },
+      select: { departmentId: true, name: true, isActive: true },
+    });
+    if (!existing) {
+      return { success: false, error: "Department not found" };
+    }
+    if (existing.isActive) {
+      return { success: true };
+    }
+
+    const baseName = extractBaseName(existing.name);
+    const restoredName = await resolveDepartmentRestoreName(id, baseName);
+
+    await db.department.update({
+      where: { departmentId: id },
+      data: {
+        isActive: true,
+        name: restoredName,
+      },
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to unarchive department", error);
+    return { success: false, error: "Failed to unarchive department" };
   }
 }
 

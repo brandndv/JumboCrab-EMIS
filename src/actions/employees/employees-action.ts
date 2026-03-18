@@ -35,6 +35,13 @@ const parseDateInput = (value: unknown): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const normalizeOptionalId = (value: unknown): string | null => {
+  if (value == null) return null;
+  const normalized =
+    typeof value === "string" ? value.trim() : String(value).trim();
+  return normalized === "" ? null : normalized;
+};
+
 const isSameRate = (left: number | null, right: number | null) => {
   if (left == null && right == null) return true;
   if (left == null || right == null) return false;
@@ -47,12 +54,102 @@ const isMissingRateHistoryTableError = (error: unknown) => {
   return maybeCode === "P2021";
 };
 
+type EmployeeRelationIds = {
+  userId?: unknown;
+  departmentId?: unknown;
+  positionId?: unknown;
+  employeeTypeId?: unknown;
+  supervisorUserId?: unknown;
+};
+
+const normalizeEmployeeRelationIds = (input: EmployeeRelationIds) => ({
+  userId: normalizeOptionalId(input.userId),
+  departmentId: normalizeOptionalId(input.departmentId),
+  positionId: normalizeOptionalId(input.positionId),
+  employeeTypeId: normalizeOptionalId(input.employeeTypeId),
+  supervisorUserId: normalizeOptionalId(input.supervisorUserId),
+});
+
+const validateEmployeeRelationIds = async (
+  input: ReturnType<typeof normalizeEmployeeRelationIds>,
+): Promise<string | null> => {
+  const [user, supervisorUser, department, position, employeeType] =
+    await Promise.all([
+      input.userId
+        ? db.user.findUnique({
+            where: { userId: input.userId },
+            select: { userId: true },
+          })
+        : Promise.resolve(null),
+      input.supervisorUserId
+        ? db.user.findUnique({
+            where: { userId: input.supervisorUserId },
+            select: { userId: true },
+          })
+        : Promise.resolve(null),
+      input.departmentId
+        ? db.department.findUnique({
+            where: { departmentId: input.departmentId },
+            select: { departmentId: true },
+          })
+        : Promise.resolve(null),
+      input.positionId
+        ? db.position.findUnique({
+            where: { positionId: input.positionId },
+            select: { positionId: true, departmentId: true, isActive: true },
+          })
+        : Promise.resolve(null),
+      input.employeeTypeId
+        ? db.employeeType.findUnique({
+            where: { employeeTypeId: input.employeeTypeId },
+            select: { employeeTypeId: true },
+          })
+        : Promise.resolve(null),
+    ]);
+
+  if (input.userId && !user) {
+    return "Selected user not found";
+  }
+  if (input.supervisorUserId && !supervisorUser) {
+    return "Selected supervisor not found";
+  }
+  if (input.departmentId && !department) {
+    return "Selected department not found";
+  }
+  if (input.positionId && !position) {
+    return "Selected position not found";
+  }
+  if (input.employeeTypeId && !employeeType) {
+    return "Selected employee type not found";
+  }
+  if (position && !position.isActive) {
+    return "Selected position is no longer active";
+  }
+  if (
+    position &&
+    input.departmentId &&
+    position.departmentId !== input.departmentId
+  ) {
+    return "Selected position does not belong to the selected department";
+  }
+
+  return null;
+};
+
 export type EmployeeActionRecord = Omit<PrismaEmployee, "dailyRate"> & {
   dailyRate: number | null;
   department?: string | null;
   position?: string | null;
   employeeType?: string | null;
 };
+
+type EmployeeWithLookupRelations = Prisma.EmployeeGetPayload<{
+  include: {
+    department: { select: { departmentId: true; name: true } };
+    position: { select: { positionId: true; name: true } };
+    employeeType: { select: { employeeTypeId: true; name: true } };
+  };
+}>;
 
 const serializeEmployeeRecord = (
   employee: PrismaEmployee,
@@ -127,15 +224,14 @@ export async function getEmployees(): Promise<{
         employeeType: { select: { employeeTypeId: true, name: true } },
       },
     });
-    const normalized = employees.map(
-      (emp) =>
-        ({
-          ...emp,
-          dailyRate: toRateNumber(emp.dailyRate),
-          department: (emp as any).department?.name ?? null,
-          position: (emp as any).position?.name ?? null,
-          employeeType: (emp as any).employeeType?.name ?? null,
-        }) as EmployeeActionRecord,
+    const normalized = (employees as EmployeeWithLookupRelations[]).map((emp) =>
+      ({
+        ...emp,
+        dailyRate: toRateNumber(emp.dailyRate),
+        department: emp.department?.name ?? null,
+        position: emp.position?.name ?? null,
+        employeeType: emp.employeeType?.name ?? null,
+      }) satisfies EmployeeActionRecord,
     );
     console.log(`Fetched ${employees.length} employees`);
     return { success: true, data: normalized };
@@ -185,10 +281,11 @@ export async function getEmployeeById(id: string | undefined): Promise<{
       ? ({
           ...employee,
           dailyRate: toRateNumber(employee.dailyRate),
-          department: (employee as any).department?.name ?? null,
-          position: (employee as any).position?.name ?? null,
-          employeeType: (employee as any).employeeType?.name ?? null,
-        } as EmployeeActionRecord)
+          department: (employee as EmployeeWithLookupRelations).department?.name ?? null,
+          position: (employee as EmployeeWithLookupRelations).position?.name ?? null,
+          employeeType:
+            (employee as EmployeeWithLookupRelations).employeeType?.name ?? null,
+        } satisfies EmployeeActionRecord)
       : employee;
 
     return { success: true, data: normalized };
@@ -356,13 +453,23 @@ export async function createEmployee(employeeData: Employee): Promise<{
       typeof suffix === "string" && SUFFIX.includes(suffix as AllowedSuffix)
         ? (suffix as AllowedSuffix)
         : null;
+    const normalizedRelationIds = normalizeEmployeeRelationIds({
+      userId,
+      departmentId,
+      positionId,
+    });
+    const relationError =
+      await validateEmployeeRelationIds(normalizedRelationIds);
+    if (relationError) {
+      return { success: false, error: relationError };
+    }
 
     const employeeCreateData = {
       ...restBaseData,
       ...(suffix !== undefined && { suffix: normalizedSuffix }),
-      departmentId: departmentId ?? null,
-      positionId: positionId ?? null,
-      userId: userId ?? null,
+      departmentId: normalizedRelationIds.departmentId,
+      positionId: normalizedRelationIds.positionId,
+      userId: normalizedRelationIds.userId,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies Prisma.EmployeeUncheckedCreateInput;
@@ -456,7 +563,7 @@ export async function updateEmployee(
       JSON.stringify(currentData, null, 2)
     );
 
-    const updateData: Record<string, any> = {
+    const updateData: Record<string, unknown> & { updatedAt: Date } = {
       updatedAt: new Date(),
     };
 
@@ -494,13 +601,41 @@ export async function updateEmployee(
       "emergencyContactEmail",
       "dailyRate",
       "userId",
-    ];
+    ] as const;
 
     allowedFields.forEach((field) => {
       if (field in data) {
-        updateData[field] = data[field];
+        updateData[field] = data[field as keyof typeof data];
       }
     });
+
+    const normalizedRelationIds = normalizeEmployeeRelationIds({
+      userId: updateData.userId,
+      departmentId: updateData.departmentId,
+      positionId: updateData.positionId,
+      employeeTypeId: updateData.employeeTypeId,
+      supervisorUserId: updateData.supervisorUserId,
+    });
+
+    (
+      [
+        "userId",
+        "departmentId",
+        "positionId",
+        "employeeTypeId",
+        "supervisorUserId",
+      ] as const
+    ).forEach((field) => {
+      if (field in updateData) {
+        updateData[field] = normalizedRelationIds[field];
+      }
+    });
+
+    const relationError =
+      await validateEmployeeRelationIds(normalizedRelationIds);
+    if (relationError) {
+      return { success: false, error: relationError };
+    }
 
     (["birthdate", "startDate", "endDate"] as const).forEach((field) => {
       if (field in updateData) {
@@ -510,8 +645,8 @@ export async function updateEmployee(
           if (updateData[field] === undefined) delete updateData[field];
           return;
         }
-        const parsed = value instanceof Date ? value : new Date(value);
-        if (Number.isNaN(parsed.getTime())) {
+        const parsed = parseDateInput(value);
+        if (!parsed) {
           delete updateData[field];
         } else {
           updateData[field] = parsed;
@@ -568,7 +703,7 @@ export async function updateEmployee(
     // Save employee first so rate changes persist even if history table is unavailable.
     const updatedEmployee = await db.employee.update({
       where: { employeeId },
-      data: updateData,
+      data: updateData as Prisma.EmployeeUncheckedUpdateInput,
     });
 
     if (

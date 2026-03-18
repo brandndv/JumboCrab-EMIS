@@ -12,6 +12,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx ./scripts/seedEmployees.ts",
+    "prisma:seed:payroll:bimonthly": "tsx ./scripts/seedPayrollBimonthly.ts",
+    "prisma:seed:gm-43": "tsx ./scripts/seedGmAnd43Employees.ts",
+    "prisma:seed:attendance:2-bimonthly": "tsx ./scripts/seedAttendanceTwoBimonthly.ts",
     "postinstall": "npx prisma generate"
   },
   "dependencies": {

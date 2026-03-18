@@ -309,7 +309,7 @@ export function DailyAttendance() {
                     <TableHead>Time out</TableHead>
                     <TableHead>Late</TableHead>
                     <TableHead>Over/Under</TableHead>
-                    <TableHead>Worked Hours</TableHead>
+                    <TableHead>Worked / Payable</TableHead>
                     <TableHead>Expected</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -388,7 +388,29 @@ export function DailyAttendance() {
                               ? `${formatMinutesToTime(row.undertimeMinutes, false)} UT`
                               : "On time"}
                       </TableCell>
-                      <TableCell>{row.netWorkedHoursAndMinutes}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex flex-col leading-tight">
+                          <span>
+                            {row.netWorkedHoursAndMinutes ??
+                              row.workedHoursAndMinutes ??
+                              formatMinutesToTime(
+                                row.netWorkedMinutes ?? row.workedMinutes,
+                                false,
+                              )}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Payable:{" "}
+                            {row.payableWorkedHoursAndMinutes ??
+                              formatMinutesToTime(
+                                row.payableWorkedMinutes,
+                                false,
+                              )}
+                            {(row.lateGraceCreditMinutes ?? 0) > 0
+                              ? ` (incl. ${formatMinutesToTime(row.lateGraceCreditMinutes, false)} grace)`
+                              : ""}
+                          </span>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {row.scheduledStartMinutes != null &&
                         row.scheduledEndMinutes != null ? (

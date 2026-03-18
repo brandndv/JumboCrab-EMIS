@@ -31,6 +31,9 @@ export type AttendanceRow = {
   deductedBreakMinutes?: number | null;
   netWorkedMinutes?: number | null;
   netWorkedHoursAndMinutes?: string | null;
+  payableWorkedMinutes?: number | null;
+  payableWorkedHoursAndMinutes?: string | null;
+  lateGraceCreditMinutes?: number | null;
   breakMinutes?: number | null;
   breakCount?: number | null;
   punchesCount?: number | null;

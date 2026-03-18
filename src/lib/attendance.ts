@@ -99,6 +99,7 @@ export const computeScheduledPaidMinutes = ({
 type PayrollVarianceInput = {
   netWorkedMinutes: number | null | undefined;
   scheduledPaidMinutes: number | null | undefined;
+  lateGraceCreditMinutes?: number | null | undefined;
 };
 
 // Payroll-accurate variance:
@@ -107,6 +108,7 @@ type PayrollVarianceInput = {
 export const computePayrollVariance = ({
   netWorkedMinutes,
   scheduledPaidMinutes,
+  lateGraceCreditMinutes,
 }: PayrollVarianceInput) => {
   if (
     typeof netWorkedMinutes !== "number" ||
@@ -119,9 +121,16 @@ export const computePayrollVariance = ({
 
   const net = Math.max(0, Math.round(netWorkedMinutes));
   const target = Math.max(0, Math.round(scheduledPaidMinutes));
+  const credit =
+    typeof lateGraceCreditMinutes === "number" &&
+    Number.isFinite(lateGraceCreditMinutes)
+      ? Math.max(0, Math.round(lateGraceCreditMinutes))
+      : 0;
+  const adjustedNetForUndertime = Math.min(target, net + credit);
 
   return {
-    undertimeMinutes: Math.max(0, target - net),
+    // Grace credit can only reduce undertime, never create overtime.
+    undertimeMinutes: Math.max(0, target - adjustedNetForUndertime),
     overtimeMinutesRaw: Math.max(0, net - target),
   };
 };
@@ -182,6 +191,26 @@ export const computeLateMinutes = (
   if (scheduledStartMinutes == null || actualInMinutes == null) return null;
   const lateStartMinute = scheduledStartMinutes + LATE_GRACE_MINUTES;
   return Math.max(0, actualInMinutes - lateStartMinute);
+};
+
+export const computeLateGraceCreditMinutes = ({
+  scheduledStartMinutes,
+  actualInMinutes,
+  lateGraceMinutes = LATE_GRACE_MINUTES,
+}: {
+  scheduledStartMinutes: number | null | undefined;
+  actualInMinutes: number | null | undefined;
+  lateGraceMinutes?: number | null | undefined;
+}) => {
+  if (scheduledStartMinutes == null || actualInMinutes == null) return 0;
+  const rawLateMinutes = Math.max(0, actualInMinutes - scheduledStartMinutes);
+  if (rawLateMinutes <= 0) return 0;
+  const grace =
+    typeof lateGraceMinutes === "number" && Number.isFinite(lateGraceMinutes)
+      ? Math.max(0, Math.round(lateGraceMinutes))
+      : 0;
+  if (grace <= 0) return 0;
+  return Math.min(rawLateMinutes, grace);
 };
 
 type BreakDeductionInput = {
@@ -570,9 +599,14 @@ export async function recomputeAttendanceForDay(
     scheduledEndMinutes: expected.scheduledEndMinutes,
     scheduledBreakMinutes,
   });
+  const lateGraceCreditMinutes = computeLateGraceCreditMinutes({
+    scheduledStartMinutes: expected.scheduledStartMinutes,
+    actualInMinutes,
+  });
   const { undertimeMinutes, overtimeMinutesRaw } = computePayrollVariance({
     netWorkedMinutes,
     scheduledPaidMinutes,
+    lateGraceCreditMinutes,
   });
 
   const lateMinutes =

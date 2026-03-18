@@ -12,9 +12,9 @@ type KioskChallenge = {
   exp: number;
   url: string;
 };
-
-const CHALLENGE_TTL_MS = 30_000;
-const ROTATE_INTERVAL_MS = 30_000;
+//! SET QR TIMEOUT
+const CHALLENGE_TTL_MS = 2_000;
+const ROTATE_INTERVAL_MS = 2_000;
 
 const getPublicBaseUrl = () => {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -94,7 +94,9 @@ export function KioskQrPanel() {
           variant="ghost"
           size="sm"
           className="h-7 gap-1 px-2 text-xs"
-          onClick={() => setChallenge(makeChallenge(kioskId, getPublicBaseUrl()))}
+          onClick={() =>
+            setChallenge(makeChallenge(kioskId, getPublicBaseUrl()))
+          }
         >
           <RefreshCcw className="h-3 w-3" />
           Refresh QR

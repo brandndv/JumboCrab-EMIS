@@ -2,16 +2,17 @@
 
 import { listDepartmentOptions } from "@/actions/organization/departments-action";
 import {
+  archivePosition,
   createPosition,
-  deletePosition,
   listPositions,
+  unarchivePosition,
   updatePosition,
 } from "@/actions/organization/positions-action";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Plus, RefreshCcw, Trash2 } from "lucide-react";
+import { Archive, Eye, EyeOff, Pencil, Plus, RefreshCcw, RotateCcw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -22,10 +23,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 
 type PositionRow = {
   positionId: string;
   name: string;
+  isActive: boolean;
   description?: string | null;
   departmentId: string;
   department?: { departmentId: string; name: string } | null;
@@ -44,14 +47,15 @@ export function PositionTable() {
   const [departmentId, setDepartmentId] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [mutatingId, setMutatingId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async (includeArchived = showArchived) => {
     try {
       setLoading(true);
       setError(null);
       const [posResult, deptResult] = await Promise.all([
-        listPositions(),
+        listPositions({ includeArchived }),
         listDepartmentOptions(),
       ]);
       if (!posResult.success) {
@@ -68,11 +72,11 @@ export function PositionTable() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showArchived]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load(showArchived);
+  }, [load, showArchived]);
 
   const filtered = useMemo(() => {
     const term = filter.trim().toLowerCase();
@@ -127,6 +131,7 @@ export function PositionTable() {
   };
 
   const startEdit = (pos: PositionRow) => {
+    if (!pos.isActive) return;
     setEditingId(pos.positionId);
     setName(pos.name);
     setDescription(pos.description || "");
@@ -147,20 +152,44 @@ export function PositionTable() {
   };
 
   const handleDelete = async (id: string) => {
-    const confirmed = window.confirm("Delete this position? It will no longer appear in lists.");
+    const confirmed = window.confirm(
+      "Archive this position? It will be hidden from active lists.",
+    );
     if (!confirmed) return;
     try {
-      setDeletingId(id);
+      setMutatingId(id);
       setError(null);
-      const result = await deletePosition(id);
+      const result = await archivePosition(id);
       if (!result.success) {
-        throw new Error(result.error || "Failed to delete position");
+        throw new Error(result.error || "Failed to archive position");
       }
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete position");
+      setError(err instanceof Error ? err.message : "Failed to archive position");
     } finally {
-      setDeletingId(null);
+      setMutatingId(null);
+    }
+  };
+
+  const handleUnarchive = async (id: string) => {
+    const confirmed = window.confirm(
+      "Unarchive this position? It will appear again in active lists.",
+    );
+    if (!confirmed) return;
+    try {
+      setMutatingId(id);
+      setError(null);
+      const result = await unarchivePosition(id);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to unarchive position");
+      }
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to unarchive position",
+      );
+    } finally {
+      setMutatingId(null);
     }
   };
 
@@ -181,8 +210,31 @@ export function PositionTable() {
             className="w-full sm:w-64"
           />
           <div className="flex items-center gap-2 self-end sm:self-auto">
-            <Button variant="ghost" size="icon" onClick={load} aria-label="Reload positions">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void load()}
+              aria-label="Reload positions"
+            >
               <RefreshCcw className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={showArchived ? "secondary" : "outline"}
+              size="sm"
+              type="button"
+              onClick={() => setShowArchived((prev) => !prev)}
+            >
+              {showArchived ? (
+                <>
+                  <EyeOff className="mr-2 h-4 w-4" />
+                  Hide Archived
+                </>
+              ) : (
+                <>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Show Archived
+                </>
+              )}
             </Button>
             <Dialog open={open} onOpenChange={closeDialog}>
               <DialogTrigger asChild>
@@ -249,6 +301,7 @@ export function PositionTable() {
               <TableRow>
                 <TableHead>Position</TableHead>
                 <TableHead>Department</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -256,21 +309,21 @@ export function PositionTable() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="text-sm text-muted-foreground">
                     Loading...
                   </TableCell>
                 </TableRow>
               )}
               {error && !loading && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-sm text-destructive">
+                  <TableCell colSpan={5} className="text-sm text-destructive">
                     {error}
                   </TableCell>
                 </TableRow>
               )}
               {!loading && !error && filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="text-sm text-muted-foreground">
                     No positions found. Click Add Position to create one.
                   </TableCell>
                 </TableRow>
@@ -283,6 +336,11 @@ export function PositionTable() {
                     <TableCell className="text-sm text-muted-foreground">
                       {pos.department?.name || "—"}
                     </TableCell>
+                    <TableCell>
+                      <Badge variant={pos.isActive ? "secondary" : "outline"}>
+                        {pos.isActive ? "Active" : "Archived"}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {pos.description || "—"}
                     </TableCell>
@@ -294,21 +352,39 @@ export function PositionTable() {
                           type="button"
                           className="gap-1"
                           onClick={() => startEdit(pos)}
+                          disabled={!pos.isActive}
                         >
                           <Pencil className="h-4 w-4" />
                           Edit
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          type="button"
-                          className="gap-1 text-destructive"
-                          onClick={() => handleDelete(pos.positionId)}
-                          disabled={deletingId === pos.positionId}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          {deletingId === pos.positionId ? "Deleting..." : "Delete"}
-                        </Button>
+                        {pos.isActive && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            className="gap-1 text-destructive"
+                            onClick={() => handleDelete(pos.positionId)}
+                            disabled={mutatingId === pos.positionId}
+                          >
+                            <Archive className="h-4 w-4" />
+                            {mutatingId === pos.positionId ? "Archiving..." : "Archive"}
+                          </Button>
+                        )}
+                        {!pos.isActive && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            className="gap-1"
+                            onClick={() => handleUnarchive(pos.positionId)}
+                            disabled={mutatingId === pos.positionId}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            {mutatingId === pos.positionId
+                              ? "Restoring..."
+                              : "Unarchive"}
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
