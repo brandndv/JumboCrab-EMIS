@@ -223,147 +223,216 @@ export default function ViolationCreateForm({
 
   return (
     <Card className="shadow-sm">
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="employee-combined">Employee</Label>
-          <div className="relative">
-            <Input
-              id="employee-combined"
-              value={employeeQuery}
-              onChange={(event) => {
-                setEmployeeQuery(event.target.value);
-                setSelectedEmployeeId("");
-                setEmployeeDropdownOpen(true);
-              }}
-              onFocus={() => setEmployeeDropdownOpen(true)}
-              onBlur={() => {
-                // Delay close so click on suggestion can complete.
-                setTimeout(() => setEmployeeDropdownOpen(false), 120);
-              }}
-              placeholder="Search and select employee"
-              autoComplete="off"
-            />
-            {employeeDropdownOpen && employeeSuggestions.length > 0 ? (
-              <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md">
-                {employeeSuggestions.slice(0, 20).map((employee) => (
-                  <button
-                    key={employee.employeeId}
-                    type="button"
-                    className="w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      selectEmployee(employee);
-                    }}
-                  >
-                    {formatEmployeeLabel(employee)}
-                  </button>
-                ))}
+      <CardContent className="space-y-6 p-6 sm:p-8">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,24rem)]">
+          <section className="space-y-4 rounded-2xl border border-border/70 bg-background p-5">
+            <div>
+              <h2 className="text-lg font-semibold">Assignment Basics</h2>
+              <p className="text-sm text-muted-foreground">
+                Select the employee, violation type, and date for this record.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="employee-combined">Employee</Label>
+              <div className="relative">
+                <Input
+                  id="employee-combined"
+                  value={employeeQuery}
+                  onChange={(event) => {
+                    setEmployeeQuery(event.target.value);
+                    setSelectedEmployeeId("");
+                    setEmployeeDropdownOpen(true);
+                  }}
+                  onFocus={() => setEmployeeDropdownOpen(true)}
+                  onBlur={() => {
+                    // Delay close so click on suggestion can complete.
+                    setTimeout(() => setEmployeeDropdownOpen(false), 120);
+                  }}
+                  placeholder="Search and select employee"
+                  autoComplete="off"
+                />
+                {employeeDropdownOpen && employeeSuggestions.length > 0 ? (
+                  <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md">
+                    {employeeSuggestions.slice(0, 20).map((employee) => (
+                      <button
+                        key={employee.employeeId}
+                        type="button"
+                        className="w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          selectEmployee(employee);
+                        }}
+                      >
+                        {formatEmployeeLabel(employee)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-          {employeesLoading ? (
-            <p className="text-xs text-muted-foreground">
-              Loading employees...
-            </p>
-          ) : null}
-          {selectedEmployee ? (
-            <p className="text-xs text-muted-foreground">
-              Selected: {formatEmployeeLabel(selectedEmployee)}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Select one employee from search results.
-            </p>
-          )}
-        </div>
+              {employeesLoading ? (
+                <p className="text-xs text-muted-foreground">
+                  Loading employees...
+                </p>
+              ) : null}
+              {selectedEmployee ? (
+                <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Selected Employee
+                  </p>
+                  <p className="mt-2 font-medium">
+                    {formatEmployeeLabel(selectedEmployee)}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Select one employee from the search results.
+                </p>
+              )}
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="violation-select">Violation</Label>
-          <Select
-            value={selectedViolationId}
-            onValueChange={setSelectedViolationId}
-            disabled={definitionsLoading}
-          >
-            <SelectTrigger id="violation-select">
-              <SelectValue
-                placeholder={
-                  definitionsLoading
-                    ? "Loading violation options..."
-                    : "Select violation"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {activeDefinitions.map((definition) => (
-                <SelectItem
-                  key={definition.violationId}
-                  value={definition.violationId}
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem]">
+              <div className="space-y-2">
+                <Label htmlFor="violation-select">Violation</Label>
+                <Select
+                  value={selectedViolationId}
+                  onValueChange={setSelectedViolationId}
+                  disabled={definitionsLoading}
                 >
-                  {definition.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {activeDefinitions.length === 0 && !definitionsLoading ? (
-            <p className="text-xs text-muted-foreground">
-              No violation definitions found. Add a violation in the directory
-              first.
+                  <SelectTrigger id="violation-select">
+                    <SelectValue
+                      placeholder={
+                        definitionsLoading
+                          ? "Loading violation options..."
+                          : "Select violation"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeDefinitions.map((definition) => (
+                      <SelectItem
+                        key={definition.violationId}
+                        value={definition.violationId}
+                      >
+                        {definition.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {activeDefinitions.length === 0 && !definitionsLoading ? (
+                  <p className="text-xs text-muted-foreground">
+                    No violation definitions found. Add a violation in the
+                    directory first.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="violation-date">Violation Date</Label>
+                <Input
+                  id="violation-date"
+                  type="date"
+                  value={violationDate}
+                  onChange={(event) => setViolationDate(event.target.value)}
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4 rounded-2xl border border-border/70 bg-muted/[0.03] p-5">
+            <div>
+              <h2 className="text-lg font-semibold">Violation Details</h2>
+              <p className="text-sm text-muted-foreground">
+                Review the strike impact before saving the assignment.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Strike Rule
+                </p>
+                <p className="mt-2 font-medium">
+                  {selectedDefinition
+                    ? `1 strike each, max ${selectedDefinition.maxStrikesPerEmployee} counted`
+                    : "Select a violation to view strike rules"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Strike Points
+                </p>
+                <p className="mt-2 font-medium">
+                  {selectedDefinition
+                    ? `${selectedDefinition.defaultStrikePoints} point${
+                        selectedDefinition.defaultStrikePoints === 1 ? "" : "s"
+                      }`
+                    : "Not set"}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Description
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {selectedDefinition?.description?.trim() ||
+                  "Select a violation to review its definition and expected handling."}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+              New assignments start as unacknowledged. Mark them acknowledged
+              once the employee confirms receipt.
+            </div>
+          </section>
+        </div>
+
+        <section className="space-y-3 rounded-2xl border border-border/70 bg-background p-5">
+          <div>
+            <h2 className="text-lg font-semibold">Remarks</h2>
+            <p className="text-sm text-muted-foreground">
+              Add optional notes or context for this violation assignment.
             </p>
-          ) : null}
-          {selectedDefinition ? (
-            <p className="text-xs text-muted-foreground">
-              Strike rule: 1 strike each, max{" "}
-              {selectedDefinition.maxStrikesPerEmployee} counted per employee
-            </p>
-          ) : null}
-        </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="violation-remarks">Remarks</Label>
+            <textarea
+              id="violation-remarks"
+              value={remarks}
+              onChange={(event) => setRemarks(event.target.value)}
+              placeholder="Optional notes"
+              className="min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            />
+          </div>
+        </section>
 
-        <div className="space-y-2">
-          <Label htmlFor="violation-date">Violation Date</Label>
-          <Input
-            id="violation-date"
-            type="date"
-            value={violationDate}
-            onChange={(event) => setViolationDate(event.target.value)}
-          />
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1">
+            {message ? (
+              <p className="text-sm text-emerald-600">{message}</p>
+            ) : null}
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push(cancelPath || inferredCancelPath)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void submit()}
+              disabled={submitting}
+            >
+              Save Assignment
+            </Button>
+          </div>
         </div>
-
-        <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          Acknowledgement is stored in <code>isAcknowledged</code> and defaults
-          to false. It should become true when the employee acknowledges it.
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="violation-remarks">Remarks</Label>
-          <textarea
-            id="violation-remarks"
-            value={remarks}
-            onChange={(event) => setRemarks(event.target.value)}
-            placeholder="Optional notes"
-            className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          />
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push(cancelPath || inferredCancelPath)}
-            disabled={submitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => void submit()}
-            disabled={submitting}
-          >
-            Save Assignment
-          </Button>
-        </div>
-
-        {message ? <p className="text-sm text-emerald-600">{message}</p> : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
       </CardContent>
     </Card>
   );

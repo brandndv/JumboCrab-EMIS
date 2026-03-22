@@ -627,6 +627,8 @@ export function AttendanceLocks() {
                               ? "success"
                               : row.status === "LATE"
                                 ? "warning"
+                                : row.status === "LEAVE"
+                                  ? "secondary"
                                 : row.status === "INCOMPLETE"
                                   ? "info"
                                   : row.status === "ABSENT"

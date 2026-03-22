@@ -33,42 +33,50 @@ interface NavSidebarProps {
   userRole: string; // Use string (primitive) type, not String (object)
 }
 
+type MenuSubItem = {
+  label: string;
+  path: string;
+  roles?: string[];
+};
+
+type MenuItem = {
+  id: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  href: string;
+  hasSubmenu: boolean;
+  roles: string[];
+  subItems?: MenuSubItem[];
+};
+
 const NavSidebar = ({ userRole }: NavSidebarProps) => {
-  const [mounted, setMounted] = useState(false);
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({});
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const collapsibleId = useId(); // Generate a stable ID prefix
 
-  // Set mounted state after component mounts
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   const updateOpenState = (key: string, value: boolean) => {
-    if (mounted) {
-      // Only update state if we're not collapsed
-      if (!isSidebarCollapsed) {
-        // Close all other open items when opening a new one
-        const newState = { ...openStates };
+    if (!isSidebarCollapsed) {
+      setOpenStates((current) => {
+        const nextState = { ...current };
         if (value) {
-          // Close all other items when opening a new one
-          Object.keys(newState).forEach((k) => {
-            if (k !== key) newState[k] = false;
+          Object.keys(nextState).forEach((stateKey) => {
+            if (stateKey !== key) nextState[stateKey] = false;
           });
         }
-        newState[key] = value;
-        setOpenStates(newState);
-      }
+        nextState[key] = value;
+        return nextState;
+      });
     }
   };
 
-  // Close all submenus when sidebar is collapsed
   useEffect(() => {
+    const element = sidebarRef.current;
+
     const handleResize = () => {
-      if (sidebarRef.current) {
-        const isCollapsed = sidebarRef.current.offsetWidth < 80; // Adjust this value based on your collapsed width
+      if (element) {
+        const isCollapsed = element.offsetWidth < 80; // Adjust this value based on your collapsed width
         setIsSidebarCollapsed(isCollapsed);
         if (isCollapsed) {
           setOpenStates({});
@@ -76,25 +84,21 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       }
     };
 
-    // Initial check
     handleResize();
 
-    // Add resize observer
     const resizeObserver = new ResizeObserver(handleResize);
-    if (sidebarRef.current) {
-      resizeObserver.observe(sidebarRef.current);
+    if (element) {
+      resizeObserver.observe(element);
     }
 
     return () => {
-      if (sidebarRef.current) {
-        resizeObserver.unobserve(sidebarRef.current);
+      if (element) {
+        resizeObserver.unobserve(element);
       }
     };
   }, []);
 
-  const isActive = (href: string) => pathname.startsWith(href);
-
-  const menuItems = [
+  const menuItems: MenuItem[] = [
     // ========== DASHBOARD MENU ========== //
     {
       id: "dashboard",
@@ -259,29 +263,53 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
     // ========== DEDUCTION MENU ========== //
     {
       id: "deduction",
-      label: "Deduction",
+      label: "Deductions",
       icon: BookMinus,
-      href: `/${userRole}/deduction`,
+      href: `/${userRole}/deductions`,
       hasSubmenu: true,
       subItems: [
         {
-          label: "Deductions Directory",
+          label: "Deduction Types",
           path: "",
-          roles: ["admin", "generalManager", "clerk"],
+          roles: ["admin", "generalManager"],
         },
         {
-          label: "Add Deduction",
+          label: "Employee Deductions",
+          path: "/employee",
+          roles: ["admin", "generalManager", "manager", "clerk"],
+        },
+        {
+          label: "Review Drafts",
+          path: "",
+          roles: ["manager"],
+        },
+        {
+          label: "Review Drafts",
+          path: "/review",
+          roles: ["admin"],
+        },
+        {
+          label: "Assign Deduction",
           path: "/add",
-          roles: ["admin", "generalManager", "clerk"],
+          roles: ["admin", "manager"],
         },
         {
-          label: "Deduction History",
-          path: "/history",
-          roles: ["admin", "generalManager", "clerk"],
+          label: "My Drafts",
+          path: "",
+          roles: ["clerk"],
         },
-        // ========== DEDUCTION ACCESS ========= //
+        {
+          label: "Draft Deduction",
+          path: "/add",
+          roles: ["clerk"],
+        },
+        {
+          label: "My Deductions",
+          path: "",
+          roles: ["employee"],
+        },
       ],
-      roles: ["admin", "generalManager", "clerk"],
+      roles: ["admin", "generalManager", "manager", "clerk", "employee"],
     },
     // ========== CONTRIBUTION MENU ========== //
     {
@@ -408,21 +436,33 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       hasSubmenu: true,
       subItems: [
         {
-          label: "All Requests",
+          label: "Review Queue",
           path: "",
-          roles: ["admin", "manager", "employee"],
+          roles: ["manager"],
         },
         {
-          label: "History",
-          path: "/history",
-          roles: ["admin", "manager", "employee"],
+          label: "My Requests",
+          path: "",
+          roles: ["employee"],
+        },
+        {
+          label: "Leave Status",
+          path: "/leave",
+          roles: ["employee"],
+        },
+        {
+          label: "Day Off Status",
+          path: "/day-off",
+          roles: ["employee"],
+        },
+        {
+          label: "New Request",
+          path: "/add",
+          roles: ["employee"],
         },
       ],
       // ========== REQUEST ACCESS ========= //
-      roles: [
-        "admin",
-        // "manager", "employee"
-      ],
+      roles: ["manager", "employee"],
     },
     // ========== REPORTS MENU ========== //
     {
@@ -521,17 +561,16 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       ref={sidebarRef}
       className="flex flex-col items-center space-y-2 w-full"
     >
-      <SidebarGroup className="w-full">
-        <SidebarMenu className="space-y-1 w-full max-w-xs mx-auto">
+        <SidebarGroup className="w-full">
+          <SidebarMenu className="space-y-1 w-full max-w-xs mx-auto">
           {filteredMenuItems.map((item) => {
-            const active = isActive(item.href);
             // Subitem role gating: only show subitems whose optional 'roles' includes current userRole.
             // To configure, add `roles: ["admin","manager"]` on any subitem object in `menuItems` above.
-            const visibleSubItems = (item.subItems?.filter((si: any) =>
-              typeof si === "object"
-                ? !("roles" in si) || si.roles?.includes(userRole)
-                : true,
-            ) || []) as any[];
+            const visibleSubItems =
+              item.subItems?.filter(
+                (subItem) =>
+                  !subItem.roles || subItem.roles.includes(userRole),
+              ) || [];
 
             if (item.hasSubmenu) {
               return (

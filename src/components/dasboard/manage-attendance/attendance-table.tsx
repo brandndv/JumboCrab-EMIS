@@ -443,6 +443,7 @@ export function AttendanceHistoryTable() {
               <option value="">All status</option>
               <option value="PRESENT">Present</option>
               <option value="ABSENT">Absent</option>
+              <option value="LEAVE">Leave</option>
               <option value="LATE">Late</option>
               <option value="INCOMPLETE">Incomplete</option>
               <option value="REST">Rest</option>
@@ -593,9 +594,11 @@ export function AttendanceHistoryTable() {
                                 ? "success"
                                 : row.status === "LATE"
                                   ? "warning"
-                                  : row.status === "INCOMPLETE"
-                                    ? "info"
-                                    : row.status === "ABSENT"
+                                  : row.status === "LEAVE"
+                                    ? "secondary"
+                                    : row.status === "INCOMPLETE"
+                                      ? "info"
+                                      : row.status === "ABSENT"
                                       ? "destructive"
                                       : "outline"
                             }

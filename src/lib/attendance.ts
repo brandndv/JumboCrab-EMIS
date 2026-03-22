@@ -1,4 +1,11 @@
-import { ATTENDANCE_STATUS, PUNCH_TYPE, Shift } from "@prisma/client";
+import {
+  ATTENDANCE_STATUS,
+  CURRENT_STATUS,
+  LeaveRequestStatus,
+  LeaveRequestType,
+  PUNCH_TYPE,
+  Shift,
+} from "@prisma/client";
 import { db } from "./db";
 import { startOfZonedDay, endOfZonedDay, TZ } from "./timezone";
 
@@ -12,6 +19,7 @@ type ExpectedShift = {
 type DayKey = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 const AUTO_TIMEOUT_GRACE_MINUTES = 60; //AUTO TIME OUT DURATION AFTER SCHEDULE END
 const DEFAULT_LATE_GRACE_MINUTES = 0;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const parseNonNegativeMinutes = (
   value: string | undefined,
@@ -29,6 +37,75 @@ export const LATE_GRACE_MINUTES = parseNonNegativeMinutes(
   process.env.ATTENDANCE_LATE_GRACE_MINUTES,
   DEFAULT_LATE_GRACE_MINUTES,
 );
+
+const leaveTypeToCurrentStatus = (
+  leaveType: LeaveRequestType,
+): CURRENT_STATUS => {
+  switch (leaveType) {
+    case LeaveRequestType.VACATION:
+      return CURRENT_STATUS.VACATION;
+    case LeaveRequestType.SICK:
+      return CURRENT_STATUS.SICK_LEAVE;
+    case LeaveRequestType.PERSONAL:
+    case LeaveRequestType.EMERGENCY:
+    case LeaveRequestType.UNPAID:
+    default:
+      return CURRENT_STATUS.ON_LEAVE;
+  }
+};
+
+const syncEmployeeCurrentStatusFromApprovedLeave = async (
+  employeeId: string,
+  referenceDate = new Date(),
+) => {
+  const employee = await db.employee.findUnique({
+    where: { employeeId },
+    select: {
+      currentStatus: true,
+    },
+  });
+
+  if (!employee) return;
+  if (
+    employee.currentStatus === CURRENT_STATUS.INACTIVE ||
+    employee.currentStatus === CURRENT_STATUS.ENDED
+  ) {
+    return;
+  }
+
+  const dayStart = startOfZonedDay(referenceDate);
+  const dayEnd = new Date(dayStart.getTime() + DAY_MS);
+
+  const activeLeave = await db.leaveRequest.findFirst({
+    where: {
+      employeeId,
+      status: LeaveRequestStatus.APPROVED,
+      startDate: {
+        lt: dayEnd,
+      },
+      endDate: {
+        gte: dayStart,
+      },
+    },
+    orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+    select: {
+      leaveType: true,
+    },
+  });
+
+  const nextStatus = activeLeave
+    ? leaveTypeToCurrentStatus(activeLeave.leaveType)
+    : CURRENT_STATUS.ACTIVE;
+
+  if (employee.currentStatus !== nextStatus) {
+    await db.employee.update({
+      where: { employeeId },
+      data: {
+        currentStatus: nextStatus,
+      },
+    });
+  }
+};
 
 const minutesBetween = (a: Date, b: Date) =>
   Math.round((b.getTime() - a.getTime()) / 60000);
@@ -483,6 +560,16 @@ export async function recomputeAttendanceForDay(
 
   const expected = await getExpectedShiftForDate(employeeId, dayStart);
   const paidHoursPerDay = expected.shift?.paidHoursPerDay ?? null;
+  const approvedLeave = await db.leaveRequest.findFirst({
+    where: {
+      employeeId,
+      status: LeaveRequestStatus.APPROVED,
+      startDate: { lte: dayStart },
+      endDate: { gte: dayStart },
+    },
+    orderBy: { submittedAt: "desc" },
+    select: { id: true },
+  });
 
   let firstClockIn =
     punches.find((p) => p.punchType === PUNCH_TYPE.TIME_IN) ?? null;
@@ -616,7 +703,9 @@ export async function recomputeAttendanceForDay(
   let status: ATTENDANCE_STATUS = expected.shift
     ? ATTENDANCE_STATUS.ABSENT
     : ATTENDANCE_STATUS.REST;
-  if (actualInAt || actualOutAt) {
+  if (approvedLeave && !actualInAt && !actualOutAt) {
+    status = ATTENDANCE_STATUS.LEAVE;
+  } else if (actualInAt || actualOutAt) {
     if (!actualOutAt && cutoffPassed) {
       status = ATTENDANCE_STATUS.INCOMPLETE;
     } else {
@@ -634,14 +723,28 @@ export async function recomputeAttendanceForDay(
         workDate: dayStart,
       },
     },
-    select: { isLocked: true },
+    select: {
+      isLocked: true,
+      isPaidLeave: true,
+      leaveRequestId: true,
+    },
   });
   const shouldLock = existingAttendance?.isLocked ?? false;
+  const leaveRequestId =
+    status === ATTENDANCE_STATUS.LEAVE
+      ? approvedLeave?.id ?? existingAttendance?.leaveRequestId ?? null
+      : null;
+  const isPaidLeave =
+    status === ATTENDANCE_STATUS.LEAVE
+      ? existingAttendance?.isPaidLeave ?? false
+      : false;
 
   const attendance = await db.attendance.upsert({
     where: { employeeId_workDate: { employeeId, workDate: dayStart } },
     update: {
       status,
+      isPaidLeave,
+      leaveRequestId,
       expectedShiftId: expected.shift?.id ?? null,
       scheduledStartMinutes: expected.scheduledStartMinutes,
       scheduledEndMinutes: expected.scheduledEndMinutes,
@@ -662,6 +765,8 @@ export async function recomputeAttendanceForDay(
       employeeId,
       workDate: dayStart,
       status,
+      isPaidLeave,
+      leaveRequestId,
       expectedShiftId: expected.shift?.id ?? null,
       scheduledStartMinutes: expected.scheduledStartMinutes,
       scheduledEndMinutes: expected.scheduledEndMinutes,
@@ -687,6 +792,8 @@ export async function recomputeAttendanceForDay(
       data: { attendanceId: attendance.id },
     });
   }
+
+  await syncEmployeeCurrentStatusFromApprovedLeave(employeeId, now);
 
   return { attendance, punches };
 }
