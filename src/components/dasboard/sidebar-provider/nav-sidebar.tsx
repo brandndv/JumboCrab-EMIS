@@ -475,34 +475,46 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         {
           label: "Overview",
           path: "",
-          roles: ["admin", "generalManager", "manager", "supervisor", "clerk"],
+          roles: ["generalManager", "manager"],
         },
         {
-          label: "Employee Reports",
-          path: "/employees",
-          roles: ["admin", "generalManager", "manager", "supervisor", "clerk"],
-        },
-        {
-          label: "Attendance Reports",
+          label: "Attendance",
           path: "/attendance",
-          roles: ["admin", "generalManager", "manager", "supervisor", "clerk"],
+          roles: ["generalManager", "manager"],
         },
         {
-          label: "Payroll Reports",
+          label: "Accounts",
+          path: "/accounts",
+          roles: ["generalManager", "manager"],
+        },
+        {
+          label: "Employee Information",
+          path: "/employee-information",
+          roles: ["generalManager", "manager"],
+        },
+        {
+          label: "Contributions",
+          path: "/contributions",
+          roles: ["generalManager", "manager"],
+        },
+        {
+          label: "Deductions",
+          path: "/deductions",
+          roles: ["generalManager", "manager"],
+        },
+        {
+          label: "Violations",
+          path: "/violations",
+          roles: ["generalManager", "manager"],
+        },
+        {
+          label: "Payroll",
           path: "/payroll",
-          roles: ["admin", "generalManager", "manager", "supervisor", "clerk"],
-        },
-        {
-          label: "Custom Reports",
-          path: "/custom",
-          roles: ["admin", "generalManager", "manager", "supervisor", "clerk"],
+          roles: ["generalManager", "manager"],
         },
       ],
       // ========== REPORT ACCESS ========= //
-      roles: [
-        "admin",
-        // "generalManager", "manager", "supervisor", "clerk"
-      ],
+      roles: ["generalManager", "manager"],
     },
     // ========== PAYSLIP MENU ========= //
     {
