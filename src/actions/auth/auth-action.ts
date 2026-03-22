@@ -168,6 +168,13 @@ export async function createAuthUser(input: {
       };
     }
 
+    if (appRole === "admin") {
+      return {
+        success: false,
+        error: "Admin accounts are reserved for system control and cannot be created here",
+      };
+    }
+
     if (appRole === "employee" && !employeeId) {
       return {
         success: false,

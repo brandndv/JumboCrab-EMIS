@@ -22,7 +22,7 @@ import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { usePathname, useRouter } from "next/navigation";
 import { createAuthUser } from "@/actions/auth/auth-action";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { APP_ROLES, type AppRole } from "@/lib/rbac";
+import { MANAGEABLE_APP_ROLES, type AppRole } from "@/lib/rbac";
 
 type Employee = {
   employeeId: string;
@@ -274,7 +274,7 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
                         <SelectValue placeholder="Select a role" />
                       </SelectTrigger>
                       <SelectContent className="bg-card text-foreground">
-                        {APP_ROLES.map((roleValue) => (
+                        {MANAGEABLE_APP_ROLES.map((roleValue) => (
                           <SelectItem key={roleValue} value={roleValue}>
                             {roleValue.charAt(0).toUpperCase() +
                               roleValue

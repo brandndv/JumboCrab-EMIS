@@ -22,18 +22,10 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, ArrowLeft, Save } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import { getUserById, updateUser } from "@/actions/users/users-action";
-
-const roles: string[] = [
-  "admin",
-  "generalManager",
-  "manager",
-  "supervisor",
-  "clerk",
-  "employee",
-];
+import { MANAGEABLE_APP_ROLES } from "@/lib/rbac";
 
 const Field = ({
   label,
@@ -71,6 +63,21 @@ const buildDisplayName = (user?: UserWithEmployee | null) => {
   }`.trim();
   return fullName || user?.username || "User";
 };
+
+function getEntityName(value: unknown): string | null {
+  if (typeof value === "string") return value;
+
+  if (
+    value &&
+    typeof value === "object" &&
+    "name" in value &&
+    typeof (value as { name?: unknown }).name === "string"
+  ) {
+    return (value as { name: string }).name;
+  }
+
+  return null;
+}
 
 export default function UserEditPage({
   params,
@@ -272,7 +279,7 @@ export default function UserEditPage({
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent>
-                      {roles.map((r) => (
+                      {MANAGEABLE_APP_ROLES.map((r) => (
                         <SelectItem key={r} value={r}>
                           {r}
                         </SelectItem>
@@ -357,17 +364,13 @@ export default function UserEditPage({
                   <InfoField
                     label="Position"
                     value={
-                      typeof user.employee.position === "string"
-                        ? user.employee.position
-                        : (user.employee.position as any)?.name
+                      getEntityName(user.employee.position) ?? "—"
                     }
                   />
                   <InfoField
                     label="Department"
                     value={
-                      typeof user.employee.department === "string"
-                        ? user.employee.department
-                        : (user.employee.department as any)?.name
+                      getEntityName(user.employee.department) ?? "—"
                     }
                   />
                 </div>

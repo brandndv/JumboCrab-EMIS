@@ -3,9 +3,13 @@
 import { db } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
 import type { UserWithEmployee } from "@/lib/validations/users";
-import { Roles } from "@prisma/client";
+import { Prisma, Roles } from "@prisma/client";
 import { hashPassword } from "@/lib/auth";
 import { normalizeRole } from "@/lib/rbac";
+
+function isHiddenManagementRole(role: Roles | string | null | undefined) {
+  return normalizeRole(role) === "admin";
+}
 
 function toDbRole(role: string): Roles | null {
   const appRole = normalizeRole(role);
@@ -54,7 +58,11 @@ const baseUserSelect = {
   },
 } as const;
 
-const normalizeUsers = (users: any[]) =>
+type BaseUserRecord = Prisma.UserGetPayload<{
+  select: typeof baseUserSelect;
+}>;
+
+const normalizeUsers = (users: BaseUserRecord[]) =>
   users.map((u) => ({
     ...u,
     role: normalizeRole(u.role) ?? "employee",
@@ -67,7 +75,7 @@ const normalizeUsers = (users: any[]) =>
       : null,
   }));
 
-const normalizeUser = (user: any) => normalizeUsers([user])[0];
+const normalizeUser = (user: BaseUserRecord) => normalizeUsers([user])[0];
 
 // ========= GET USERS ========= /
 export async function getUsers(): Promise<{
@@ -77,6 +85,11 @@ export async function getUsers(): Promise<{
 }> {
   try {
     const users = await prisma.user.findMany({
+      where: {
+        role: {
+          not: Roles.Admin,
+        },
+      },
       select: baseUserSelect,
       orderBy: {
         createdAt: "desc",
@@ -119,7 +132,7 @@ export async function getUserById(id: string | undefined): Promise<{
     });
 
     // If no user is found, return an error
-    if (!user) {
+    if (!user || isHiddenManagementRole(user.role)) {
       return {
         success: false,
         error: `User with ID ${id} not found`,
@@ -162,9 +175,9 @@ export async function updateUser(input: {
 
     const existingUser = await db.user.findUnique({
       where: { userId },
-      select: { userId: true },
+      select: { userId: true, role: true },
     });
-    if (!existingUser) {
+    if (!existingUser || isHiddenManagementRole(existingUser.role)) {
       return { success: false, error: "User not found" };
     }
 
@@ -185,6 +198,12 @@ export async function updateUser(input: {
         return {
           success: false,
           error: `Invalid role. Must be one of: ${Object.values(Roles).join(", ")}`,
+        };
+      }
+      if (dbRole === Roles.Admin) {
+        return {
+          success: false,
+          error: "Admin accounts cannot be created or managed from this screen",
         };
       }
       updates.role = dbRole;
@@ -267,7 +286,7 @@ export async function deleteUser(input: {
       include: { employee: true },
     });
 
-    if (!user) {
+    if (!user || isHiddenManagementRole(user.role)) {
       return { success: false, error: "User not found" };
     }
 
@@ -296,6 +315,11 @@ export async function getUsersWithEmployeeAccount(): Promise<{
 }> {
   try {
     const users = await prisma.user.findMany({
+      where: {
+        role: {
+          not: Roles.Admin,
+        },
+      },
       select: baseUserSelect,
       orderBy: {
         createdAt: "desc",
