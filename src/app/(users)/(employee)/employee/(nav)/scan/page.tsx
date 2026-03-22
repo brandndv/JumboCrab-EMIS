@@ -4,7 +4,7 @@ import {
   BrowserMultiFormatReader,
   type IScannerControls,
 } from "@zxing/browser";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,24 @@ const toErrorMessage = (err: unknown, fallback: string) =>
   err instanceof Error ? err.message : fallback;
 
 export default function EmployeeScanPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="px-4 py-8 sm:px-8 lg:px-12">
+          <Card className="shadow-sm">
+            <CardContent className="py-10">
+              <p className="text-sm text-muted-foreground">Loading scanner...</p>
+            </CardContent>
+          </Card>
+        </div>
+      }
+    >
+      <EmployeeScanPageContent />
+    </Suspense>
+  );
+}
+
+function EmployeeScanPageContent() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const reader = useMemo(() => new BrowserMultiFormatReader(), []);
   const searchParams = useSearchParams();

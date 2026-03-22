@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession } from "@/hooks/use-session";
+import Link from "next/link";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -8,12 +9,24 @@ import {
   BreadcrumbSeparator,
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SignOutButton } from "@/components/ui/signout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@radix-ui/react-separator";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect } from "react";
 import { ModeToggle } from "@/components/theme-provider/mode-toggle";
+import { ThemeMenuSub } from "@/components/theme-provider/theme-menu-sub";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { CircleUserRound, LogOutIcon } from "lucide-react";
 
 /**
  * NavHeader Component
@@ -69,6 +82,11 @@ const NavHeader = () => {
     };
     return map[s.toLowerCase()] ?? toTitle(s);
   };
+
+  const displayName = employee
+    ? `${employee.firstName} ${employee.lastName}`
+    : user.username;
+  const accountHref = user.role ? `/${user.role}/account` : "/sign-in";
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full shrink-0 items-center border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
@@ -131,36 +149,85 @@ const NavHeader = () => {
 
         {/* Right side: User info */}
         <div className="flex items-center gap-4">
-          <ModeToggle />
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col items-end text-sm">
-              <span className="font-medium">
-                {employee
-                  ? `${employee.firstName} ${employee.lastName}`
-                  : user.username}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {employee?.position}
-              </span>
-            </div>
-            <Avatar className="h-9 w-9  ">
-              {(user?.image || user?.employee?.img) && (
-                <AvatarImage
-                  src={
-                    (user?.image as string) || (user?.employee?.img as string)
-                  }
-                  alt={
-                    employee
-                      ? `${employee.firstName} ${employee.lastName}`
-                      : `${user.username}`
-                  }
-                />
-              )}
-              <AvatarFallback className="bg-primary/10 text-primary font-semibold uppercase">
-                {user ? (user.username?.[0] ?? "U") : "U"}
-              </AvatarFallback>
-            </Avatar>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-accent/60"
+              >
+                <div className="hidden flex-col items-end text-sm sm:flex">
+                  <span className="font-medium">{displayName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {employee?.position}
+                  </span>
+                </div>
+                <Avatar className="h-9 w-9">
+                  {(user?.image || user?.employee?.img) && (
+                    <AvatarImage
+                      src={
+                        (user?.image as string) ||
+                        (user?.employee?.img as string)
+                      }
+                      alt={displayName}
+                    />
+                  )}
+                  <AvatarFallback className="bg-primary/10 font-semibold uppercase text-primary">
+                    {user ? (user.username?.[0] ?? "U") : "U"}
+                  </AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 rounded-xl">
+              <DropdownMenuLabel className="p-0 font-normal">
+                <div className="flex items-center gap-3 px-3 py-2 text-left">
+                  <Avatar className="h-9 w-9">
+                    {(user?.image || user?.employee?.img) && (
+                      <AvatarImage
+                        src={
+                          (user?.image as string) ||
+                          (user?.employee?.img as string)
+                        }
+                        alt={displayName}
+                      />
+                    )}
+                    <AvatarFallback className="bg-primary/10 font-semibold uppercase text-primary">
+                      {user ? (user.username?.[0] ?? "U") : "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="grid min-w-0 flex-1 text-sm leading-tight">
+                    <span className="truncate font-medium">{displayName}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {user.email}
+                    </span>
+                  </div>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem asChild>
+                  <Link
+                    href={accountHref}
+                    className="flex w-full items-center gap-2"
+                  >
+                    <CircleUserRound />
+                    My Account
+                  </Link>
+                </DropdownMenuItem>
+                <ThemeMenuSub />
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <SignOutButton
+                  className="flex w-full items-center gap-2"
+                  as="button"
+                  unstyled
+                >
+                  <LogOutIcon />
+                  Sign Out
+                </SignOutButton>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

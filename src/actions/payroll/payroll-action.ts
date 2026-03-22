@@ -6,6 +6,7 @@ import {
   DeductionAmountMode,
   DeductionFrequency,
   EmployeeDeductionAssignmentStatus,
+  EmployeeDeductionWorkflowStatus,
   PayrollDeductionType,
   PayrollEmployeeStatus,
   PayrollEarningType,
@@ -845,6 +846,7 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
             employeeId: true,
             workDate: true,
             status: true,
+            isPaidLeave: true,
             paidHoursPerDay: true,
             scheduledStartMinutes: true,
             scheduledEndMinutes: true,
@@ -870,6 +872,7 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
         const assignments = await tx.employeeDeductionAssignment.findMany({
           where: {
             employeeId: { in: employeeIds },
+            workflowStatus: EmployeeDeductionWorkflowStatus.APPROVED,
             status: EmployeeDeductionAssignmentStatus.ACTIVE,
             deductionType: { isActive: true },
           },
@@ -930,11 +933,18 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
           let daysAbsent = 0;
           let daysLate = 0;
           for (const row of employeeRows) {
-            if (row.status === ATTENDANCE_STATUS.ABSENT) {
+            const isPaidLeaveRow =
+              row.status === ATTENDANCE_STATUS.LEAVE && row.isPaidLeave === true;
+
+            if (
+              row.status === ATTENDANCE_STATUS.ABSENT ||
+              (row.status === ATTENDANCE_STATUS.LEAVE && !isPaidLeaveRow)
+            ) {
               daysAbsent += 1;
             } else if (
               row.status === ATTENDANCE_STATUS.PRESENT ||
-              row.status === ATTENDANCE_STATUS.LATE
+              row.status === ATTENDANCE_STATUS.LATE ||
+              isPaidLeaveRow
             ) {
               daysPresent += 1;
             }
@@ -1008,8 +1018,12 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
                 ? Math.max(0, scheduledPaidMinutes - undertimeMinutes)
                 : netWorkedMinutes;
 
+            const isPaidLeaveRow =
+              row.status === ATTENDANCE_STATUS.LEAVE && row.isPaidLeave === true;
+
             const isZeroWorkRow =
               (row.status === ATTENDANCE_STATUS.ABSENT ||
+                (row.status === ATTENDANCE_STATUS.LEAVE && !isPaidLeaveRow) ||
                 row.status === ATTENDANCE_STATUS.INCOMPLETE) &&
               Math.max(0, row.workedMinutes ?? 0) === 0 &&
               Math.max(0, row.netWorkedMinutes ?? 0) === 0;
@@ -1017,7 +1031,9 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
             // Keep base earning and undertime deduction balanced:
             // scheduled base for scheduled rows, payable net for unscheduled rows.
             const baseEarningMinutes =
-              isZeroWorkRow
+              isPaidLeaveRow
+                ? scheduledPaidMinutes ?? 0
+                : isZeroWorkRow
                 ? 0
                 : scheduledPaidMinutes != null
                 ? scheduledPaidMinutes
@@ -1037,7 +1053,7 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
                   }) ?? 0);
 
             const undertimeDeductionAmount =
-              isZeroWorkRow || scheduledPaidMinutes == null
+              isPaidLeaveRow || isZeroWorkRow || scheduledPaidMinutes == null
                 ? 0
                 : (computePayableAmountFromNetMinutes({
                     netWorkedMinutes: undertimeMinutes,
@@ -1234,11 +1250,6 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
             earnings.reduce((sum, line) => sum + line.amount, 0),
           );
 
-          const assignmentUpdates: Array<{
-            id: string;
-            remainingBalance: number | null;
-            status: EmployeeDeductionAssignmentStatus;
-          }> = [];
           const employeeAssignments =
             assignmentByEmployee.get(employee.employeeId) ?? [];
 
@@ -1297,17 +1308,6 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
                 Math.min(safeBalance, effectiveInstallment),
               );
 
-              const remainingBalance = roundCurrency(
-                Math.max(0, safeBalance - amount),
-              );
-              assignmentUpdates.push({
-                id: assignment.id,
-                remainingBalance,
-                status:
-                  remainingBalance <= 0
-                    ? EmployeeDeductionAssignmentStatus.COMPLETED
-                    : EmployeeDeductionAssignmentStatus.ACTIVE,
-              });
             }
 
             amount = roundCurrency(Math.max(0, amount));
@@ -1424,16 +1424,6 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
             });
           }
 
-          for (const update of assignmentUpdates) {
-            await tx.employeeDeductionAssignment.update({
-              where: { id: update.id },
-              data: {
-                remainingBalance: update.remainingBalance,
-                status: update.status,
-                updatedByUserId: session.userId ?? null,
-              },
-            });
-          }
         }
 
         return payroll.payrollId;
@@ -1746,6 +1736,113 @@ export async function releasePayrollRun(payrollId: string): Promise<{
           updatedByUserId: session.userId ?? null,
         },
       });
+
+      const deductionAssignments = await tx.payrollDeduction.findMany({
+        where: {
+          payrollEmployee: { payrollId },
+          assignmentId: { not: null },
+          isVoided: false,
+        },
+        select: {
+          assignmentId: true,
+          amount: true,
+          assignment: {
+            select: {
+              id: true,
+              workflowStatus: true,
+              status: true,
+              remainingBalance: true,
+              installmentTotal: true,
+              deductionType: {
+                select: {
+                  frequency: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const settlementByAssignment = new Map<
+        string,
+        {
+          totalAmount: number;
+          workflowStatus: EmployeeDeductionWorkflowStatus;
+          status: EmployeeDeductionAssignmentStatus;
+          remainingBalance: Prisma.Decimal | null;
+          installmentTotal: Prisma.Decimal | null;
+          frequency: DeductionFrequency;
+        }
+      >();
+
+      for (const row of deductionAssignments) {
+        const assignmentId = row.assignmentId;
+        const assignment = row.assignment;
+        if (!assignmentId || !assignment) continue;
+
+        const existingSettlement = settlementByAssignment.get(assignmentId);
+        const totalAmount = roundCurrency(
+          (existingSettlement?.totalAmount ?? 0) + toNumber(row.amount, 0),
+        );
+
+        settlementByAssignment.set(assignmentId, {
+          totalAmount,
+          workflowStatus: assignment.workflowStatus,
+          status: assignment.status,
+          remainingBalance: assignment.remainingBalance,
+          installmentTotal: assignment.installmentTotal,
+          frequency: assignment.deductionType.frequency,
+        });
+      }
+
+      for (const [assignmentId, settlement] of settlementByAssignment) {
+        if (
+          settlement.workflowStatus !== EmployeeDeductionWorkflowStatus.APPROVED
+        ) {
+          continue;
+        }
+
+        if (settlement.frequency === DeductionFrequency.ONE_TIME) {
+          await tx.employeeDeductionAssignment.update({
+            where: { id: assignmentId },
+            data: {
+              status: EmployeeDeductionAssignmentStatus.COMPLETED,
+              updatedByUserId: session.userId ?? null,
+            },
+          });
+          continue;
+        }
+
+        if (settlement.frequency !== DeductionFrequency.INSTALLMENT) {
+          continue;
+        }
+
+        const balanceSeed = toNumber(
+          settlement.remainingBalance ?? settlement.installmentTotal,
+          0,
+        );
+        const nextRemainingBalance = roundCurrency(
+          Math.max(0, balanceSeed - settlement.totalAmount),
+        );
+
+        const nextStatus =
+          nextRemainingBalance <= 0
+            ? EmployeeDeductionAssignmentStatus.COMPLETED
+            : settlement.status === EmployeeDeductionAssignmentStatus.PAUSED
+              ? EmployeeDeductionAssignmentStatus.PAUSED
+              : settlement.status === EmployeeDeductionAssignmentStatus.CANCELLED
+                ? EmployeeDeductionAssignmentStatus.CANCELLED
+                : EmployeeDeductionAssignmentStatus.ACTIVE;
+
+        await tx.employeeDeductionAssignment.update({
+          where: { id: assignmentId },
+          data: {
+            remainingBalance: nextRemainingBalance,
+            status: nextStatus,
+            updatedByUserId: session.userId ?? null,
+          },
+        });
+      }
     });
 
     revalidatePayrollPages();

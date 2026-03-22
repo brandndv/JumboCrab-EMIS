@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsUpDown, CircleUserRound, LogOutIcon } from "lucide-react";
+import { CircleUserRound, LogOutIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -19,6 +19,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { SignOutButton } from "@/components/ui/signout";
+import { ThemeMenuSub } from "@/components/theme-provider/theme-menu-sub";
 import Link from "next/link";
 
 const getUserInitials = (name: string) => {
@@ -73,8 +74,6 @@ export function FooterSidebar({
                 <span className="truncate font-medium">{user.name}</span>
                 <span className="truncate text-xs">{user.email}</span>
               </div>
-              {/* Hide chevrons when collapsed to keep avatar centered */}
-              <ChevronsUpDown className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -112,6 +111,7 @@ export function FooterSidebar({
                   My Account
                 </Link>
               </DropdownMenuItem>
+              <ThemeMenuSub />
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>

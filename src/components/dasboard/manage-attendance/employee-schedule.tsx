@@ -33,6 +33,11 @@ type EmployeeMonthScheduleDay = {
     notes: string | null;
   } | null;
   source: "override" | "pattern" | "none";
+  leave: {
+    requestId: string | null;
+    leaveType: "VACATION" | "SICK" | "PERSONAL" | "EMERGENCY" | "UNPAID";
+    isPaidLeave: boolean;
+  } | null;
   scheduledStartMinutes: number | null;
   scheduledEndMinutes: number | null;
 };
@@ -105,6 +110,17 @@ const sourceLabelMap: Record<EmployeeMonthScheduleDay["source"], string> = {
   override: "Manual override",
   pattern: "Pattern schedule",
   none: "No source",
+};
+
+const leaveTypeLabelMap: Record<
+  NonNullable<EmployeeMonthScheduleDay["leave"]>["leaveType"],
+  string
+> = {
+  VACATION: "Vacation leave",
+  SICK: "Sick leave",
+  PERSONAL: "Personal leave",
+  EMERGENCY: "Emergency leave",
+  UNPAID: "Unpaid leave",
 };
 
 const EmployeeScedule = () => {
@@ -202,12 +218,17 @@ const EmployeeScedule = () => {
   const DaySquareEvent = ({ event }: CalendarEventRendererProps) => {
     const day = event.resource;
     const shift = day.shift;
+    const leave = day.leave;
 
     return (
       <div className="employee-day-event">
-        <p className="employee-day-event-code">{shift?.code ?? "REST"}</p>
+        <p className="employee-day-event-code">
+          {leave ? "LEAVE" : shift?.code ?? "REST"}
+        </p>
         <p className="employee-day-event-time hidden sm:block">
-          {!shift
+          {leave
+            ? `${leave.isPaidLeave ? "Paid" : "Unpaid"} · ${leaveTypeLabelMap[leave.leaveType]}`
+            : !shift
             ? "No shift"
             : `${formatMinutes(day.scheduledStartMinutes)} - ${formatMinutes(
                 day.scheduledEndMinutes,
@@ -220,11 +241,23 @@ const EmployeeScedule = () => {
   const stats = useMemo(() => {
     const summary = {
       workDays: 0,
+      leaveDays: 0,
+      paidLeaveDays: 0,
+      paidSickLeaveDays: 0,
       restDays: 0,
       overrides: 0,
     };
     days.forEach((day) => {
-      if (day.shift) {
+      if (day.leave) {
+        summary.leaveDays += 1;
+        if (day.leave.isPaidLeave) {
+          if (day.leave.leaveType === "SICK") {
+            summary.paidSickLeaveDays += 1;
+          } else {
+            summary.paidLeaveDays += 1;
+          }
+        }
+      } else if (day.shift) {
         summary.workDays += 1;
       } else {
         summary.restDays += 1;
@@ -241,6 +274,24 @@ const EmployeeScedule = () => {
       days.flatMap((day) => {
         const baseDate = parseIsoDate(day.date);
         if (!baseDate) return [];
+
+        if (day.leave) {
+          const leaveStart = new Date(baseDate);
+          leaveStart.setHours(0, 0, 0, 0);
+          const leaveEnd = new Date(leaveStart);
+          leaveEnd.setDate(leaveEnd.getDate() + 1);
+
+          return [
+            {
+              id: `${day.date}-leave`,
+              title: `${leaveTypeLabelMap[day.leave.leaveType]} · ${day.leave.isPaidLeave ? "Paid" : "Unpaid"}`,
+              start: leaveStart,
+              end: leaveEnd,
+              allDay: true,
+              resource: day,
+            },
+          ];
+        }
 
         if (
           day.shift &&
@@ -323,12 +374,30 @@ const EmployeeScedule = () => {
               Select any date to inspect the shift details for that day.
             </p>
           </div>
-          <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
+          <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-3 xl:grid-cols-6 sm:gap-3">
             <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-center">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 Work
               </p>
               <p className="text-lg font-semibold">{stats.workDays}</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-center">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Leave
+              </p>
+              <p className="text-lg font-semibold">{stats.leaveDays}</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-center">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Paid Leave
+              </p>
+              <p className="text-lg font-semibold">{stats.paidLeaveDays}</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-center">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Paid Sick
+              </p>
+              <p className="text-lg font-semibold">{stats.paidSickLeaveDays}</p>
             </div>
             <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-center">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -384,14 +453,21 @@ const EmployeeScedule = () => {
                     className: cn(
                       dayKey === selectedDateKey && "rbc-selected-day",
                       dayKey === todayKey && "rbc-focus-today",
+                      dayInfo?.leave && "rbc-leave-day",
                       dayInfo?.source === "override" && "rbc-override-day",
                     ),
                   };
                 }}
                 eventPropGetter={(event) => ({
                   className: cn(
-                    event.resource.shift ? "rbc-shift-event" : "rbc-rest-event",
+                    event.resource.leave
+                      ? "rbc-leave-event"
+                      : event.resource.shift
+                        ? "rbc-shift-event"
+                        : "rbc-rest-event",
+                    event.resource.leave?.isPaidLeave && "rbc-paid-leave-event",
                     event.resource.source === "override" &&
+                      !event.resource.leave &&
                       "rbc-override-event",
                   ),
                 })}
@@ -409,7 +485,9 @@ const EmployeeScedule = () => {
                     : "No date selected"}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {selectedDay?.shift
+                  {selectedDay?.leave
+                    ? `${leaveTypeLabelMap[selectedDay.leave.leaveType]} · ${selectedDay.leave.isPaidLeave ? "Paid" : "Unpaid"}`
+                    : selectedDay?.shift
                     ? `${selectedDay.shift.name} · ${formatMinutes(
                         selectedDay.scheduledStartMinutes,
                       )} - ${formatMinutes(selectedDay.scheduledEndMinutes)}`
@@ -428,6 +506,14 @@ const EmployeeScedule = () => {
                   <p>
                     <span className="mr-2 inline-block h-2 w-2 rounded-full border border-primary align-middle" />
                     Manual override
+                  </p>
+                  <p>
+                    <span className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-500 align-middle" />
+                    Paid leave
+                  </p>
+                  <p>
+                    <span className="mr-2 inline-block h-2 w-2 rounded-full bg-amber-500 align-middle" />
+                    Unpaid leave
                   </p>
                   <p>
                     <span className="mr-2 inline-block h-2 w-2 rounded-full bg-muted-foreground/60 align-middle" />
@@ -464,6 +550,37 @@ const EmployeeScedule = () => {
                 </p>
               ) : monthError ? (
                 <p className="text-sm text-destructive">{monthError}</p>
+              ) : todaySchedule?.leave ? (
+                <>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">
+                      {formatLongDate(todaySchedule.date)}
+                    </p>
+                    <p className="text-xl font-semibold">
+                      {leaveTypeLabelMap[todaySchedule.leave.leaveType]}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {todaySchedule.leave.isPaidLeave
+                        ? "Paid leave"
+                        : "Unpaid leave"}
+                      {todaySchedule.shift
+                        ? ` · Scheduled ${formatMinutes(
+                            todaySchedule.scheduledStartMinutes,
+                          )} - ${formatMinutes(todaySchedule.scheduledEndMinutes)}`
+                        : ""}
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      todaySchedule.leave.isPaidLeave
+                        ? "border-emerald-500 text-emerald-600"
+                        : "border-amber-500 text-amber-600",
+                    )}
+                  >
+                    {todaySchedule.leave.isPaidLeave ? "Paid leave" : "Unpaid leave"}
+                  </Badge>
+                </>
               ) : !todaySchedule?.shift ? (
                 <p className="text-sm text-muted-foreground">
                   No shift scheduled for today.

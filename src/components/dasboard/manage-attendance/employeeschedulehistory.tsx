@@ -70,6 +70,7 @@ const toDateKey = (value: string | Date) =>
 const badgeVariantForStatus = (status?: string | null) => {
   if (status === "PRESENT") return "success" as const;
   if (status === "LATE") return "warning" as const;
+  if (status === "LEAVE") return "secondary" as const;
   if (status === "INCOMPLETE") return "info" as const;
   if (status === "ABSENT") return "destructive" as const;
   return "outline" as const;

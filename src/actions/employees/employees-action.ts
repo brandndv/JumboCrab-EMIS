@@ -58,7 +58,6 @@ type EmployeeRelationIds = {
   userId?: unknown;
   departmentId?: unknown;
   positionId?: unknown;
-  employeeTypeId?: unknown;
   supervisorUserId?: unknown;
 };
 
@@ -66,14 +65,13 @@ const normalizeEmployeeRelationIds = (input: EmployeeRelationIds) => ({
   userId: normalizeOptionalId(input.userId),
   departmentId: normalizeOptionalId(input.departmentId),
   positionId: normalizeOptionalId(input.positionId),
-  employeeTypeId: normalizeOptionalId(input.employeeTypeId),
   supervisorUserId: normalizeOptionalId(input.supervisorUserId),
 });
 
 const validateEmployeeRelationIds = async (
   input: ReturnType<typeof normalizeEmployeeRelationIds>,
 ): Promise<string | null> => {
-  const [user, supervisorUser, department, position, employeeType] =
+  const [user, supervisorUser, department, position] =
     await Promise.all([
       input.userId
         ? db.user.findUnique({
@@ -99,12 +97,6 @@ const validateEmployeeRelationIds = async (
             select: { positionId: true, departmentId: true, isActive: true },
           })
         : Promise.resolve(null),
-      input.employeeTypeId
-        ? db.employeeType.findUnique({
-            where: { employeeTypeId: input.employeeTypeId },
-            select: { employeeTypeId: true },
-          })
-        : Promise.resolve(null),
     ]);
 
   if (input.userId && !user) {
@@ -118,9 +110,6 @@ const validateEmployeeRelationIds = async (
   }
   if (input.positionId && !position) {
     return "Selected position not found";
-  }
-  if (input.employeeTypeId && !employeeType) {
-    return "Selected employee type not found";
   }
   if (position && !position.isActive) {
     return "Selected position is no longer active";
@@ -140,14 +129,12 @@ export type EmployeeActionRecord = Omit<PrismaEmployee, "dailyRate"> & {
   dailyRate: number | null;
   department?: string | null;
   position?: string | null;
-  employeeType?: string | null;
 };
 
 type EmployeeWithLookupRelations = Prisma.EmployeeGetPayload<{
   include: {
     department: { select: { departmentId: true; name: true } };
     position: { select: { positionId: true; name: true } };
-    employeeType: { select: { employeeTypeId: true; name: true } };
   };
 }>;
 
@@ -221,7 +208,6 @@ export async function getEmployees(): Promise<{
       include: {
         department: { select: { departmentId: true, name: true } },
         position: { select: { positionId: true, name: true } },
-        employeeType: { select: { employeeTypeId: true, name: true } },
       },
     });
     const normalized = (employees as EmployeeWithLookupRelations[]).map((emp) =>
@@ -230,7 +216,6 @@ export async function getEmployees(): Promise<{
         dailyRate: toRateNumber(emp.dailyRate),
         department: emp.department?.name ?? null,
         position: emp.position?.name ?? null,
-        employeeType: emp.employeeType?.name ?? null,
       }) satisfies EmployeeActionRecord,
     );
     console.log(`Fetched ${employees.length} employees`);
@@ -266,7 +251,6 @@ export async function getEmployeeById(id: string | undefined): Promise<{
       include: {
         department: { select: { departmentId: true, name: true } },
         position: { select: { positionId: true, name: true } },
-        employeeType: { select: { employeeTypeId: true, name: true } },
       },
     });
 
@@ -283,8 +267,6 @@ export async function getEmployeeById(id: string | undefined): Promise<{
           dailyRate: toRateNumber(employee.dailyRate),
           department: (employee as EmployeeWithLookupRelations).department?.name ?? null,
           position: (employee as EmployeeWithLookupRelations).position?.name ?? null,
-          employeeType:
-            (employee as EmployeeWithLookupRelations).employeeType?.name ?? null,
         } satisfies EmployeeActionRecord)
       : employee;
 
@@ -578,7 +560,6 @@ export async function updateEmployee(
       "civilStatus",
       "departmentId",
       "positionId",
-      "employeeTypeId",
       "supervisorUserId",
       "employmentStatus",
       "currentStatus",
@@ -613,19 +594,10 @@ export async function updateEmployee(
       userId: updateData.userId,
       departmentId: updateData.departmentId,
       positionId: updateData.positionId,
-      employeeTypeId: updateData.employeeTypeId,
       supervisorUserId: updateData.supervisorUserId,
     });
 
-    (
-      [
-        "userId",
-        "departmentId",
-        "positionId",
-        "employeeTypeId",
-        "supervisorUserId",
-      ] as const
-    ).forEach((field) => {
+    (["userId", "departmentId", "positionId", "supervisorUserId"] as const).forEach((field) => {
       if (field in updateData) {
         updateData[field] = normalizedRelationIds[field];
       }

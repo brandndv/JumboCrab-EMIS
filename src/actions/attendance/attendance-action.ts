@@ -850,7 +850,11 @@ export async function listAttendance(input?: {
         ratePerMinute,
       });
       const normalizedStatus =
-        !expectedShift && !actualInAt && !actualOutAt && punches.length === 0
+        record.status !== ATTENDANCE_STATUS.LEAVE &&
+        !expectedShift &&
+        !actualInAt &&
+        !actualOutAt &&
+        punches.length === 0
           ? ATTENDANCE_STATUS.REST
           : record.status;
       // "Forgot to timeout" is true when system auto-closed the shift,

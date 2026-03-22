@@ -1,5 +1,6 @@
 "use server";
 
+import { ATTENDANCE_STATUS } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getDailySchedule } from "@/lib/schedule";
 import { getExpectedShiftForDate } from "@/lib/attendance";
@@ -127,6 +128,40 @@ export async function getEmployeeMonthSchedule(input: {
     const monthDates = Array.from({ length: daysInMonth }, (_, index) =>
       new Date(Date.UTC(year, monthIndex, index + 1, 12, 0, 0)),
     );
+    const monthStart = startOfZonedDay(monthDates[0]);
+    const monthEnd = endOfZonedDay(monthDates[monthDates.length - 1]);
+
+    const leaveAttendances = await db.attendance.findMany({
+      where: {
+        employeeId,
+        workDate: {
+          gte: monthStart,
+          lt: monthEnd,
+        },
+        status: ATTENDANCE_STATUS.LEAVE,
+      },
+      select: {
+        workDate: true,
+        isPaidLeave: true,
+        leaveRequestId: true,
+        leaveRequest: {
+          select: {
+            leaveType: true,
+          },
+        },
+      },
+    });
+
+    const leaveByDate = new Map(
+      leaveAttendances.map((row) => [
+        toTzDateKey(row.workDate),
+        {
+          requestId: row.leaveRequestId,
+          leaveType: row.leaveRequest?.leaveType ?? "PERSONAL",
+          isPaidLeave: row.isPaidLeave,
+        },
+      ]),
+    );
 
     const days = await Promise.all(
       monthDates.map(async (date) => {
@@ -135,6 +170,7 @@ export async function getEmployeeMonthSchedule(input: {
           date: toTzDateKey(date),
           shift: expected.shift ? serializeShift(expected.shift) : null,
           source: expected.source,
+          leave: leaveByDate.get(toTzDateKey(date)) ?? null,
           scheduledStartMinutes: expected.scheduledStartMinutes,
           scheduledEndMinutes: expected.scheduledEndMinutes,
         };
