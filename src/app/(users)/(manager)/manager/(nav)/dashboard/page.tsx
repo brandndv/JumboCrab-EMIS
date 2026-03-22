@@ -1,7 +1,5 @@
-import React from "react";
+import RoleDashboardPage from "@/components/dasboard/dashboard/role-dashboard-page";
 
-const ManagerDashboard = () => {
-  return <div>ManagerDashboard</div>;
-};
-
-export default ManagerDashboard;
+export default function ManagerDashboardPage() {
+  return <RoleDashboardPage role="manager" />;
+}
