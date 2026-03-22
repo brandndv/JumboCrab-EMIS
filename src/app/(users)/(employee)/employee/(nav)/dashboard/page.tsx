@@ -1,9 +1,5 @@
-const EmployeeDashboardPage = () => {
-  return (
-    <>
-      <h1>Employee Dashboard Page</h1>
-    </>
-  );
-};
+import RoleDashboardPage from "@/components/dasboard/dashboard/role-dashboard-page";
 
-export default EmployeeDashboardPage;
+export default function EmployeeDashboardPage() {
+  return <RoleDashboardPage role="employee" />;
+}

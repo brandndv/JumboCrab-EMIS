@@ -1,5 +1,5 @@
-const PayrollDashboardPage = () => {
-  return <div>PayrollDashboardPage</div>;
-};
+import RoleDashboardPage from "@/components/dasboard/dashboard/role-dashboard-page";
 
-export default PayrollDashboardPage;
+export default function ClerkDashboardPage() {
+  return <RoleDashboardPage role="clerk" />;
+}
