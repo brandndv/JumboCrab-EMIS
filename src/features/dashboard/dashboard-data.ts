@@ -1,38 +1,50 @@
 import {
+  ATTENDANCE_STATUS,
   CashAdvanceRequestStatus,
   DayOffRequestStatus,
   EmployeeDeductionAssignmentStatus,
   EmployeeDeductionWorkflowStatus,
   LeaveRequestStatus,
+  LeaveRequestType,
   PayrollReviewDecision,
   PayrollStatus,
+  Prisma,
   ScheduleChangeRequestStatus,
   ScheduleSwapRequestStatus,
 } from "@prisma/client";
-import { fetchSession } from "@/actions/auth/session-action";
-import { listAttendance } from "@/actions/attendance/attendance-action";
-import { listEmployeeDeductionAssignments } from "@/actions/deductions/deductions-action";
-import { getEmployees } from "@/actions/employees/employees-action";
 import {
-  listPayrollPayslips,
-  listPayrollRuns,
-} from "@/actions/payroll/payroll-action";
+  employeeDeductionAssignmentInclude,
+  serializeDeductionAssignment,
+} from "@/actions/deductions/deductions-shared";
+import type { DeductionAssignmentRow } from "@/actions/deductions/types";
 import {
-  getEmployeeDayOffMonthlySummary,
-  getEmployeeLeaveBalanceSummary,
-  listCashAdvanceRequests,
-  listDayOffRequests,
-  listLeaveRequests,
-  listScheduleChangeRequests,
-  listScheduleSwapRequests,
-  type CashAdvanceRequestRow,
-  type DayOffRequestRow,
-  type LeaveRequestRow,
-  type ScheduleChangeRequestRow,
-  type ScheduleSwapRequestRow,
-} from "@/actions/requests/requests-action";
-import { getUsers } from "@/actions/users/users-action";
-import { getViolations } from "@/actions/violations/violations-action";
+  formatEmployeeName,
+  serializePayrollRunSummary,
+} from "@/actions/payroll/payroll-shared";
+import type { PayrollPayslipSummary, PayrollRunSummary } from "@/types/payroll";
+import {
+  PAID_LEAVE_ALLOWANCE_PER_YEAR,
+  PAID_SICK_LEAVE_ALLOWANCE_PER_YEAR,
+  employeeRequestSelect,
+  reviewedBySelect,
+} from "@/actions/requests/requests-core-shared";
+import {
+  serializeCashAdvanceRequest,
+  serializeDayOffRequest,
+  serializeLeaveRequest,
+  serializeScheduleChangeRequest,
+  serializeScheduleSwapRequest,
+} from "@/actions/requests/requests-serializers-shared";
+import type {
+  CashAdvanceRequestRow,
+  DayOffRequestRow,
+  LeaveRequestRow,
+  ScheduleChangeRequestRow,
+  ScheduleSwapRequestRow,
+} from "@/actions/requests/types";
+import { employeeViolationInclude } from "@/actions/violations/violations-core-shared";
+import { serializeViolation } from "@/actions/violations/violations-serializers-shared";
+import type { ViolationRow } from "@/actions/violations/types";
 import {
   formatDate as formatDeductionDate,
   describeAssignmentValue,
@@ -57,9 +69,11 @@ import {
   requestStatusLabel,
   requestTypeLabel,
 } from "@/features/manage-requests/request-ui-helpers";
+import { getCurrentPlainSession } from "@/lib/current-session";
 import { db } from "@/lib/db";
+import { toIsoString, toNumber } from "@/lib/payroll/helpers";
 import { normalizeRole, type AppRole } from "@/lib/rbac";
-import { TZ, formatZonedTime } from "@/lib/timezone";
+import { TZ, endOfZonedDay, formatZonedTime, startOfZonedDay } from "@/lib/timezone";
 
 type DashboardTone = "primary" | "info" | "success" | "warning" | "danger";
 
@@ -145,23 +159,97 @@ type DashboardSession = {
   } | null;
 };
 
-type AttendanceActionRow = NonNullable<
-  Awaited<ReturnType<typeof listAttendance>>["data"]
->[number];
+type AttendanceSnapshot = {
+  id: string;
+  employeeId: string;
+  status: ATTENDANCE_STATUS;
+  lateMinutes: number;
+  undertimeMinutes: number;
+  actualInAt: string | null;
+  actualOutAt: string | null;
+  breakStartAt: string | null;
+  breakEndAt: string | null;
+  expectedShiftName: string | null;
+  lastPunchAt: string | null;
+};
 
-type PayrollRunRow = NonNullable<
-  Awaited<ReturnType<typeof listPayrollRuns>>["data"]
->[number];
+const payrollRunDashboardInclude = {
+  createdBy: { select: { username: true } },
+  managerReviewedBy: { select: { username: true } },
+  gmReviewedBy: { select: { username: true } },
+  releasedBy: { select: { username: true } },
+  payrollEmployees: {
+    select: {
+      grossPay: true,
+      totalDeductions: true,
+      netPay: true,
+    },
+  },
+} satisfies Prisma.PayrollInclude;
 
-type PayrollPayslipRow = NonNullable<
-  Awaited<ReturnType<typeof listPayrollPayslips>>["data"]
->[number];
+const cashAdvanceDashboardInclude = {
+  employee: { select: employeeRequestSelect },
+  reviewedBy: { select: reviewedBySelect },
+  deductionAssignment: {
+    select: {
+      id: true,
+      status: true,
+      effectiveFrom: true,
+      remainingBalance: true,
+    },
+  },
+} satisfies Prisma.CashAdvanceRequestInclude;
 
-type DeductionAssignmentRow = NonNullable<
-  Awaited<ReturnType<typeof listEmployeeDeductionAssignments>>["data"]
->[number];
+const leaveRequestDashboardInclude = {
+  employee: { select: employeeRequestSelect },
+  reviewedBy: { select: reviewedBySelect },
+  attendances: {
+    select: {
+      workDate: true,
+      isPaidLeave: true,
+    },
+  },
+} satisfies Prisma.LeaveRequestInclude;
 
-type ViolationRow = NonNullable<Awaited<ReturnType<typeof getViolations>>["data"]>[number];
+const dayOffRequestDashboardInclude = {
+  employee: { select: employeeRequestSelect },
+  reviewedBy: { select: reviewedBySelect },
+} satisfies Prisma.DayOffRequestInclude;
+
+const scheduleChangeDashboardInclude = {
+  employee: { select: employeeRequestSelect },
+  reviewedBy: { select: reviewedBySelect },
+} satisfies Prisma.ScheduleChangeRequestInclude;
+
+const scheduleSwapDashboardInclude = {
+  requesterEmployee: { select: employeeRequestSelect },
+  coworkerEmployee: { select: employeeRequestSelect },
+  reviewedBy: { select: reviewedBySelect },
+} satisfies Prisma.ScheduleSwapRequestInclude;
+
+type DashboardPayrollRunRecord = Prisma.PayrollGetPayload<{
+  include: typeof payrollRunDashboardInclude;
+}>;
+
+type DashboardCashAdvanceRecord = Prisma.CashAdvanceRequestGetPayload<{
+  include: typeof cashAdvanceDashboardInclude;
+}>;
+
+type DashboardLeaveRequestRecord = Prisma.LeaveRequestGetPayload<{
+  include: typeof leaveRequestDashboardInclude;
+}>;
+
+type DashboardDayOffRequestRecord = Prisma.DayOffRequestGetPayload<{
+  include: typeof dayOffRequestDashboardInclude;
+}>;
+
+type DashboardScheduleChangeRecord = Prisma.ScheduleChangeRequestGetPayload<{
+  include: typeof scheduleChangeDashboardInclude;
+}>;
+
+type DashboardScheduleSwapRecord = Prisma.ScheduleSwapRequestGetPayload<{
+  include: typeof scheduleSwapDashboardInclude;
+}>;
 
 const toneBadgeClass = (tone: DashboardTone) => {
   switch (tone) {
@@ -221,19 +309,6 @@ const buildSubtitle = (session: DashboardSession) => {
   return bits.length > 0 ? bits.join(" • ") : session.email;
 };
 
-const safeData = async <T>(
-  promise: Promise<{ success: boolean; data?: T | null; error?: string | null }>,
-  fallback: T,
-) => {
-  try {
-    const result = await promise;
-    if (!result.success) return fallback;
-    return result.data ?? fallback;
-  } catch {
-    return fallback;
-  }
-};
-
 const toCompactNumber = (value: number) =>
   new Intl.NumberFormat("en-PH", {
     notation: "compact",
@@ -271,16 +346,10 @@ const violationStatusClass = (value: ViolationRow["status"]) => {
   return toneBadgeClass("warning");
 };
 
-const isAttendanceFlagged = (row: AttendanceActionRow) =>
-  row.status === "ABSENT" ||
-  row.status === "INCOMPLETE" ||
-  (row.lateMinutes ?? 0) > 0 ||
-  (row.undertimeMinutes ?? 0) > 0;
-
-const isOpenPayrollRun = (run: PayrollRunRow) =>
+const isOpenPayrollRun = (run: PayrollRunSummary) =>
   run.status !== "RELEASED" && run.status !== "VOIDED";
 
-const isGmApprovalRun = (run: PayrollRunRow) =>
+const isGmApprovalRun = (run: PayrollRunSummary) =>
   run.status !== "RELEASED" &&
   run.status !== "VOIDED" &&
   run.managerDecision === PayrollReviewDecision.APPROVED &&
@@ -292,9 +361,272 @@ const sortByNewest = <T>(rows: T[], getDate: (row: T) => string | null | undefin
       new Date(getDate(b) ?? 0).getTime() - new Date(getDate(a) ?? 0).getTime(),
   );
 
+const getDayBounds = (dateKey = todayKey()) => {
+  const start = startOfZonedDay(new Date(`${dateKey}T00:00:00+08:00`));
+  return {
+    start,
+    end: endOfZonedDay(start),
+  };
+};
+
+const loadRecentPayrollRuns = async (input?: {
+  limit?: number;
+  where?: Prisma.PayrollWhereInput;
+}): Promise<PayrollRunSummary[]> => {
+  const rows = await db.payroll.findMany({
+    where: input?.where,
+    include: payrollRunDashboardInclude,
+    orderBy: [{ payrollPeriodStart: "desc" }, { createdAt: "desc" }],
+    take: input?.limit && input.limit > 0 ? input.limit : undefined,
+  });
+
+  return rows.map((row) =>
+    serializePayrollRunSummary(row as DashboardPayrollRunRecord),
+  );
+};
+
+const loadRecentPayrollPayslips = async (input: {
+  employeeId: string;
+  limit?: number;
+}): Promise<PayrollPayslipSummary[]> => {
+  const rows = await db.payrollEmployee.findMany({
+    where: {
+      employeeId: input.employeeId,
+      payroll: {
+        status: PayrollStatus.RELEASED,
+      },
+    },
+    include: {
+      payroll: {
+        select: {
+          payrollId: true,
+          payrollPeriodStart: true,
+          payrollPeriodEnd: true,
+          payrollType: true,
+          status: true,
+          generatedAt: true,
+          releasedAt: true,
+        },
+      },
+      employee: {
+        select: {
+          employeeId: true,
+          employeeCode: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+    orderBy: [
+      { payroll: { payrollPeriodStart: "desc" } },
+      { employee: { lastName: "asc" } },
+    ],
+    take: input.limit && input.limit > 0 ? input.limit : undefined,
+  });
+
+  return rows.map((row) => ({
+    payrollEmployeeId: row.id,
+    payrollId: row.payrollId,
+    payrollPeriodStart: row.payroll.payrollPeriodStart.toISOString(),
+    payrollPeriodEnd: row.payroll.payrollPeriodEnd.toISOString(),
+    payrollType: row.payroll.payrollType,
+    payrollStatus: row.payroll.status,
+    generatedAt: row.payroll.generatedAt.toISOString(),
+    releasedAt: toIsoString(row.payroll.releasedAt),
+    employeeId: row.employeeId,
+    employeeCode: row.employee.employeeCode,
+    employeeName: formatEmployeeName(row.employee),
+    grossPay: toNumber(row.grossPay, 0),
+    totalEarnings: toNumber(row.totalEarnings, 0),
+    totalDeductions: toNumber(row.totalDeductions, 0),
+    netPay: toNumber(row.netPay, 0),
+    status: row.status,
+  }));
+};
+
+const loadRecentDeductionAssignments = async (input: {
+  limit?: number;
+  where?: Prisma.EmployeeDeductionAssignmentWhereInput;
+}): Promise<DeductionAssignmentRow[]> => {
+  const rows = await db.employeeDeductionAssignment.findMany({
+    where: input.where,
+    include: employeeDeductionAssignmentInclude,
+    orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }],
+    take: input.limit && input.limit > 0 ? input.limit : undefined,
+  });
+
+  return rows.map(serializeDeductionAssignment);
+};
+
+const loadCashAdvanceRequests = async (input: {
+  where?: Prisma.CashAdvanceRequestWhereInput;
+  limit?: number;
+}): Promise<CashAdvanceRequestRow[]> => {
+  const rows = await db.cashAdvanceRequest.findMany({
+    where: input.where,
+    include: cashAdvanceDashboardInclude,
+    orderBy: [{ status: "asc" }, { submittedAt: "desc" }, { createdAt: "desc" }],
+    take: input.limit && input.limit > 0 ? input.limit : undefined,
+  });
+
+  return rows.map((row) =>
+    serializeCashAdvanceRequest(row as DashboardCashAdvanceRecord),
+  );
+};
+
+const loadLeaveRequests = async (input: {
+  where?: Prisma.LeaveRequestWhereInput;
+  limit?: number;
+}): Promise<LeaveRequestRow[]> => {
+  const rows = await db.leaveRequest.findMany({
+    where: input.where,
+    include: leaveRequestDashboardInclude,
+    orderBy: [{ status: "asc" }, { submittedAt: "desc" }, { createdAt: "desc" }],
+    take: input.limit && input.limit > 0 ? input.limit : undefined,
+  });
+
+  return rows.map((row) =>
+    serializeLeaveRequest(row as DashboardLeaveRequestRecord),
+  );
+};
+
+const loadDayOffRequests = async (input: {
+  where?: Prisma.DayOffRequestWhereInput;
+  limit?: number;
+}): Promise<DayOffRequestRow[]> => {
+  const rows = await db.dayOffRequest.findMany({
+    where: input.where,
+    include: dayOffRequestDashboardInclude,
+    orderBy: [{ status: "asc" }, { submittedAt: "desc" }, { createdAt: "desc" }],
+    take: input.limit && input.limit > 0 ? input.limit : undefined,
+  });
+
+  return rows.map((row) =>
+    serializeDayOffRequest(row as DashboardDayOffRequestRecord),
+  );
+};
+
+const loadScheduleChangeRequests = async (input: {
+  where?: Prisma.ScheduleChangeRequestWhereInput;
+  limit?: number;
+}): Promise<ScheduleChangeRequestRow[]> => {
+  const rows = await db.scheduleChangeRequest.findMany({
+    where: input.where,
+    include: scheduleChangeDashboardInclude,
+    orderBy: [{ status: "asc" }, { submittedAt: "desc" }, { createdAt: "desc" }],
+    take: input.limit && input.limit > 0 ? input.limit : undefined,
+  });
+
+  return rows.map((row) =>
+    serializeScheduleChangeRequest(row as DashboardScheduleChangeRecord),
+  );
+};
+
+const loadScheduleSwapRequests = async (input: {
+  where?: Prisma.ScheduleSwapRequestWhereInput;
+  limit?: number;
+  viewerEmployeeId?: string | null;
+}): Promise<ScheduleSwapRequestRow[]> => {
+  const rows = await db.scheduleSwapRequest.findMany({
+    where: input.where,
+    include: scheduleSwapDashboardInclude,
+    orderBy: [{ status: "asc" }, { submittedAt: "desc" }, { createdAt: "desc" }],
+    take: input.limit && input.limit > 0 ? input.limit : undefined,
+  });
+
+  return rows.map((row) =>
+    serializeScheduleSwapRequest(
+      row as DashboardScheduleSwapRecord,
+      input.viewerEmployeeId,
+    ),
+  );
+};
+
+const loadRecentViolations = async (input: {
+  where?: Prisma.EmployeeViolationWhereInput;
+  limit?: number;
+}): Promise<ViolationRow[]> => {
+  const rows = await db.employeeViolation.findMany({
+    where: input.where,
+    include: employeeViolationInclude,
+    orderBy: [{ violationDate: "desc" }, { createdAt: "desc" }],
+    take: input.limit && input.limit > 0 ? input.limit : undefined,
+  });
+
+  return rows.map(serializeViolation);
+};
+
+const loadTodayAttendanceSnapshot = async (
+  employeeId: string,
+  dateKey = todayKey(),
+): Promise<AttendanceSnapshot | null> => {
+  const { start, end } = getDayBounds(dateKey);
+
+  const [attendance, punches] = await Promise.all([
+    db.attendance.findFirst({
+      where: {
+        employeeId,
+        workDate: {
+          gte: start,
+          lt: end,
+        },
+      },
+      orderBy: { workDate: "desc" },
+      include: {
+        expectedShift: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    }),
+    db.punch.findMany({
+      where: {
+        employeeId,
+        punchTime: {
+          gte: start,
+          lt: end,
+        },
+      },
+      orderBy: { punchTime: "asc" },
+      select: {
+        punchType: true,
+        punchTime: true,
+      },
+    }),
+  ]);
+
+  if (!attendance && punches.length === 0) {
+    return null;
+  }
+
+  const lastPunchAt =
+    punches.length > 0 ? punches[punches.length - 1].punchTime : null;
+  const breakOutAt =
+    [...punches].reverse().find((row) => row.punchType === "BREAK_OUT")?.punchTime ??
+    null;
+  const breakInAt =
+    [...punches].reverse().find((row) => row.punchType === "BREAK_IN")?.punchTime ??
+    null;
+
+  return {
+    id: attendance?.id ?? `attendance-placeholder-${employeeId}-${dateKey}`,
+    employeeId,
+    status: attendance?.status ?? ATTENDANCE_STATUS.ABSENT,
+    lateMinutes: attendance?.lateMinutes ?? 0,
+    undertimeMinutes: attendance?.undertimeMinutes ?? 0,
+    actualInAt: toIsoString(attendance?.actualInAt),
+    actualOutAt: toIsoString(attendance?.actualOutAt),
+    breakStartAt: toIsoString(breakOutAt),
+    breakEndAt: toIsoString(breakInAt),
+    expectedShiftName: attendance?.expectedShift?.name ?? null,
+    lastPunchAt: toIsoString(lastPunchAt),
+  };
+};
+
 const buildPayrollItem = (
   role: AppRole,
-  run: PayrollRunRow,
+  run: PayrollRunSummary,
   href?: string,
 ): DashboardItem => ({
   id: run.payrollId,
@@ -347,7 +679,7 @@ const buildViolationItem = (
   statusClassName: violationStatusClass(row.status),
 });
 
-const buildPayslipItem = (role: AppRole, row: PayrollPayslipRow): DashboardItem => ({
+const buildPayslipItem = (role: AppRole, row: PayrollPayslipSummary): DashboardItem => ({
   id: row.payrollEmployeeId,
   title: formatDateRange(row.payrollPeriodStart, row.payrollPeriodEnd),
   description: `${humanizePayrollType(row.payrollType)} • ${row.employeeName}`,
@@ -530,46 +862,53 @@ const buildEmployeeRequestItems = (
 };
 
 const buildSession = async (): Promise<DashboardSession | null> => {
-  const result = await fetchSession();
-  const rawSession = result.session;
-  if (
-    !result.success ||
-    !rawSession?.isLoggedIn ||
-    !("userId" in rawSession) ||
-    !("username" in rawSession) ||
-    !("email" in rawSession) ||
-    !("role" in rawSession)
-  ) {
+  const rawSession = await getCurrentPlainSession();
+  if (!rawSession?.isLoggedIn || !rawSession.userId || !rawSession.role) {
     return null;
   }
 
   const normalizedRole = normalizeRole(rawSession.role);
-
   if (!normalizedRole) {
     return null;
   }
 
+  const employee =
+    rawSession.employee &&
+    typeof rawSession.employee === "object" &&
+    "employeeId" in rawSession.employee &&
+    "firstName" in rawSession.employee &&
+    "lastName" in rawSession.employee
+      ? (rawSession.employee as {
+          employeeId: unknown;
+          firstName: unknown;
+          lastName: unknown;
+          position?: unknown;
+          department?: unknown;
+          dailyRate?: unknown;
+        })
+      : null;
+
   return {
-    userId: rawSession.userId ?? "",
+    userId: rawSession.userId,
     username: rawSession.username ?? "",
     email: rawSession.email ?? "",
     role: normalizedRole,
-    employee: rawSession.employee
+    employee: employee
       ? {
-          employeeId: rawSession.employee.employeeId,
-          firstName: rawSession.employee.firstName,
-          lastName: rawSession.employee.lastName,
+          employeeId: String(employee.employeeId),
+          firstName: String(employee.firstName),
+          lastName: String(employee.lastName),
           position:
-            typeof rawSession.employee.position === "string"
-              ? rawSession.employee.position
+            typeof employee.position === "string"
+              ? employee.position
               : null,
           department:
-            typeof rawSession.employee.department === "string"
-              ? rawSession.employee.department
+            typeof employee.department === "string"
+              ? employee.department
               : null,
           dailyRate:
-            typeof rawSession.employee.dailyRate === "number"
-              ? rawSession.employee.dailyRate
+            typeof employee.dailyRate === "number"
+              ? employee.dailyRate
               : null,
         }
       : null,
@@ -577,21 +916,58 @@ const buildSession = async (): Promise<DashboardSession | null> => {
 };
 
 const buildAdminDashboard = async (session: DashboardSession): Promise<DashboardData> => {
-  const today = todayKey();
+  const { start: todayStart, end: todayEnd } = getDayBounds();
   const [
-    employees,
-    users,
-    attendanceRows,
     payrollRuns,
+    activeEmployeeCount,
+    linkedAccounts,
+    userCount,
+    disabledUsers,
+    attendanceRecordedCount,
+    attendanceFlaggedCount,
     departmentCount,
     payrollQueueCount,
     deductionDraftCount,
     violationDraftCount,
   ] = await Promise.all([
-    safeData(getEmployees(), []),
-    safeData(getUsers(), []),
-    safeData(listAttendance({ start: today, end: today, includeAll: true }), []),
-    safeData(listPayrollRuns({ limit: 5 }), []),
+    loadRecentPayrollRuns({ limit: 5 }),
+    db.employee.count({
+      where: {
+        isArchived: false,
+        currentStatus: { not: "ENDED" },
+      },
+    }),
+    db.employee.count({
+      where: {
+        isArchived: false,
+        currentStatus: { not: "ENDED" },
+        userId: { not: null },
+      },
+    }),
+    db.user.count(),
+    db.user.count({ where: { isDisabled: true } }),
+    db.attendance.count({
+      where: {
+        workDate: {
+          gte: todayStart,
+          lt: todayEnd,
+        },
+      },
+    }),
+    db.attendance.count({
+      where: {
+        workDate: {
+          gte: todayStart,
+          lt: todayEnd,
+        },
+        OR: [
+          { status: ATTENDANCE_STATUS.ABSENT },
+          { status: ATTENDANCE_STATUS.INCOMPLETE },
+          { lateMinutes: { gt: 0 } },
+          { undertimeMinutes: { gt: 0 } },
+        ],
+      },
+    }),
     db.department.count({ where: { isActive: true } }),
     db.payroll.count({
       where: { status: { notIn: [PayrollStatus.RELEASED, PayrollStatus.VOIDED] } },
@@ -602,12 +978,7 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
     db.employeeViolation.count({ where: { status: "DRAFT" } }),
   ]);
 
-  const activeEmployees = employees.filter(
-    (employee) => !employee.isArchived && employee.currentStatus !== "ENDED",
-  );
-  const linkedAccounts = activeEmployees.filter((employee) => !!employee.userId).length;
-  const disabledUsers = users.filter((user) => user.isDisabled).length;
-  const attendanceFlaggedCount = attendanceRows.filter(isAttendanceFlagged).length;
+  const missingAccounts = Math.max(0, activeEmployeeCount - linkedAccounts);
 
   return {
     role: "admin",
@@ -620,14 +991,14 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
     stats: [
       {
         label: "Active Employees",
-        value: toCompactNumber(activeEmployees.length),
+        value: toCompactNumber(activeEmployeeCount),
         description: `${departmentCount} departments with live headcount`,
         icon: "users",
         tone: "primary",
       },
       {
         label: "User Accounts",
-        value: toCompactNumber(users.length),
+        value: toCompactNumber(userCount),
         description: `${disabledUsers} disabled account${disabledUsers === 1 ? "" : "s"}`,
         icon: "shield",
         tone: "info",
@@ -635,7 +1006,7 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
       {
         label: "Attendance Flags",
         value: toCompactNumber(attendanceFlaggedCount),
-        description: `${attendanceRows.length} attendance row${attendanceRows.length === 1 ? "" : "s"} logged today`,
+        description: `${attendanceRecordedCount} attendance row${attendanceRecordedCount === 1 ? "" : "s"} logged today`,
         icon: "alert",
         tone: attendanceFlaggedCount > 0 ? "warning" : "success",
       },
@@ -655,10 +1026,7 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
         description: "Create accounts and fix access coverage.",
         href: "/admin/users",
         icon: "shield",
-        badge:
-          activeEmployees.length - linkedAccounts > 0
-            ? `${activeEmployees.length - linkedAccounts} missing`
-            : undefined,
+        badge: missingAccounts > 0 ? `${missingAccounts} missing` : undefined,
       },
       {
         title: "Payroll History",
@@ -683,7 +1051,7 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
       },
     ],
     notes: [
-      `${activeEmployees.length - linkedAccounts} employee account${activeEmployees.length - linkedAccounts === 1 ? "" : "s"} still need login access.`,
+      `${missingAccounts} employee account${missingAccounts === 1 ? "" : "s"} still need login access.`,
       `${payrollQueueCount} payroll run${payrollQueueCount === 1 ? "" : "s"} remain unreleased.`,
       `${attendanceFlaggedCount} attendance record${attendanceFlaggedCount === 1 ? "" : "s"} are flagged today.`,
     ],
@@ -706,14 +1074,13 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
           id: "admin-users",
           title: "Employees without linked accounts",
           description: "Create or link user records so staff can access the system.",
-          meta: `${linkedAccounts}/${activeEmployees.length} active employees linked`,
+          meta: `${linkedAccounts}/${activeEmployeeCount} active employees linked`,
           icon: "shield",
           href: "/admin/users",
-          value: String(activeEmployees.length - linkedAccounts),
-          statusLabel:
-            activeEmployees.length - linkedAccounts > 0 ? "Needs setup" : "Covered",
+          value: String(missingAccounts),
+          statusLabel: missingAccounts > 0 ? "Needs setup" : "Covered",
           statusClassName: toneBadgeClass(
-            activeEmployees.length - linkedAccounts > 0 ? "warning" : "success",
+            missingAccounts > 0 ? "warning" : "success",
           ),
         },
         {
@@ -746,7 +1113,7 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
           id: "admin-attendance",
           title: "Today's attendance exceptions",
           description: "Late, incomplete, absent, and undertime records from today's log.",
-          meta: `${attendanceRows.length} total attendance row${attendanceRows.length === 1 ? "" : "s"} today`,
+          meta: `${attendanceRecordedCount} total attendance row${attendanceRecordedCount === 1 ? "" : "s"} today`,
           icon: "clock",
           href: "/admin/attendance/history",
           value: String(attendanceFlaggedCount),
@@ -766,11 +1133,8 @@ const buildGeneralManagerDashboard = async (
   const monthStartDate = monthStart();
   const [payrollRuns, assignments, activeEmployees, gmQueueCount, releasedThisMonth] =
     await Promise.all([
-      safeData(listPayrollRuns({ limit: 5 }), []),
-      safeData(
-        listEmployeeDeductionAssignments({ directoryMode: true, limit: 5 }),
-        [],
-      ),
+      loadRecentPayrollRuns({ limit: 5 }),
+      loadRecentDeductionAssignments({ limit: 5 }),
       db.employee.count({ where: { isArchived: false } }),
       db.payroll.count({
         where: {
@@ -907,7 +1271,7 @@ const buildGeneralManagerDashboard = async (
 const buildManagerDashboard = async (
   session: DashboardSession,
 ): Promise<DashboardData> => {
-  const today = todayKey();
+  const { start: todayStart, end: todayEnd } = getDayBounds();
   const [
     cashRows,
     leaveRows,
@@ -915,48 +1279,90 @@ const buildManagerDashboard = async (
     scheduleChangeRows,
     scheduleSwapRows,
     payrollRuns,
-    attendanceRows,
+    pendingCashCount,
+    pendingLeaveCount,
+    pendingDayOffCount,
+    pendingScheduleChangeCount,
+    pendingScheduleSwapCount,
+    payrollQueueCount,
+    payrollReturnedCount,
+    gmApprovalCount,
+    attendanceFlaggedCount,
     activeEmployeeCount,
     deductionDraftCount,
     draftViolationCount,
   ] = await Promise.all([
-    safeData(
-      listCashAdvanceRequests({
-        statuses: [CashAdvanceRequestStatus.PENDING_MANAGER],
-        limit: 8,
-      }),
-      [],
-    ),
-    safeData(
-      listLeaveRequests({
-        statuses: [LeaveRequestStatus.PENDING_MANAGER],
-        limit: 8,
-      }),
-      [],
-    ),
-    safeData(
-      listDayOffRequests({
-        statuses: [DayOffRequestStatus.PENDING_MANAGER],
-        limit: 8,
-      }),
-      [],
-    ),
-    safeData(
-      listScheduleChangeRequests({
-        statuses: [ScheduleChangeRequestStatus.PENDING_MANAGER],
-        limit: 8,
-      }),
-      [],
-    ),
-    safeData(
-      listScheduleSwapRequests({
-        statuses: [ScheduleSwapRequestStatus.PENDING_MANAGER],
-        limit: 8,
-      }),
-      [],
-    ),
-    safeData(listPayrollRuns({ limit: 6 }), []),
-    safeData(listAttendance({ start: today, end: today, includeAll: true }), []),
+    loadCashAdvanceRequests({
+      where: { status: CashAdvanceRequestStatus.PENDING_MANAGER },
+      limit: 8,
+    }),
+    loadLeaveRequests({
+      where: { status: LeaveRequestStatus.PENDING_MANAGER },
+      limit: 8,
+    }),
+    loadDayOffRequests({
+      where: { status: DayOffRequestStatus.PENDING_MANAGER },
+      limit: 8,
+    }),
+    loadScheduleChangeRequests({
+      where: { status: ScheduleChangeRequestStatus.PENDING_MANAGER },
+      limit: 8,
+    }),
+    loadScheduleSwapRequests({
+      where: { status: ScheduleSwapRequestStatus.PENDING_MANAGER },
+      limit: 8,
+    }),
+    loadRecentPayrollRuns({ limit: 6 }),
+    db.cashAdvanceRequest.count({
+      where: { status: CashAdvanceRequestStatus.PENDING_MANAGER },
+    }),
+    db.leaveRequest.count({
+      where: { status: LeaveRequestStatus.PENDING_MANAGER },
+    }),
+    db.dayOffRequest.count({
+      where: { status: DayOffRequestStatus.PENDING_MANAGER },
+    }),
+    db.scheduleChangeRequest.count({
+      where: { status: ScheduleChangeRequestStatus.PENDING_MANAGER },
+    }),
+    db.scheduleSwapRequest.count({
+      where: { status: ScheduleSwapRequestStatus.PENDING_MANAGER },
+    }),
+    db.payroll.count({
+      where: {
+        status: { notIn: [PayrollStatus.RELEASED, PayrollStatus.VOIDED] },
+      },
+    }),
+    db.payroll.count({
+      where: {
+        OR: [
+          { managerDecision: PayrollReviewDecision.REJECTED },
+          { gmDecision: PayrollReviewDecision.REJECTED },
+        ],
+        status: { notIn: [PayrollStatus.RELEASED, PayrollStatus.VOIDED] },
+      },
+    }),
+    db.payroll.count({
+      where: {
+        status: { notIn: [PayrollStatus.RELEASED, PayrollStatus.VOIDED] },
+        managerDecision: PayrollReviewDecision.APPROVED,
+        gmDecision: PayrollReviewDecision.PENDING,
+      },
+    }),
+    db.attendance.count({
+      where: {
+        workDate: {
+          gte: todayStart,
+          lt: todayEnd,
+        },
+        OR: [
+          { status: ATTENDANCE_STATUS.ABSENT },
+          { status: ATTENDANCE_STATUS.INCOMPLETE },
+          { lateMinutes: { gt: 0 } },
+          { undertimeMinutes: { gt: 0 } },
+        ],
+      },
+    }),
     db.employee.count({ where: { isArchived: false } }),
     db.employeeDeductionAssignment.count({
       where: { workflowStatus: EmployeeDeductionWorkflowStatus.DRAFT },
@@ -965,19 +1371,11 @@ const buildManagerDashboard = async (
   ]);
 
   const pendingRequests =
-    cashRows.length +
-    leaveRows.length +
-    dayOffRows.length +
-    scheduleChangeRows.length +
-    scheduleSwapRows.length;
-  const payrollQueueCount = payrollRuns.filter(isOpenPayrollRun).length;
-  const payrollReturnedCount = payrollRuns.filter(
-    (run) =>
-      run.managerDecision === PayrollReviewDecision.REJECTED ||
-      run.gmDecision === PayrollReviewDecision.REJECTED,
-  ).length;
-  const gmApprovalCount = payrollRuns.filter(isGmApprovalRun).length;
-  const attendanceFlaggedCount = attendanceRows.filter(isAttendanceFlagged).length;
+    pendingCashCount +
+    pendingLeaveCount +
+    pendingDayOffCount +
+    pendingScheduleChangeCount +
+    pendingScheduleSwapCount;
 
   return {
     role: "manager",
@@ -1101,7 +1499,9 @@ const buildSupervisorDashboard = async (
   session: DashboardSession,
 ): Promise<DashboardData> => {
   const [violations, directReports] = await Promise.all([
-    safeData(getViolations(), []),
+    loadRecentViolations({
+      where: { draftedById: session.userId },
+    }),
     db.employee.findMany({
       where: {
         supervisorUserId: session.userId,
@@ -1226,80 +1626,230 @@ const buildSupervisorDashboard = async (
 const buildEmployeeDashboard = async (
   session: DashboardSession,
 ): Promise<DashboardData> => {
-  const today = todayKey();
   const employeeId = session.employee?.employeeId ?? null;
+  const today = todayKey();
+  const [currentYear, currentMonth] = today.split("-").map(Number);
+  const yearStart = new Date(`${currentYear}-01-01T00:00:00+08:00`);
+  const nextYearStart = new Date(`${currentYear + 1}-01-01T00:00:00+08:00`);
+  const monthStartDate = new Date(
+    `${currentYear}-${String(currentMonth).padStart(2, "0")}-01T00:00:00+08:00`,
+  );
+  const nextMonthStart =
+    currentMonth === 12
+      ? new Date(`${currentYear + 1}-01-01T00:00:00+08:00`)
+      : new Date(
+          `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01T00:00:00+08:00`,
+        );
 
   const [
-    attendanceRows,
+    todayAttendance,
     cashRows,
     leaveRows,
     dayOffRows,
     scheduleChangeRows,
     scheduleSwapRows,
-    deductionRows,
     payslipRows,
-    leaveBalance,
-    dayOffSummary,
-    violations,
+    pendingCashCount,
+    pendingLeaveCount,
+    pendingDayOffCount,
+    pendingScheduleChangeCount,
+    pendingScheduleSwapCount,
+    activeDeductions,
+    releasedPayslipCount,
+    paidLeaveUsed,
+    paidSickLeaveUsed,
+    approvedDayOffThisMonth,
+    unacknowledgedViolations,
   ] = await Promise.all([
+    employeeId ? loadTodayAttendanceSnapshot(employeeId, today) : Promise.resolve(null),
     employeeId
-      ? safeData(
-          listAttendance({
-            start: today,
-            end: today,
-            employeeId,
-            includeAll: true,
-          }),
-          [],
-        )
+      ? loadCashAdvanceRequests({ where: { employeeId }, limit: 8 })
       : Promise.resolve([]),
-    safeData(listCashAdvanceRequests({ limit: 8 }), []),
-    safeData(listLeaveRequests({ limit: 8 }), []),
-    safeData(listDayOffRequests({ limit: 8 }), []),
-    safeData(listScheduleChangeRequests({ limit: 8 }), []),
-    safeData(listScheduleSwapRequests({ limit: 8 }), []),
-    safeData(listEmployeeDeductionAssignments({ limit: 8 }), []),
-    safeData(listPayrollPayslips(), []),
-    safeData(getEmployeeLeaveBalanceSummary(), {
-      year: new Date().getFullYear(),
-      paidLeaveAllowance: 0,
-      paidLeaveUsed: 0,
-      paidLeaveRemaining: 0,
-      paidSickLeaveAllowance: 0,
-      paidSickLeaveUsed: 0,
-      paidSickLeaveRemaining: 0,
-    }),
-    safeData(getEmployeeDayOffMonthlySummary(), {
-      year: new Date().getFullYear(),
-      month: new Date().getMonth() + 1,
-      monthLabel: "",
-      approvedThisMonth: 0,
-    }),
-    safeData(getViolations(), []),
+    employeeId
+      ? loadLeaveRequests({ where: { employeeId }, limit: 8 })
+      : Promise.resolve([]),
+    employeeId
+      ? loadDayOffRequests({ where: { employeeId }, limit: 8 })
+      : Promise.resolve([]),
+    employeeId
+      ? loadScheduleChangeRequests({ where: { employeeId }, limit: 8 })
+      : Promise.resolve([]),
+    employeeId
+      ? loadScheduleSwapRequests({
+          where: {
+            OR: [
+              { requesterEmployeeId: employeeId },
+              { coworkerEmployeeId: employeeId },
+            ],
+          },
+          limit: 8,
+          viewerEmployeeId: employeeId,
+        })
+      : Promise.resolve([]),
+    employeeId
+      ? loadRecentPayrollPayslips({ employeeId, limit: 6 })
+      : Promise.resolve([]),
+    employeeId
+      ? db.cashAdvanceRequest.count({
+          where: {
+            employeeId,
+            status: CashAdvanceRequestStatus.PENDING_MANAGER,
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.leaveRequest.count({
+          where: {
+            employeeId,
+            status: LeaveRequestStatus.PENDING_MANAGER,
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.dayOffRequest.count({
+          where: {
+            employeeId,
+            status: DayOffRequestStatus.PENDING_MANAGER,
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.scheduleChangeRequest.count({
+          where: {
+            employeeId,
+            status: ScheduleChangeRequestStatus.PENDING_MANAGER,
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.scheduleSwapRequest.count({
+          where: {
+            OR: [
+              { requesterEmployeeId: employeeId },
+              { coworkerEmployeeId: employeeId },
+            ],
+            status: {
+              in: [
+                ScheduleSwapRequestStatus.PENDING_MANAGER,
+                ScheduleSwapRequestStatus.PENDING_COWORKER,
+              ],
+            },
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.employeeDeductionAssignment.count({
+          where: {
+            employeeId,
+            workflowStatus: EmployeeDeductionWorkflowStatus.APPROVED,
+            status: EmployeeDeductionAssignmentStatus.ACTIVE,
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.payrollEmployee.count({
+          where: {
+            employeeId,
+            payroll: { status: PayrollStatus.RELEASED },
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.attendance.count({
+          where: {
+            employeeId,
+            status: ATTENDANCE_STATUS.LEAVE,
+            isPaidLeave: true,
+            workDate: {
+              gte: yearStart,
+              lt: nextYearStart,
+            },
+            NOT: {
+              leaveRequest: {
+                is: {
+                  leaveType: LeaveRequestType.SICK,
+                },
+              },
+            },
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.attendance.count({
+          where: {
+            employeeId,
+            status: ATTENDANCE_STATUS.LEAVE,
+            isPaidLeave: true,
+            workDate: {
+              gte: yearStart,
+              lt: nextYearStart,
+            },
+            leaveRequest: {
+              is: {
+                leaveType: LeaveRequestType.SICK,
+              },
+            },
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.dayOffRequest.count({
+          where: {
+            employeeId,
+            status: DayOffRequestStatus.APPROVED,
+            workDate: {
+              gte: monthStartDate,
+              lt: nextMonthStart,
+            },
+          },
+        })
+      : Promise.resolve(0),
+    employeeId
+      ? db.employeeViolation.count({
+          where: {
+            employeeId,
+            isAcknowledged: false,
+          },
+        })
+      : Promise.resolve(0),
   ]);
 
-  const todayAttendance = attendanceRows[0] ?? null;
-  const pendingRequests = [
-    ...cashRows.filter((row) => row.status === "PENDING_MANAGER"),
-    ...leaveRows.filter((row) => row.status === "PENDING_MANAGER"),
-    ...dayOffRows.filter((row) => row.status === "PENDING_MANAGER"),
-    ...scheduleChangeRows.filter((row) => row.status === "PENDING_MANAGER"),
-    ...scheduleSwapRows.filter(
-      (row) =>
-        row.status === "PENDING_MANAGER" || row.status === "PENDING_COWORKER",
-    ),
-  ].length;
-  const activeDeductions = deductionRows.filter((row) => row.status === "ACTIVE").length;
+  const pendingRequests =
+    pendingCashCount +
+    pendingLeaveCount +
+    pendingDayOffCount +
+    pendingScheduleChangeCount +
+    pendingScheduleSwapCount;
   const latestPayslip = payslipRows[0] ?? null;
-  const unacknowledgedViolations = violations.filter(
-    (row) => !row.isAcknowledged,
-  ).length;
+  const leaveBalance = {
+    year: currentYear,
+    paidLeaveAllowance: PAID_LEAVE_ALLOWANCE_PER_YEAR,
+    paidLeaveUsed,
+    paidLeaveRemaining: Math.max(
+      0,
+      PAID_LEAVE_ALLOWANCE_PER_YEAR - paidLeaveUsed,
+    ),
+    paidSickLeaveAllowance: PAID_SICK_LEAVE_ALLOWANCE_PER_YEAR,
+    paidSickLeaveUsed,
+    paidSickLeaveRemaining: Math.max(
+      0,
+      PAID_SICK_LEAVE_ALLOWANCE_PER_YEAR - paidSickLeaveUsed,
+    ),
+  };
+  const dayOffSummary = {
+    year: currentYear,
+    month: currentMonth,
+    monthLabel: monthStartDate.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+    }),
+    approvedThisMonth: approvedDayOffThisMonth,
+  };
 
   const lastPunch =
+    todayAttendance?.lastPunchAt ??
     todayAttendance?.actualOutAt ??
     todayAttendance?.actualInAt ??
-    todayAttendance?.breakEndAt ??
-    todayAttendance?.breakStartAt ??
     null;
   const attendanceDescription = todayAttendance
     ? [
@@ -1384,7 +1934,7 @@ const buildEmployeeDashboard = async (
         description: "Review released payroll runs and net pay details.",
         href: "/employee/payslip",
         icon: "receipt",
-        badge: payslipRows.length > 0 ? `${payslipRows.length} released` : undefined,
+        badge: releasedPayslipCount > 0 ? `${releasedPayslipCount} released` : undefined,
       },
     ],
     notes: [

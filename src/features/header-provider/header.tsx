@@ -41,10 +41,6 @@ const NavHeader = () => {
   const { user, employee, loading, error } = useSession();
   const router = useRouter();
   useEffect(() => {
-    console.log("Current User:", user);
-    console.log("Employee Data:", employee);
-  }, [user, employee]);
-  useEffect(() => {
     if (!loading && !error && !user) {
       router.replace("/sign-in");
     }
