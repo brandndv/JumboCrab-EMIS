@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableLoadingState } from "@/components/loading/loading-states";
 import { TZ } from "@/lib/timezone";
 import { Clock4, RefreshCcw, RotateCcw, Search } from "lucide-react";
 
@@ -515,7 +516,11 @@ export function AttendanceHistoryTable() {
         </div>
 
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading attendance...</p>
+          <TableLoadingState
+            label="Loading attendance"
+            columns={10}
+            rows={5}
+          />
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : rows.length === 0 ? (

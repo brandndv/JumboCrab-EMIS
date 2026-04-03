@@ -17,6 +17,10 @@ import {
 } from "@/features/manage-deductions/deduction-ui-helpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -66,19 +70,7 @@ function DeductionAssignmentFormFallback({
   title,
   description,
 }: Pick<DeductionAssignmentFormPageProps, "title" | "description">) {
-  return (
-    <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">
-      <div>
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      <Card className="shadow-sm">
-        <CardContent className="py-10">
-          <p className="text-sm text-muted-foreground">Loading deduction form...</p>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <ModuleLoadingState title={title} description={description} cardCount={2} />;
 }
 
 function DeductionAssignmentFormPageContent({
@@ -394,9 +386,11 @@ function DeductionAssignmentFormPageContent({
       <Card className="shadow-sm">
         <CardContent className="space-y-6 pt-6">
           {loadingExisting ? (
-            <p className="text-sm text-muted-foreground">
-              Loading deduction assignment...
-            </p>
+            <InlineLoadingState
+              label="Loading deduction assignment"
+              lines={3}
+              className="border-border/60 bg-muted/10"
+            />
           ) : null}
 
           <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/10 p-4">

@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TableLoadingState } from "@/components/loading/loading-states";
 
 type ShiftRow = {
   id: number;
@@ -252,13 +253,6 @@ export function ShiftsManager() {
       setEditError("Code and name are required");
       return;
     }
-    const derived = computeDerived(
-      editForm.startTime,
-      editForm.endTime,
-      editForm.spansMidnight,
-      editForm.breakStartTime,
-      editForm.breakEndTime
-    );
     try {
       setEditSaving(true);
       setEditError(null);
@@ -311,7 +305,7 @@ export function ShiftsManager() {
         </CardHeader>
         <CardContent className="p-4">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading shifts...</p>
+            <TableLoadingState label="Loading shifts" columns={7} rows={4} />
           ) : error ? (
             <p className="text-sm text-destructive">{error}</p>
           ) : rows.length === 0 ? (

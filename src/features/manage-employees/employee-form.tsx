@@ -26,6 +26,7 @@ import {
   NATIONALITIES,
   EMERGENCY_RELATIONSHIPS,
 } from "@/lib/employees/options";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
 
 const ensureOption = (
   options: readonly string[],
@@ -549,7 +550,12 @@ export default function EmployeeForm({
     formData.currentStatus === "ENDED" || formData.currentStatus === "INACTIVE";
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <ModuleLoadingState
+        title={mode === "create" ? "Add Employee" : "Edit Employee"}
+        description="Loading employee form fields, linked options, and saved values."
+      />
+    );
   }
 
   return (

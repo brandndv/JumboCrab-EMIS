@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { TableLoadingState } from "@/components/loading/loading-states";
 
 type DepartmentRow = {
   departmentId: string;
@@ -251,8 +252,12 @@ export function DepartmentTable() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-sm text-muted-foreground">
-                    Loading...
+                  <TableCell colSpan={4} className="p-3">
+                    <TableLoadingState
+                      label="Loading departments"
+                      columns={4}
+                      rows={3}
+                    />
                   </TableCell>
                 </TableRow>
               )}

@@ -12,6 +12,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  InlineLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -644,9 +648,9 @@ const PayrollGeneratePage = () => {
 
                   <div className="max-h-56 overflow-y-auto rounded-md border">
                     {eligibleLoading ? (
-                      <p className="p-3 text-sm text-muted-foreground">
-                        Loading employees...
-                      </p>
+                      <div className="p-3">
+                        <InlineLoadingState label="Loading employees" lines={2} />
+                      </div>
                     ) : filteredEligibleEmployees.length === 0 ? (
                       <p className="p-3 text-sm text-muted-foreground">
                         No employees match your search.
@@ -934,8 +938,12 @@ const PayrollGeneratePage = () => {
               <TableBody>
                 {loadingRuns ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      Loading payroll queue...
+                    <TableCell colSpan={6} className="p-3">
+                      <TableLoadingState
+                        label="Loading payroll queue"
+                        columns={6}
+                        rows={3}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}

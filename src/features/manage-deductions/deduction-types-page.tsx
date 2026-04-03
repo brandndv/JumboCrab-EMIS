@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableLoadingState } from "@/components/loading/loading-states";
 import { DeductionAmountMode, DeductionFrequency } from "@prisma/client";
 import { Pencil, Plus, RefreshCcw } from "lucide-react";
 
@@ -397,8 +398,12 @@ export default function DeductionTypesPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      Loading deduction types...
+                    <TableCell colSpan={6} className="p-3">
+                      <TableLoadingState
+                        label="Loading deduction types"
+                        columns={6}
+                        rows={3}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}

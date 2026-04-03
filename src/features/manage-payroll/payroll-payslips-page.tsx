@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import {
   Dialog,
   DialogContent,
@@ -747,9 +748,7 @@ const PayrollPayslipsPage = ({
         </CardHeader>
         <CardContent className="space-y-3">
           {loadingRows ? (
-            <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-              Loading payslips...
-            </div>
+            <InlineLoadingState label="Loading payslips" lines={3} />
           ) : null}
           {!loadingRows && rowsError ? (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
@@ -1000,9 +999,7 @@ const PayrollPayslipsPage = ({
             className={cn("space-y-6", isEmployeeView ? "p-0" : "p-6")}
           >
             {loadingDetail ? (
-              <p className="text-sm text-muted-foreground">
-                Loading payslip details...
-              </p>
+              <InlineLoadingState label="Loading payslip details" lines={3} />
             ) : null}
             {!loadingDetail && detailError ? (
               <p className="text-sm text-destructive">{detailError}</p>
@@ -1293,11 +1290,7 @@ const PayrollPayslipsPage = ({
               <DialogTitle>Payslip Breakdown</DialogTitle>
             </DialogHeader>
             {loadingDetail ? (
-              <div className="rounded-2xl border border-border/70 bg-background p-6 shadow-sm">
-                <p className="text-sm text-muted-foreground">
-                  Loading payslip details...
-                </p>
-              </div>
+              <InlineLoadingState label="Loading payslip details" lines={3} />
             ) : null}
             {!loadingDetail && detailError ? (
               <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive shadow-sm">

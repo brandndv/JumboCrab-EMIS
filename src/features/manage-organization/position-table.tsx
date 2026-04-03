@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { TableLoadingState } from "@/components/loading/loading-states";
 
 type PositionRow = {
   positionId: string;
@@ -309,8 +310,12 @@ export function PositionTable() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-sm text-muted-foreground">
-                    Loading...
+                  <TableCell colSpan={5} className="p-3">
+                    <TableLoadingState
+                      label="Loading positions"
+                      columns={5}
+                      rows={3}
+                    />
                   </TableCell>
                 </TableRow>
               )}

@@ -29,6 +29,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Eye, EyeOff } from "lucide-react";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 import type { Employee } from "@/lib/validations/employees";
 
 type EmployeeType = Partial<Employee>;
@@ -275,13 +279,10 @@ const MyAccountPage = () => {
 
   if (loading) {
     return (
-      <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-        <Card className="rounded-2xl border border-border/70 bg-card/60 shadow-sm">
-          <CardContent className="p-6 text-sm text-muted-foreground">
-            Loading account...
-          </CardContent>
-        </Card>
-      </div>
+      <ModuleLoadingState
+        title="My Account"
+        description="Loading account credentials, employee profile, and linked records."
+      />
     );
   }
 
@@ -475,9 +476,11 @@ const MyAccountPage = () => {
           <CardContent className="pt-0">
             {employeeInfoTab === "profile" &&
               (employeeDetailsLoading && !employee ? (
-                <div className="rounded-lg border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-                  Loading employee information...
-                </div>
+                <InlineLoadingState
+                  label="Loading employee information"
+                  lines={3}
+                  className="border-border/60 bg-muted/10"
+                />
               ) : employee ? (
                 <div className="space-y-4">
                   <InfoSection
@@ -606,9 +609,11 @@ const MyAccountPage = () => {
 
             {employeeInfoTab === "governmentIds" &&
               (governmentIdsLoading ? (
-                <div className="rounded-lg border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-                  Loading government IDs...
-                </div>
+                <InlineLoadingState
+                  label="Loading government IDs"
+                  lines={2}
+                  className="border-border/60 bg-muted/10"
+                />
               ) : governmentIdsError ? (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
                   {governmentIdsError}

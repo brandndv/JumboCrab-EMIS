@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { Button } from "@/components/ui/button";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 
 type UnassignedEmployee = {
@@ -99,9 +100,11 @@ export function UnassignedEmployees() {
       </div>
 
       {loading && (
-        <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
-          Loading unassigned employees...
-        </div>
+        <InlineLoadingState
+          label="Loading unassigned employees"
+          lines={3}
+          className="border-border/60 bg-muted/10"
+        />
       )}
 
       {error && (

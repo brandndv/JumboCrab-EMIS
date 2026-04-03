@@ -25,6 +25,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useEffect } from "react";
 import { ThemeMenuSub } from "@/components/theme-provider/theme-menu-sub";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AppHeaderLoadingState } from "@/components/loading/loading-states";
 import { CircleUserRound, LogOutIcon } from "lucide-react";
 
 /**
@@ -54,7 +55,7 @@ const NavHeader = () => {
     .filter(Boolean); // Remove empty segments
 
   // Show loading/error states if needed
-  if (loading) return <div className="p-4">Loading user data...</div>;
+  if (loading) return <AppHeaderLoadingState />;
   if (error)
     return <div className="p-4 text-red-500">Error: {error.message}</div>;
   if (!user) return null;

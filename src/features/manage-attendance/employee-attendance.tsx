@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/table";
 import { useSession } from "@/hooks/use-session";
 import { listAttendance } from "@/actions/attendance/attendance-action";
+import {
+  ModuleLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 import type { AttendanceRow } from "@/hooks/use-attendance";
 import { Table2 } from "lucide-react";
 import { TZ } from "@/lib/timezone";
@@ -193,7 +197,14 @@ const EmployeeAttendance = () => {
     return result;
   }, [selectedRange, rowsByDate]);
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) {
+    return (
+      <ModuleLoadingState
+        title="Attendance"
+        description="Loading your attendance ranges, punches, and daily breakdown."
+      />
+    );
+  }
   if (error) return <div>Failed to load session</div>;
   if (!user) return <div>No session</div>;
 
@@ -289,9 +300,11 @@ const EmployeeAttendance = () => {
           {rowsError ? (
             <p className="text-sm text-destructive">{rowsError}</p>
           ) : rowsLoading ? (
-            <p className="text-sm text-muted-foreground">
-              Loading attendance...
-            </p>
+            <TableLoadingState
+              label="Loading attendance"
+              columns={7}
+              rows={4}
+            />
           ) : completeDateRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No dates in selected range.

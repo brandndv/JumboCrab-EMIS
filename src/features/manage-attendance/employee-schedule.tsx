@@ -13,6 +13,10 @@ import { CalendarDays, Clock3, Sparkles } from "lucide-react";
 import { getEmployeeMonthSchedule } from "@/actions/schedule/schedule-action";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 import { useSession } from "@/hooks/use-session";
 import { TZ } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
@@ -354,7 +358,14 @@ const EmployeeScedule = () => {
     user?.username ||
     "Employee";
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) {
+    return (
+      <ModuleLoadingState
+        title="Schedule"
+        description="Loading your calendar, shift overlays, and schedule details."
+      />
+    );
+  }
   if (error) return <div>Failed to load session</div>;
   if (!user) return <div>No session</div>;
 
@@ -540,9 +551,11 @@ const EmployeeScedule = () => {
             </div>
 
             {monthLoading && (
-              <p className="text-sm text-muted-foreground">
-                Loading month schedule...
-              </p>
+              <InlineLoadingState
+                label="Loading month schedule"
+                lines={2}
+                className="border-border/60 bg-muted/10"
+              />
             )}
             {monthError && (
               <p className="text-sm text-destructive">{monthError}</p>
@@ -561,9 +574,11 @@ const EmployeeScedule = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {monthLoading ? (
-                <p className="text-sm text-muted-foreground">
-                  Loading today&apos;s schedule...
-                </p>
+                <InlineLoadingState
+                  label="Loading today's schedule"
+                  lines={2}
+                  className="border-border/60 bg-muted/10"
+                />
               ) : monthError ? (
                 <p className="text-sm text-destructive">{monthError}</p>
               ) : todaySchedule?.leave ? (

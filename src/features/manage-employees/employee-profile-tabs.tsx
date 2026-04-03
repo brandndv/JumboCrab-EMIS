@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import { IdCard, Loader2, Plus } from "lucide-react";
 import EmployeeForm from "./employee-form";
 import {
@@ -572,10 +573,11 @@ export function EmployeeProfileTabs({
               </CardHeader>
               <CardContent className="space-y-3">
                 {loadingRateHistory ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
-                    Loading rate history...
-                  </div>
+                  <InlineLoadingState
+                    label="Loading rate history"
+                    lines={2}
+                    className="border-border/60 bg-muted/10"
+                  />
                 ) : rateHistoryError ? (
                   <p className="text-sm text-destructive">{rateHistoryError}</p>
                 ) : rateHistory.length === 0 ? (
@@ -664,10 +666,11 @@ export function EmployeeProfileTabs({
               </CardHeader>
               <CardContent>
                 {loadingViolationStrikeProgress ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
-                    Loading strike progress...
-                  </div>
+                  <InlineLoadingState
+                    label="Loading strike progress"
+                    lines={2}
+                    className="border-border/60 bg-muted/10"
+                  />
                 ) : violationStrikeProgressError ? (
                   <p className="text-sm text-destructive">
                     {violationStrikeProgressError}
@@ -722,10 +725,11 @@ export function EmployeeProfileTabs({
               </CardHeader>
               <CardContent className="space-y-3">
                 {loadingEmployeeViolations ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
-                    Loading employee violations...
-                  </div>
+                  <InlineLoadingState
+                    label="Loading employee violations"
+                    lines={2}
+                    className="border-border/60 bg-muted/10"
+                  />
                 ) : employeeViolationsError ? (
                   <p className="text-sm text-destructive">{employeeViolationsError}</p>
                 ) : employeeViolations.length === 0 ? (
@@ -860,86 +864,95 @@ export function EmployeeProfileTabs({
               <p className="text-sm text-destructive">{govIdError}</p>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              {govIdFields.map((item) => {
-                const value = governmentId?.[item.key] ?? "";
-                return (
-                  <Card key={item.label} className="border-dashed">
-                    <CardHeader className="gap-2 px-4 pt-4 pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base">{item.label}</CardTitle>
-                        <Badge variant="outline">
-                          {loadingGovId ? "Loading..." : value ? "Set" : "Not set"}
-                        </Badge>
-                      </div>
-                      <CardDescription className="text-xs">
-                        {item.helper}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-4 space-y-2">
-                      {loadingGovId ? (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="size-4 animate-spin" />
-                          Loading ID...
+            {loadingGovId ? (
+              <InlineLoadingState
+                label="Loading government IDs"
+                lines={3}
+                className="border-border/60 bg-muted/10"
+              />
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {govIdFields.map((item) => {
+                  const value = governmentId?.[item.key] ?? "";
+                  return (
+                    <Card key={item.label} className="border-dashed">
+                      <CardHeader className="gap-2 px-4 pt-4 pb-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <CardTitle className="text-base">{item.label}</CardTitle>
+                          <Badge variant="outline">{value ? "Set" : "Not set"}</Badge>
                         </div>
-                      ) : value ? (
-                        <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
-                          <IdCard className="size-4 text-muted-foreground" />
-                          <p className="text-sm font-medium">{value}</p>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                          <IdCard className="size-4 text-muted-foreground" />
-                          <span>
-                            Not set yet. Click &ldquo;{hasAnyGovId ? "Edit" : "Add"} IDs&rdquo; to
-                            save it.
-                          </span>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+                        <CardDescription className="text-xs">
+                          {item.helper}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2 px-4 pb-4">
+                        {value ? (
+                          <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                            <IdCard className="size-4 text-muted-foreground" />
+                            <p className="text-sm font-medium">{value}</p>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                            <IdCard className="size-4 text-muted-foreground" />
+                            <span>
+                              Not set yet. Click &ldquo;{hasAnyGovId ? "Edit" : "Add"} IDs&rdquo; to
+                              save it.
+                            </span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold">Contributions (EE/ER)</p>
-                {loadingContribution && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="size-3 animate-spin" />
-                    Loading...
-                  </div>
-                )}
+                {loadingContribution ? <Badge variant="outline">Syncing</Badge> : null}
               </div>
               {contributionError && (
                 <p className="text-xs text-destructive">{contributionError}</p>
               )}
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {[
-                  ["SSS", "sssEe", "sssEr"],
-                  ["PhilHealth", "philHealthEe", "philHealthEr"],
-                  ["Pag-IBIG", "pagIbigEe", "pagIbigEr"],
-                  ["Tax", "withholdingEe", "withholdingEr"],
-                ].map(([label, eeKey, erKey]) => (
-                  <div key={label} className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs">
-                    <div className="text-xs text-muted-foreground">{label}</div>
-                    <div className="text-sm font-semibold">
-                      EE:{" "}
-                      {contribution && contribution[eeKey as keyof typeof contribution] != null
-                        ? contribution[eeKey as keyof typeof contribution]
-                        : "—"}
+              {loadingContribution ? (
+                <InlineLoadingState
+                  label="Loading contributions"
+                  lines={2}
+                  className="border-border/60 bg-muted/10"
+                />
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ["SSS", "sssEe", "sssEr"],
+                    ["PhilHealth", "philHealthEe", "philHealthEr"],
+                    ["Pag-IBIG", "pagIbigEe", "pagIbigEr"],
+                    ["Tax", "withholdingEe", "withholdingEr"],
+                  ].map(([label, eeKey, erKey]) => (
+                    <div
+                      key={label}
+                      className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs"
+                    >
+                      <div className="text-xs text-muted-foreground">{label}</div>
+                      <div className="text-sm font-semibold">
+                        EE:{" "}
+                        {contribution &&
+                        contribution[eeKey as keyof typeof contribution] != null
+                          ? contribution[eeKey as keyof typeof contribution]
+                          : "—"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        ER:{" "}
+                        {contribution &&
+                        contribution[erKey as keyof typeof contribution] != null
+                          ? contribution[erKey as keyof typeof contribution]
+                          : "—"}{" "}
+                        (admin)
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      ER:{" "}
-                      {contribution && contribution[erKey as keyof typeof contribution] != null
-                        ? contribution[erKey as keyof typeof contribution]
-                        : "—"}{" "}
-                      (admin)
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

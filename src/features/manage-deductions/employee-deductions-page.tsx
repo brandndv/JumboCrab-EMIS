@@ -15,6 +15,7 @@ import {
 import { DeductionProgress } from "@/features/manage-deductions/deduction-progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import { DeductionFrequency, EmployeeDeductionAssignmentStatus } from "@prisma/client";
 
 export default function EmployeeDeductionsPage() {
@@ -140,7 +141,7 @@ export default function EmployeeDeductionsPage() {
         <CardContent>
           {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading deductions...</p>
+            <InlineLoadingState label="Loading deductions" lines={3} />
           ) : null}
           {!loading && rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">

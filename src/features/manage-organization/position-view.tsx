@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -93,7 +94,7 @@ export function PositionView() {
       </CardHeader>
       <CardContent className="space-y-4 p-4">
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading...</p>
+          <InlineLoadingState label="Loading positions" lines={2} />
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : filtered.length === 0 ? (

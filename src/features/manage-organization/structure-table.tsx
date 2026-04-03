@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { TableLoadingState } from "@/components/loading/loading-states";
 
 type StructureRow = {
   employeeId: string;
@@ -336,8 +337,12 @@ export function StructureTable() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-sm text-muted-foreground">
-                    Loading...
+                  <TableCell colSpan={6} className="p-3">
+                    <TableLoadingState
+                      label="Loading organization structure"
+                      columns={6}
+                      rows={3}
+                    />
                   </TableCell>
                 </TableRow>
               )}

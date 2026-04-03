@@ -12,13 +12,14 @@ import HeaderSidebar from "./header-sidebar";
 import { FooterSidebar } from "./footer-sidebar";
 import NavSidebar from "./nav-sidebar";
 import { useSession } from "@/hooks/use-session";
+import { AppSidebarLoadingState } from "@/components/loading/loading-states";
 
 const AppSidebar = () => {
   const { employee, user, loading, error } = useSession();
   const role = user?.role ?? null;
 
   if (loading) {
-    return <div>Loading sidebar...</div>;
+    return <AppSidebarLoadingState />;
   }
 
   if (error || !user || !role) {

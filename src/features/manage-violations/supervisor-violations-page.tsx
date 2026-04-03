@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableLoadingState } from "@/components/loading/loading-states";
 import { useSession } from "@/hooks/use-session";
 import ViolationCreateForm from "./violation-create-form";
 
@@ -152,8 +153,12 @@ const SupervisorViolationsPage = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      Loading drafts...
+                    <TableCell colSpan={5} className="p-3">
+                      <TableLoadingState
+                        label="Loading drafts"
+                        columns={5}
+                        rows={3}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}

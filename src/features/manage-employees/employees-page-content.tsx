@@ -5,16 +5,31 @@ import { Button } from "@/components/ui/button";
 import { RotateCcw } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEmployees } from "@/features/manage-employees/employees-provider";
+import {
+  DynamicBlockLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 
 const EmployeesCard = dynamic(
   () => import("@/features/manage-employees/employees-cards"),
-  { ssr: false, loading: () => <div>Loading table...</div> },
+  {
+    ssr: false,
+    loading: () => <DynamicBlockLoadingState label="Loading employee cards" />,
+  },
 );
 
 const EmployeeComboBox = dynamic(
   () =>
     import("@/features/manage-employees/employee-combo/employee-combobox"),
-  { ssr: false, loading: () => <div>Loading filters...</div> },
+  {
+    ssr: false,
+    loading: () => (
+      <DynamicBlockLoadingState
+        label="Loading employee filters"
+        className="min-h-[120px]"
+      />
+    ),
+  },
 );
 
 function ResetFiltersButton() {
@@ -45,12 +60,11 @@ export default function EmployeesPageContent() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="bg-card border border-border rounded-xl shadow-sm px-8 py-10 text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-2 border-primary/30 border-t-transparent mx-auto"></div>
-          <p className="text-muted-foreground">Loading employees...</p>
-        </div>
-      </div>
+      <ModuleLoadingState
+        title="Employees"
+        description="Loading employee records, filters, and archive state."
+        cardCount={4}
+      />
     );
   }
 
