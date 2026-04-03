@@ -2,6 +2,12 @@ import { Prisma, Roles } from "@prisma/client";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import { normalizeRole } from "@/lib/rbac";
 
+export function isHiddenManagementRole(
+  role: Roles | string | null | undefined,
+) {
+  return normalizeRole(role) === "admin";
+}
+
 export function toDbRole(role: string): Roles | null {
   const appRole = normalizeRole(role);
   if (!appRole) return null;

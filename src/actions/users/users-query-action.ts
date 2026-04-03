@@ -1,9 +1,15 @@
 "use server";
 
+import { Roles } from "@prisma/client";
 import { db } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
 import type { UserWithEmployee } from "@/lib/validations/users";
-import { baseUserSelect, normalizeUser, normalizeUsers } from "./users-shared";
+import {
+  baseUserSelect,
+  isHiddenManagementRole,
+  normalizeUser,
+  normalizeUsers,
+} from "./users-shared";
 
 export async function getUsers(): Promise<{
   success: boolean;
@@ -12,6 +18,11 @@ export async function getUsers(): Promise<{
 }> {
   try {
     const users = await prisma.user.findMany({
+      where: {
+        role: {
+          not: Roles.Admin,
+        },
+      },
       select: baseUserSelect,
       orderBy: {
         createdAt: "desc",
@@ -46,7 +57,7 @@ export async function getUserById(id: string | undefined): Promise<{
       select: baseUserSelect,
     });
 
-    if (!user) {
+    if (!user || isHiddenManagementRole(user.role)) {
       return {
         success: false,
         error: `User with ID ${id} not found`,
@@ -73,6 +84,11 @@ export async function getUsersWithEmployeeAccount(): Promise<{
 }> {
   try {
     const users = await prisma.user.findMany({
+      where: {
+        role: {
+          not: Roles.Admin,
+        },
+      },
       select: baseUserSelect,
       orderBy: {
         createdAt: "desc",

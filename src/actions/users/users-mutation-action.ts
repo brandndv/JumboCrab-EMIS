@@ -6,6 +6,7 @@ import { hashPassword } from "@/lib/auth";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import {
   baseUserSelect,
+  isHiddenManagementRole,
   normalizeUser,
   toDbRole,
 } from "./users-shared";
@@ -31,9 +32,9 @@ export async function updateUser(input: {
 
     const existingUser = await db.user.findUnique({
       where: { userId },
-      select: { userId: true },
+      select: { userId: true, role: true },
     });
-    if (!existingUser) {
+    if (!existingUser || isHiddenManagementRole(existingUser.role)) {
       return { success: false, error: "User not found" };
     }
 
@@ -54,6 +55,12 @@ export async function updateUser(input: {
         return {
           success: false,
           error: `Invalid role. Must be one of: ${Object.values(Roles).join(", ")}`,
+        };
+      }
+      if (dbRole === Roles.Admin) {
+        return {
+          success: false,
+          error: "Admin accounts cannot be created or managed from this screen",
         };
       }
       updates.role = dbRole;
@@ -136,7 +143,7 @@ export async function deleteUser(input: {
       include: { employee: true },
     });
 
-    if (!user) {
+    if (!user || isHiddenManagementRole(user.role)) {
       return { success: false, error: "User not found" };
     }
 

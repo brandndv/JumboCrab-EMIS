@@ -7,6 +7,11 @@ export const APP_ROLES = [
 ] as const;
 
 export type AppRole = (typeof APP_ROLES)[number];
+export type ManageableAppRole = Exclude<AppRole, "admin">;
+
+export const MANAGEABLE_APP_ROLES = APP_ROLES.filter(
+  (role): role is ManageableAppRole => role !== "admin",
+);
 
 export const ADMIN_PANEL_ROLES: AppRole[] = ["admin", "generalManager"];
 

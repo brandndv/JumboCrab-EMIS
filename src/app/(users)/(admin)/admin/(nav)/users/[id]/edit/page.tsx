@@ -25,14 +25,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Save } from "lucide-react";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import { getUserById, updateUser } from "@/actions/users/users-action";
-
-const roles: string[] = [
-  "admin",
-  "generalManager",
-  "manager",
-  "supervisor",
-  "employee",
-];
+import { MANAGEABLE_APP_ROLES } from "@/lib/rbac";
 
 const Field = ({
   label,
@@ -286,7 +279,7 @@ export default function UserEditPage({
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent>
-                      {roles.map((r) => (
+                      {MANAGEABLE_APP_ROLES.map((r) => (
                         <SelectItem key={r} value={r}>
                           {r}
                         </SelectItem>
