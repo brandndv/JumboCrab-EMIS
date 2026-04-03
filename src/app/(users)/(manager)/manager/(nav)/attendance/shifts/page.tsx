@@ -1,6 +1,6 @@
 "use client";
 
-import { ShiftsManager } from "@/components/dasboard/manage-attendance/shifts-manager";
+import { ShiftsManager } from "@/features/manage-attendance/shifts-manager";
 
 export default function ShiftsPage() {
   return (

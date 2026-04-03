@@ -5,6 +5,7 @@ import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { db } from "./db";
 
+//!L === CREATE USER ACCOUNT LOGIC === //
 export async function createUserAccount(
   username: string,
   email: string,

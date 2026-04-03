@@ -1,7 +1,7 @@
-import ContributionsPageContent from "@/components/dasboard/manage-contributions/contributions-page-content";
-import ContributionsProvider from "@/components/dasboard/manage-contributions/contributions-provider";
+import ContributionsPageContent from "@/features/manage-contributions/contributions-page-content";
+import ContributionsProvider from "@/features/manage-contributions/contributions-provider";
 
-export default function AdminContributionsPage() {
+export default function ManagerContributionsPage() {
   return (
     <ContributionsProvider>
       <ContributionsPageContent />

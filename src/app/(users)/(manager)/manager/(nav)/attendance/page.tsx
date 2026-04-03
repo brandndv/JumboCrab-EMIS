@@ -1,5 +1,5 @@
-import AttendancePageContent from "@/components/dasboard/manage-attendance/attendance-page-content";
-import AttendanceProvider from "@/components/dasboard/manage-attendance/attendance-provider";
+import AttendancePageContent from "@/features/manage-attendance/attendance-page-content";
+import AttendanceProvider from "@/features/manage-attendance/attendance-provider";
 
 export default function AttendancePage() {
   return (

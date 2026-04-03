@@ -1,4 +1,4 @@
-import EmployeeScedule from "@/components/dasboard/manage-attendance/employee-schedule";
+import EmployeeScedule from "@/features/manage-attendance/employee-schedule";
 
 const EmployeeScedulePage = () => {
   return <EmployeeScedule />;

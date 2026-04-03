@@ -1,4 +1,4 @@
-import RoleDashboardPage from "@/components/dasboard/dashboard/role-dashboard-page";
+import RoleDashboardPage from "@/features/dashboard/role-dashboard-page";
 
 export default function EmployeeDashboardPage() {
   return <RoleDashboardPage role="employee" />;

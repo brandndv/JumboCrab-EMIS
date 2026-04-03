@@ -23,7 +23,6 @@ const DEDUCTION_LAYOUT_PATHS = [
   "/admin/deductions",
   "/generalManager/deductions",
   "/manager/deductions",
-  "/clerk/deductions",
   "/employee/deductions",
 ] as const;
 
@@ -62,18 +61,14 @@ const canCreateApprovedDeductionAssignments = (role?: Roles) =>
 const canRecordDeductionPayments = (role?: Roles) =>
   canCreateApprovedDeductionAssignments(role);
 
-const canCreateDeductionDrafts = (role?: Roles) => role === Roles.Clerk;
-
 const canViewEmployeeDeductionDirectory = (role?: Roles) =>
   role === Roles.Admin ||
   role === Roles.GeneralManager ||
-  role === Roles.Manager ||
-  role === Roles.Clerk;
+  role === Roles.Manager;
 
 const canSearchEmployeesForDeductions = (role?: Roles) =>
   canViewEmployeeDeductionDirectory(role) ||
-  canCreateApprovedDeductionAssignments(role) ||
-  canCreateDeductionDrafts(role);
+  canCreateApprovedDeductionAssignments(role);
 
 const revalidateDeductionLayouts = () => {
   DEDUCTION_LAYOUT_PATHS.forEach((path) => {
@@ -179,16 +174,17 @@ type EmployeeDeductionAssignmentRecord =
     };
   }>;
 
-type EmployeeDeductionPaymentRecord = Prisma.EmployeeDeductionPaymentGetPayload<{
-  include: {
-    createdBy: {
-      select: {
-        userId: true;
-        username: true;
+type EmployeeDeductionPaymentRecord =
+  Prisma.EmployeeDeductionPaymentGetPayload<{
+    include: {
+      createdBy: {
+        select: {
+          userId: true;
+          username: true;
+        };
       };
     };
-  };
-}>;
+  }>;
 
 export type DeductionTypeRow = {
   id: string;
@@ -260,7 +256,9 @@ export type DeductionPaymentRow = {
   createdByName?: string | null;
 };
 
-const serializeDeductionType = (row: DeductionTypeRecord): DeductionTypeRow => ({
+const serializeDeductionType = (
+  row: DeductionTypeRecord,
+): DeductionTypeRow => ({
   id: row.id,
   code: row.code,
   name: row.name,
@@ -334,17 +332,20 @@ const serializeDeductionAssignment = (
   };
 };
 
-const resolveAssignmentValues = (input: DeductionAssignmentInput, options: {
-  amountMode: DeductionAmountMode;
-  frequency: DeductionFrequency;
-  defaultAmount: Prisma.Decimal | null;
-  defaultPercent: Prisma.Decimal | null;
-  existing?: {
-    installmentTotal: Prisma.Decimal | null;
-    installmentPerPayroll: Prisma.Decimal | null;
-    remainingBalance: Prisma.Decimal | null;
-  };
-}) => {
+const resolveAssignmentValues = (
+  input: DeductionAssignmentInput,
+  options: {
+    amountMode: DeductionAmountMode;
+    frequency: DeductionFrequency;
+    defaultAmount: Prisma.Decimal | null;
+    defaultPercent: Prisma.Decimal | null;
+    existing?: {
+      installmentTotal: Prisma.Decimal | null;
+      installmentPerPayroll: Prisma.Decimal | null;
+      remainingBalance: Prisma.Decimal | null;
+    };
+  },
+) => {
   const amountOverride = input.amountOverride ?? null;
   const percentOverride = input.percentOverride ?? null;
 
@@ -406,7 +407,8 @@ const resolveAssignmentValues = (input: DeductionAssignmentInput, options: {
     percentOverride,
     installmentTotal,
     installmentPerPayroll,
-    remainingBalance: remainingBalance == null ? installmentTotal : remainingBalance,
+    remainingBalance:
+      remainingBalance == null ? installmentTotal : remainingBalance,
   } as const;
 };
 
@@ -550,7 +552,10 @@ export async function createDeductionType(
     const parsed = deductionTypeSchema.safeParse(input);
     if (!parsed.success) {
       const message = parsed.error.issues[0]?.message;
-      return { success: false, error: message || "Invalid deduction type data" };
+      return {
+        success: false,
+        error: message || "Invalid deduction type data",
+      };
     }
 
     const code = normalizeCode(parsed.data.code, parsed.data.name);
@@ -586,11 +591,11 @@ export async function createDeductionType(
         frequency: parsed.data.frequency,
         defaultAmount:
           parsed.data.amountMode === DeductionAmountMode.FIXED
-            ? parsed.data.defaultAmount ?? null
+            ? (parsed.data.defaultAmount ?? null)
             : null,
         defaultPercent:
           parsed.data.amountMode === DeductionAmountMode.PERCENT
-            ? parsed.data.defaultPercent ?? null
+            ? (parsed.data.defaultPercent ?? null)
             : null,
         isActive: parsed.data.isActive,
         createdByUserId: session.userId ?? null,
@@ -610,9 +615,11 @@ export async function createDeductionType(
   }
 }
 
-export async function updateDeductionType(input: {
-  id: string;
-} & DeductionTypePayload): Promise<{
+export async function updateDeductionType(
+  input: {
+    id: string;
+  } & DeductionTypePayload,
+): Promise<{
   success: boolean;
   data?: DeductionTypeRow;
   error?: string;
@@ -634,7 +641,10 @@ export async function updateDeductionType(input: {
     const parsed = deductionTypeSchema.safeParse(input);
     if (!parsed.success) {
       const message = parsed.error.issues[0]?.message;
-      return { success: false, error: message || "Invalid deduction type data" };
+      return {
+        success: false,
+        error: message || "Invalid deduction type data",
+      };
     }
 
     const existing = await db.deductionType.findUnique({
@@ -680,11 +690,11 @@ export async function updateDeductionType(input: {
         frequency: parsed.data.frequency,
         defaultAmount:
           parsed.data.amountMode === DeductionAmountMode.FIXED
-            ? parsed.data.defaultAmount ?? null
+            ? (parsed.data.defaultAmount ?? null)
             : null,
         defaultPercent:
           parsed.data.amountMode === DeductionAmountMode.PERCENT
-            ? parsed.data.defaultPercent ?? null
+            ? (parsed.data.defaultPercent ?? null)
             : null,
         isActive: parsed.data.isActive,
         updatedByUserId: session.userId ?? null,
@@ -714,8 +724,14 @@ export async function listEmployeesForDeduction(input?: {
 }> {
   try {
     const session = await getSession();
-    if (!session?.isLoggedIn || !canSearchEmployeesForDeductions(session.role)) {
-      return { success: false, error: "You are not allowed to load employees." };
+    if (
+      !session?.isLoggedIn ||
+      !canSearchEmployeesForDeductions(session.role)
+    ) {
+      return {
+        success: false,
+        error: "You are not allowed to load employees.",
+      };
     }
 
     const query = typeof input?.query === "string" ? input.query.trim() : "";
@@ -810,7 +826,6 @@ export async function listEmployeeDeductionAssignments(input?: {
       typeof input?.assignmentId === "string" && input.assignmentId.trim()
         ? input.assignmentId.trim()
         : null;
-    const directoryMode = input?.directoryMode === true;
     const limitRaw =
       typeof input?.limit === "number" && Number.isFinite(input.limit)
         ? Math.floor(input.limit)
@@ -825,14 +840,10 @@ export async function listEmployeeDeductionAssignments(input?: {
       }
       where.employee = { userId: session.userId };
       where.workflowStatus = EmployeeDeductionWorkflowStatus.APPROVED;
-    } else if (session.role === Roles.Clerk) {
-      if (!session.userId) {
-        return { success: false, error: "Clerk session is invalid." };
-      }
-      if (!directoryMode && !employeeId) {
-        where.assignedByUserId = session.userId;
-      }
-    } else if (!canViewEmployeeDeductionDirectory(session.role) && !canReviewDeductionAssignments(session.role)) {
+    } else if (
+      !canViewEmployeeDeductionDirectory(session.role) &&
+      !canReviewDeductionAssignments(session.role)
+    ) {
       return {
         success: false,
         error: "You are not allowed to view deduction assignments.",
@@ -935,19 +946,7 @@ export async function getEmployeeDeductionAssignment(
       return { success: false, error: "Deduction assignment not found." };
     }
 
-    if (session.role === Roles.Clerk) {
-      if (
-        !session.userId ||
-        row.assignedByUserId !== session.userId ||
-        (row.workflowStatus !== EmployeeDeductionWorkflowStatus.DRAFT &&
-          row.workflowStatus !== EmployeeDeductionWorkflowStatus.REJECTED)
-      ) {
-        return {
-          success: false,
-          error: "You are not allowed to edit this deduction draft.",
-        };
-      }
-    } else if (canCreateApprovedDeductionAssignments(session.role)) {
+    if (canCreateApprovedDeductionAssignments(session.role)) {
       if (row.workflowStatus !== EmployeeDeductionWorkflowStatus.APPROVED) {
         return {
           success: false,
@@ -979,8 +978,7 @@ export async function createEmployeeDeductionAssignment(
     const session = await getSession();
     if (
       !session?.isLoggedIn ||
-      (!canCreateApprovedDeductionAssignments(session.role) &&
-        !canCreateDeductionDrafts(session.role))
+      !canCreateApprovedDeductionAssignments(session.role)
     ) {
       return {
         success: false,
@@ -1047,7 +1045,6 @@ export async function createEmployeeDeductionAssignment(
       return { success: false, error: duplicateAssignmentMessage };
     }
 
-    const isDirectApproval = canCreateApprovedDeductionAssignments(session.role);
     const now = new Date();
     const created = await db.employeeDeductionAssignment.create({
       data: {
@@ -1060,16 +1057,14 @@ export async function createEmployeeDeductionAssignment(
         installmentTotal: normalized.installmentTotal ?? null,
         installmentPerPayroll: normalized.installmentPerPayroll ?? null,
         remainingBalance: normalized.remainingBalance ?? null,
-        workflowStatus: isDirectApproval
-          ? EmployeeDeductionWorkflowStatus.APPROVED
-          : EmployeeDeductionWorkflowStatus.DRAFT,
+        workflowStatus: EmployeeDeductionWorkflowStatus.APPROVED,
         status: parsed.data.status ?? EmployeeDeductionAssignmentStatus.ACTIVE,
         reason: parsed.data.reason ?? null,
         assignedByUserId: session.userId ?? null,
         updatedByUserId: session.userId ?? null,
         submittedAt: now,
-        reviewedByUserId: isDirectApproval ? session.userId ?? null : null,
-        reviewedAt: isDirectApproval ? now : null,
+        reviewedByUserId: session.userId ?? null,
+        reviewedAt: now,
         reviewRemarks: null,
       },
       include: {
@@ -1162,23 +1157,12 @@ export async function updateEmployeeDeductionAssignment(
       return { success: false, error: "Deduction assignment not found." };
     }
 
-    const isClerkEdit = session.role === Roles.Clerk;
     const isManagerEdit = canCreateApprovedDeductionAssignments(session.role);
 
-    if (isClerkEdit) {
+    if (isManagerEdit) {
       if (
-        !session.userId ||
-        existing.assignedByUserId !== session.userId ||
-        (existing.workflowStatus !== EmployeeDeductionWorkflowStatus.DRAFT &&
-          existing.workflowStatus !== EmployeeDeductionWorkflowStatus.REJECTED)
+        existing.workflowStatus !== EmployeeDeductionWorkflowStatus.APPROVED
       ) {
-        return {
-          success: false,
-          error: "You are not allowed to edit this deduction draft.",
-        };
-      }
-    } else if (isManagerEdit) {
-      if (existing.workflowStatus !== EmployeeDeductionWorkflowStatus.APPROVED) {
         return {
           success: false,
           error: "Only approved deduction assignments can be edited here.",
@@ -1256,13 +1240,11 @@ export async function updateEmployeeDeductionAssignment(
         installmentTotal: normalized.installmentTotal ?? null,
         installmentPerPayroll: normalized.installmentPerPayroll ?? null,
         remainingBalance: normalized.remainingBalance ?? null,
-        workflowStatus: isClerkEdit
-          ? EmployeeDeductionWorkflowStatus.DRAFT
-          : existing.workflowStatus,
+        workflowStatus: existing.workflowStatus,
         status: parsed.data.status ?? existing.status,
         reason: parsed.data.reason ?? null,
         updatedByUserId: session.userId ?? null,
-        submittedAt: isClerkEdit ? new Date() : existing.submittedAt,
+        submittedAt: existing.submittedAt,
       },
       include: {
         employee: {
@@ -1366,7 +1348,10 @@ export async function reviewEmployeeDeductionAssignment(input: {
       return { success: false, error: "Deduction draft not found." };
     }
     if (existing.workflowStatus !== EmployeeDeductionWorkflowStatus.DRAFT) {
-      return { success: false, error: "Only deduction drafts can be reviewed." };
+      return {
+        success: false,
+        error: "Only deduction drafts can be reviewed.",
+      };
     }
 
     const reviewed = await db.employeeDeductionAssignment.update({

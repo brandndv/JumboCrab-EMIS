@@ -1,4 +1,4 @@
-import SupervisorViolationsPage from "@/components/dasboard/manage-violations/supervisor-violations-page";
+import SupervisorViolationsPage from "@/features/manage-violations/supervisor-violations-page";
 
 const ViolationsPage = () => {
   return <SupervisorViolationsPage />;

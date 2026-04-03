@@ -92,13 +92,10 @@ export function useSession() {
       get isGeneralManager() {
         return session?.user.role === "generalManager";
       },
-      get isClerk() {
-        return session?.user.role === "clerk";
-      },
       get isSupervisor() {
         return session?.user.role === "supervisor";
       },
     }),
-    [session, loading, error]
+    [session, loading, error],
   );
 }

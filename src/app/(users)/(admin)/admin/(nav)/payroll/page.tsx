@@ -1,4 +1,4 @@
-import PayrollHomePage from "@/components/dasboard/manage-payroll/payroll-home-page";
+import PayrollHomePage from "@/features/manage-payroll/payroll-home-page";
 
 const AdminPayrollPage = () => {
   return <PayrollHomePage />;

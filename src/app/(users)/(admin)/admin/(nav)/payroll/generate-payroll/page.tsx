@@ -1,7 +1,7 @@
-import PayrollGeneratePage from "@/components/dasboard/manage-payroll/payroll-generate-page";
+import { redirect } from "next/navigation";
 
 const AdminGeneratePayrollPage = () => {
-  return <PayrollGeneratePage />;
+  redirect("/admin/payroll/payroll-history");
 };
 
 export default AdminGeneratePayrollPage;

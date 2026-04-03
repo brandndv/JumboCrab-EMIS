@@ -150,7 +150,9 @@ export async function upsertEmployeeContribution(input: UpsertPayload) {
 
     // 5. Revalidate cache so the UI updates immediately
     revalidatePath("/admin/contributions");
+    revalidatePath("/manager/contributions");
     revalidatePath(`/admin/employees/${data.employeeId}/view`);
+    revalidatePath(`/manager/employees/${data.employeeId}/view`);
 
     return { success: true, data: serializeContribution(record) };
   } catch (error) {
@@ -209,11 +211,6 @@ export async function listContributionDirectory() {
       const philHealthEe = serializedContribution?.philHealthEe ?? 0;
       const pagIbigEe = serializedContribution?.pagIbigEe ?? 0;
       const withholdingEe = serializedContribution?.withholdingEe ?? 0;
-      const sssEr = serializedContribution?.sssEr ?? 0;
-      const philHealthEr = serializedContribution?.philHealthEr ?? 0;
-      const pagIbigEr = serializedContribution?.pagIbigEr ?? 0;
-      const withholdingEr = serializedContribution?.withholdingEr ?? 0;
-
       // Calculate total employee contribution
       const eeTotal = sssEe + philHealthEe + pagIbigEe + withholdingEe;
 

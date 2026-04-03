@@ -1,4 +1,4 @@
-import EmployeeScheduleHistory from "@/components/dasboard/manage-attendance/employeeschedulehistory";
+import EmployeeScheduleHistory from "@/features/manage-attendance/employeeschedulehistory";
 import React from "react";
 
 const EmployeeHistoryPage = () => {

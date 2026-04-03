@@ -1,6 +1,6 @@
 "use client";
 
-import { ScheduleBoard } from "@/components/dasboard/manage-attendance/schedule-board";
+import { ScheduleBoard } from "@/features/manage-attendance/schedule-board";
 
 export default function AttendancePatternsPage() {
   return (

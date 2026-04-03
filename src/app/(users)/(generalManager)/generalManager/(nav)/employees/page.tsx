@@ -1,7 +1,7 @@
 "use client";
 
-import EmployeesPageContent from "@/components/dasboard/manage-empoyees/employees-page-content";
-import EmployeesProvider from "@/components/dasboard/manage-empoyees/employees-provider";
+import EmployeesPageContent from "@/features/manage-employees/employees-page-content";
+import EmployeesProvider from "@/features/manage-employees/employees-provider";
 
 export default function EmployeesPage() {
   return (

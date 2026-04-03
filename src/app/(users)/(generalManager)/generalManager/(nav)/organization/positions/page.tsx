@@ -1,7 +1,7 @@
 "use client";
 
-import { PositionTable } from "@/components/dasboard/manage-organization/position-table";
-import { PositionView } from "@/components/dasboard/manage-organization/position-view";
+import { PositionTable } from "@/features/manage-organization/position-table";
+import { PositionView } from "@/features/manage-organization/position-view";
 
 export default function PositionsPage() {
   return (

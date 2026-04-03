@@ -1,7 +1,7 @@
 "use client";
 
-import { DepartmentTable } from "@/components/dasboard/manage-organization/department-table";
-import { DepartmentView } from "@/components/dasboard/manage-organization/department-view";
+import { DepartmentTable } from "@/features/manage-organization/department-table";
+import { DepartmentView } from "@/features/manage-organization/department-view";
 
 export default function DepartmentsPage() {
   return (

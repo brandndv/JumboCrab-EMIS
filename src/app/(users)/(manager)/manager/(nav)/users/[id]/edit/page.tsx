@@ -31,7 +31,6 @@ const roles: string[] = [
   "generalManager",
   "manager",
   "supervisor",
-  "clerk",
   "employee",
 ];
 

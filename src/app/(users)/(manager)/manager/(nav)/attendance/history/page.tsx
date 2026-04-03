@@ -1,6 +1,6 @@
 "use client";
 
-import { AttendanceHistoryTable } from "@/components/dasboard/manage-attendance/attendance-table";
+import { AttendanceHistoryTable } from "@/features/manage-attendance/attendance-table";
 
 export default function AttendanceHistoryPage() {
   return (

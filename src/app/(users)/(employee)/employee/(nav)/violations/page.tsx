@@ -1,4 +1,4 @@
-import EmployeeViolationsPage from "@/components/dasboard/manage-violations/employee-violations-page";
+import EmployeeViolationsPage from "@/features/manage-violations/employee-violations-page";
 
 const ViolationsPage = () => {
   return <EmployeeViolationsPage />;

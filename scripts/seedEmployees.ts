@@ -120,7 +120,6 @@ async function seedUsers() {
     { username: "gm", email: "gm@demo.com", role: Roles.GeneralManager },
     { username: "manager", email: "manager@demo.com", role: Roles.Manager },
     { username: "supervisor", email: "supervisor@demo.com", role: Roles.Supervisor },
-    { username: "clerk", email: "clerk@demo.com", role: Roles.Clerk },
     { username: "emp1", email: "emp1@demo.com", role: Roles.Employee },
     { username: "emp2", email: "emp2@demo.com", role: Roles.Employee },
     { username: "emp3", email: "emp3@demo.com", role: Roles.Employee },

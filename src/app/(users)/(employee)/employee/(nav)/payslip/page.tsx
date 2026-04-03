@@ -1,4 +1,4 @@
-import PayrollPayslipsPage from "@/components/dasboard/manage-payroll/payroll-payslips-page";
+import PayrollPayslipsPage from "@/features/manage-payroll/payroll-payslips-page";
 
 const EmployeePayslipPage = () => {
   return <PayrollPayslipsPage />;

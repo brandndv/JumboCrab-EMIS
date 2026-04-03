@@ -1,4 +1,4 @@
-import EmployeeAttendance from "@/components/dasboard/manage-attendance/employee-attendance";
+import EmployeeAttendance from "@/features/manage-attendance/employee-attendance";
 
 const EmployeeAttendancePage = () => {
   return <EmployeeAttendance />;

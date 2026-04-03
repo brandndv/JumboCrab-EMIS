@@ -21,8 +21,6 @@ function toDbRole(role: Roles | string): Roles | null {
       return Roles.Manager;
     case "supervisor":
       return Roles.Supervisor;
-    case "clerk":
-      return Roles.Clerk;
     case "employee":
       return Roles.Employee;
     default:
@@ -65,6 +63,13 @@ export async function signInUser(input: {
       return {
         success: false,
         error: "Account is disabled. Contact an administrator.",
+      };
+    }
+
+    if (!normalizeRole(result.user.role)) {
+      return {
+        success: false,
+        error: "This account role is no longer supported. Contact an administrator.",
       };
     }
 
