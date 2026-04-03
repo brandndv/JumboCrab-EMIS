@@ -1,11 +1,11 @@
 "use client";
 
-import { DepartmentTable } from "@/components/dasboard/manage-organization/department-table";
-import { PositionTable } from "@/components/dasboard/manage-organization/position-table";
-import { StructureTable } from "@/components/dasboard/manage-organization/structure-table";
-import { DepartmentView } from "@/components/dasboard/manage-organization/department-view";
-import { PositionView } from "@/components/dasboard/manage-organization/position-view";
-import { SupervisorView } from "@/components/dasboard/manage-organization/supervisor-view";
+import { DepartmentTable } from "@/features/manage-organization/department-table";
+import { PositionTable } from "@/features/manage-organization/position-table";
+import { StructureTable } from "@/features/manage-organization/structure-table";
+import { DepartmentView } from "@/features/manage-organization/department-view";
+import { PositionView } from "@/features/manage-organization/position-view";
+import { SupervisorView } from "@/features/manage-organization/supervisor-view";
 
 export default function OrganizationPage() {
   return (

@@ -1,4 +1,4 @@
-import ManagerViolationsPage from "@/components/dasboard/manage-violations/manager-violations-page";
+import ManagerViolationsPage from "@/features/manage-violations/manager-violations-page";
 
 const ViolationsPage = () => {
   return <ManagerViolationsPage />;

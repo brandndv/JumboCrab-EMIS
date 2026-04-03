@@ -1,4 +1,4 @@
-import ViolationCreateForm from "@/components/dasboard/manage-violations/violation-create-form";
+import ViolationCreateForm from "@/features/manage-violations/violation-create-form";
 
 export default async function ViolationCreatePage({
   searchParams,

@@ -2,7 +2,7 @@
 
 import { notFound } from "next/navigation";
 import { getEmployeeById } from "@/actions/employees/employees-action";
-import EmployeeForm from "@/components/dasboard/manage-empoyees/employee-form";
+import EmployeeForm from "@/features/manage-employees/employee-form";
 import { useEffect, useState } from "react";
 import { Employee } from "@/lib/validations/employees";
 import { Button } from "@/components/ui/button";

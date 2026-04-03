@@ -1,4 +1,4 @@
-import DeductionAssignmentFormPage from "@/components/dasboard/manage-deductions/deduction-assignment-form-page";
+import DeductionAssignmentFormPage from "@/features/manage-deductions/deduction-assignment-form-page";
 
 export default function AdminDeductionAddPage() {
   return (

@@ -1,7 +1,7 @@
-import PayrollReviewPage from "@/components/dasboard/manage-payroll/payroll-review-page";
+import { redirect } from "next/navigation";
 
 const AdminReviewPayrollPage = () => {
-  return <PayrollReviewPage />;
+  redirect("/admin/payroll/payroll-history");
 };
 
 export default AdminReviewPayrollPage;

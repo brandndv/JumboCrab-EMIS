@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import Link from "next/link";
 import { getEmployeeById } from "@/actions/employees/employees-action";
-import EmployeeProfileTabs from "@/components/dasboard/manage-empoyees/employee-profile-tabs";
+import EmployeeProfileTabs from "@/features/manage-employees/employee-profile-tabs";
 
 export const dynamic = "force-dynamic";
 

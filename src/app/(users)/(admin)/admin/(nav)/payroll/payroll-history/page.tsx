@@ -1,4 +1,4 @@
-import PayrollHistoryPage from "@/components/dasboard/manage-payroll/payroll-history-page";
+import PayrollHistoryPage from "@/features/manage-payroll/payroll-history-page";
 
 const AdminPayrollHistoryPage = () => {
   return <PayrollHistoryPage />;

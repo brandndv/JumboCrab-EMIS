@@ -1,5 +1,5 @@
-import NavHeader from "@/components/dasboard/header-provider/header";
-import AppSidebar from "@/components/dasboard/sidebar-provider/app-sidebar";
+import NavHeader from "@/features/header-provider/header";
+import AppSidebar from "@/features/sidebar-provider/app-sidebar";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 export default function Layout({ children }: { children: React.ReactNode }) {

@@ -1,4 +1,4 @@
-import PayrollReviewPage from "@/components/dasboard/manage-payroll/payroll-review-page";
+import PayrollReviewPage from "@/features/manage-payroll/payroll-review-page";
 
 const ManagerReviewPayrollPage = () => {
   return <PayrollReviewPage />;

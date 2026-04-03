@@ -3,7 +3,6 @@ export const APP_ROLES = [
   "generalManager",
   "manager",
   "supervisor",
-  "clerk",
   "employee",
 ] as const;
 
@@ -28,7 +27,6 @@ const ROLE_BASE_PATHS: Record<AppRole, string> = {
   generalManager: "/generalManager",
   manager: "/manager",
   supervisor: "/supervisor",
-  clerk: "/clerk",
   employee: "/employee",
 };
 
@@ -110,7 +108,6 @@ const ROLE_NORMALIZATION: Record<string, AppRole> = {
   generalmanager: "generalManager",
   manager: "manager",
   supervisor: "supervisor",
-  clerk: "clerk",
   employee: "employee",
 };
 

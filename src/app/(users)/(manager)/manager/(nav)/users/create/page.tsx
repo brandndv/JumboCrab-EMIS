@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import CreateUserForm from "@/components/dasboard/manage-users/users-create-form";
+import CreateUserForm from "@/features/manage-users/users-create-form";
 
 function ManagerUserCreateContent() {
   const searchParams = useSearchParams();

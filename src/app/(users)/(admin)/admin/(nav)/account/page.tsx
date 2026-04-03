@@ -1,4 +1,4 @@
-import MyAccountPage from "@/components/dasboard/account/my-account";
+import MyAccountPage from "@/features/account/my-account";
 
 const AdminAccount = () => {
   return <MyAccountPage />;

@@ -1,4 +1,4 @@
-import ViolationsPageContent from "@/components/dasboard/manage-violations/violations-page-content";
+import ViolationsPageContent from "@/features/manage-violations/violations-page-content";
 
 const ViolationsPage = () => {
   return <ViolationsPageContent />;

@@ -1,7 +1,7 @@
 "use client";
 
-import { StructureTable } from "@/components/dasboard/manage-organization/structure-table";
-import { SupervisorView } from "@/components/dasboard/manage-organization/supervisor-view";
+import { StructureTable } from "@/features/manage-organization/structure-table";
+import { SupervisorView } from "@/features/manage-organization/supervisor-view";
 
 export default function StructurePage() {
   return (

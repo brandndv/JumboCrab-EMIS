@@ -1,6 +1,6 @@
 "use client";
 
-import { AttendanceLocks } from "@/components/dasboard/manage-attendance/attendance-locks";
+import { AttendanceLocks } from "@/features/manage-attendance/attendance-locks";
 
 export default function AttendanceLocksPage() {
   return (

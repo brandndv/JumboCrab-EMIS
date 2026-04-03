@@ -211,7 +211,6 @@ async function ensureUsers() {
     { username: "gm", email: "gm@demo.com", role: Roles.GeneralManager },
     { username: "manager", email: "manager@demo.com", role: Roles.Manager },
     { username: "supervisor", email: "supervisor@demo.com", role: Roles.Supervisor },
-    { username: "clerk", email: "clerk@demo.com", role: Roles.Clerk },
   ];
 
   const employeeUsers = Array.from({ length: 10 }, (_, index) => {
@@ -1048,7 +1047,6 @@ async function seedPayroll(
     existingRunByPeriod.set(key, run);
   });
 
-  const clerkUserId = users["clerk"]?.userId ?? users["admin"]?.userId ?? null;
   const managerUserId = users["manager"]?.userId ?? users["admin"]?.userId ?? null;
   const gmUserId = users["gm"]?.userId ?? users["admin"]?.userId ?? null;
 
@@ -1090,7 +1088,7 @@ async function seedPayroll(
           managerReviewRemarks: "Approved (seeded)",
           gmReviewRemarks: "Approved (seeded)",
           notes: "Auto-seeded bimonthly payroll run",
-          createdByUserId: clerkUserId,
+          createdByUserId: managerUserId,
           managerReviewedByUserId: managerUserId,
           gmReviewedByUserId: gmUserId,
           releasedByUserId: gmUserId,
@@ -1123,7 +1121,7 @@ async function seedPayroll(
           managerReviewRemarks: "Approved (seeded)",
           gmReviewRemarks: "Approved (seeded)",
           notes: "Auto-seeded bimonthly payroll run",
-          createdByUserId: clerkUserId,
+          createdByUserId: managerUserId,
           managerReviewedByUserId: managerUserId,
           gmReviewedByUserId: gmUserId,
           releasedByUserId: gmUserId,
@@ -1407,8 +1405,8 @@ async function seedPayroll(
           totalDeductions,
           netPay,
           status: PayrollEmployeeStatus.RELEASED,
-          createdByUserId: clerkUserId,
-          updatedByUserId: clerkUserId,
+          createdByUserId: managerUserId,
+          updatedByUserId: managerUserId,
         },
       });
 
@@ -1435,7 +1433,7 @@ async function seedPayroll(
             referenceType: line.referenceType,
             referenceId: line.referenceId,
             remarks: line.remarks,
-            createdByUserId: clerkUserId,
+            createdByUserId: managerUserId,
           })),
         });
       }
@@ -1453,7 +1451,7 @@ async function seedPayroll(
             referenceType: line.referenceType,
             referenceId: line.referenceId,
             remarks: line.remarks,
-            createdByUserId: clerkUserId,
+            createdByUserId: managerUserId,
           })),
         });
       }

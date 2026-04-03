@@ -1,4 +1,4 @@
-import SignInForm from "@/components/dasboard/auth/sign-in";
+import SignInForm from "@/features/auth/sign-in";
 
 const SingInPage = () => {
   return (

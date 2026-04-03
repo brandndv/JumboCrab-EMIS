@@ -111,7 +111,7 @@ export default function ContributionEditPage({
       if (!result.success) {
         throw new Error(result.error || "Failed to save contribution");
       }
-      router.push("/admin/contributions");
+      router.push("/manager/contributions");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save contribution");
     } finally {
@@ -138,7 +138,7 @@ export default function ContributionEditPage({
           </p>
         </div>
         <Button asChild variant="outline">
-          <Link href="/admin/contributions">Back to directory</Link>
+          <Link href="/manager/contributions">Back to directory</Link>
         </Button>
       </div>
 
@@ -227,7 +227,7 @@ export default function ContributionEditPage({
             </div>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => router.push("/admin/contributions")}>
+            <Button variant="outline" onClick={() => router.push("/manager/contributions")}>
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={saving || loading} className="gap-2">

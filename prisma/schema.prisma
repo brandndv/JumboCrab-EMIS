@@ -1071,6 +1071,5 @@ enum Roles {
   GeneralManager
   Manager
   Supervisor
-  Clerk
   Employee
 }
