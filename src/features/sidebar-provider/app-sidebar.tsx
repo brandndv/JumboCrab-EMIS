@@ -11,16 +11,21 @@ import HeaderSidebar from "./header-sidebar";
 
 import { FooterSidebar } from "./footer-sidebar";
 import NavSidebar from "./nav-sidebar";
-import { useRole } from "@/hooks/use-role";
 import { useSession } from "@/hooks/use-session";
+import { AppSidebarLoadingState } from "@/components/loading/loading-states";
 
 const AppSidebar = () => {
-  const { role, isLoading } = useRole();
-  const { employee, user } = useSession();
+  const { employee, user, loading, error } = useSession();
+  const role = user?.role ?? null;
 
-  if (isLoading) {
-    return <div>Loading sidebar...</div>;
+  if (loading) {
+    return <AppSidebarLoadingState />;
   }
+
+  if (error || !user || !role) {
+    return null;
+  }
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -45,7 +50,7 @@ const AppSidebar = () => {
                 : "User",
             email: user?.email || "",
             avatar: employee?.img || null,
-            role: role,
+            role,
           }}
         />
       </SidebarFooter>

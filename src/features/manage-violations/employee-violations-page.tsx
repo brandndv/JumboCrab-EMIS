@@ -12,6 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  InlineLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
+import {
   Table,
   TableBody,
   TableCell,
@@ -205,9 +209,11 @@ const EmployeeViolationsPage = () => {
         </CardHeader>
         <CardContent>
           {strikeLoading ? (
-            <p className="text-sm text-muted-foreground">
-              Loading strike progress...
-            </p>
+            <InlineLoadingState
+              label="Loading strike progress"
+              lines={2}
+              className="border-border/60 bg-muted/10"
+            />
           ) : strikeError ? (
             <p className="text-sm text-destructive">{strikeError}</p>
           ) : strikeProgress.length === 0 ? (
@@ -272,8 +278,12 @@ const EmployeeViolationsPage = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      Loading your violations...
+                    <TableCell colSpan={6} className="p-3">
+                      <TableLoadingState
+                        label="Loading your violations"
+                        columns={6}
+                        rows={3}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}

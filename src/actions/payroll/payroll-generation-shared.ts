@@ -22,7 +22,10 @@ import {
   toNumberOrNull,
   toPercent,
 } from "@/lib/payroll/helpers";
-import { OVERTIME_RATE_MULTIPLIER } from "./payroll-shared";
+import {
+  OVERTIME_RATE_MULTIPLIER,
+  UNDERTIME_DEDUCTION_MULTIPLIER,
+} from "./payroll-shared";
 
 export type PayrollGenerationEmployee = Prisma.EmployeeGetPayload<{
   include: {
@@ -277,10 +280,11 @@ export const buildEmployeePayrollDraft = (input: {
     const undertimeDeductionAmount =
       isPaidLeaveRow || isZeroWorkRow || scheduledPaidMinutes == null
         ? 0
-        : (computePayableAmountFromNetMinutes({
+        : ((computePayableAmountFromNetMinutes({
             netWorkedMinutes: undertimeMinutes,
             ratePerMinute,
-          }) ?? 0);
+          }) ?? 0) *
+            UNDERTIME_DEDUCTION_MULTIPLIER);
 
     const approvedOvertime = Math.max(0, row.overtimeMinutesApproved ?? 0);
     const rawOvertime = Math.max(0, row.overtimeMinutesRaw ?? 0);
@@ -379,7 +383,7 @@ export const buildEmployeePayrollDraft = (input: {
       isManual: false,
       referenceType: PayrollReferenceType.ATTENDANCE,
       referenceId: payrollId,
-      remarks: "Computed from attendance undertime minutes (grace-aware)",
+      remarks: `Computed from attendance undertime minutes (${UNDERTIME_DEDUCTION_MULTIPLIER}x, grace-aware)`,
     });
   }
 

@@ -10,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
@@ -385,9 +386,7 @@ const PayrollReviewPage = () => {
         </CardHeader>
         <CardContent className="space-y-3">
           {loadingRuns ? (
-            <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-              Loading queue...
-            </div>
+            <InlineLoadingState label="Loading payroll queue" lines={3} />
           ) : null}
           {!loadingRuns && runsError ? (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">

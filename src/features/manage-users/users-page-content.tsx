@@ -8,6 +8,8 @@ import { usePathname, useRouter } from "next/navigation"; // Note: Use 'next/nav
 import { Search } from "lucide-react";
 import { UnassignedEmployees } from "@/features/manage-users/unassigned-employees";
 import { deleteUser, updateUser } from "@/actions/users/users-action";
+import { UsersLoadingState } from "@/features/manage-users/users-loading-state";
+import type { UserWithEmployee } from "@/lib/validations/users";
 
 export default function UsersPageContent() {
   const { users, loading, error, refreshUsers } = useUsers();
@@ -18,7 +20,7 @@ export default function UsersPageContent() {
   const pathname = usePathname();
   const basePath = pathname.replace(/\/$/, "");
 
-  function handleView(user: any) {
+  function handleView(user: UserWithEmployee) {
     console.log("View user", user.userId);
     if (!user.userId) {
       console.error("No User ID provided for view");
@@ -28,12 +30,12 @@ export default function UsersPageContent() {
     router.push(`${basePath}/${user.userId}/view`);
   }
 
-  const handleEdit = (user: any) => {
+  const handleEdit = (user: UserWithEmployee) => {
     if (!user?.userId) return;
     router.push(`${basePath}/${user.userId}/edit`);
   };
 
-  const toggleDisable = async (user: any, isDisabled: boolean) => {
+  const toggleDisable = async (user: UserWithEmployee, isDisabled: boolean) => {
     if (!user?.userId) return;
     const confirmed = window.confirm(
       `${isDisabled ? "Disable" : "Enable"} ${user.username}?`,
@@ -51,10 +53,10 @@ export default function UsersPageContent() {
     }
   };
 
-  const handleDisable = (user: any) => toggleDisable(user, true);
-  const handleEnable = (user: any) => toggleDisable(user, false);
+  const handleDisable = (user: UserWithEmployee) => toggleDisable(user, true);
+  const handleEnable = (user: UserWithEmployee) => toggleDisable(user, false);
 
-  const handleDelete = async (user: any) => {
+  const handleDelete = async (user: UserWithEmployee) => {
     if (!user?.userId) return;
     const confirmed = window.confirm(
       `Delete ${user.username}? This cannot be undone.`,
@@ -72,10 +74,10 @@ export default function UsersPageContent() {
     }
   };
 
-  if (loading) return <div>Loading users...</div>;
+  if (loading) return <UsersLoadingState />;
   if (error) return <div className="text-red-500">Error: {error}</div>;
 
-  const matchesTerm = (user: any, term: string) => {
+  const matchesTerm = (user: UserWithEmployee, term: string) => {
     if (!term.trim()) return true;
     const value = term.toLowerCase();
     const fullName = `${user.employee?.firstName ?? ""} ${
@@ -86,12 +88,7 @@ export default function UsersPageContent() {
       user.email?.toLowerCase().includes(value) ||
       fullName.includes(value) ||
       user.employee?.employeeCode?.toLowerCase().includes(value) ||
-      (typeof user.employee?.position === "string"
-        ? user.employee?.position
-        : user.employee?.position?.name
-      )
-        ?.toLowerCase?.()
-        .includes(value)
+      user.employee?.position?.toLowerCase().includes(value)
     );
   };
 

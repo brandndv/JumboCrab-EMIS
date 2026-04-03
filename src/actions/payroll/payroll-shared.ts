@@ -24,6 +24,7 @@ import type {
 } from "@/types/payroll";
 
 export const OVERTIME_RATE_MULTIPLIER = 1.25;
+export const UNDERTIME_DEDUCTION_MULTIPLIER = 1;
 
 const PAYROLL_ROUTE_PREFIXES = [
   "/admin/payroll",

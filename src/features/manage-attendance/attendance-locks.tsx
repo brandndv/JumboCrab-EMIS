@@ -21,6 +21,7 @@ import {
   setAttendanceLockState,
 } from "@/actions/attendance/attendance-action";
 import { Lock, RefreshCcw, Search, Unlock } from "lucide-react";
+import { TableLoadingState } from "@/components/loading/loading-states";
 
 type BimonthlyPeriod = "first" | "second";
 
@@ -397,8 +398,12 @@ export function AttendanceLocks() {
               <TableBody>
                 {summaryLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
-                      Loading lock summary...
+                    <TableCell colSpan={6} className="p-3">
+                      <TableLoadingState
+                        label="Loading lock summary"
+                        columns={6}
+                        rows={3}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : summaryRows.length === 0 ? (
@@ -600,8 +605,12 @@ export function AttendanceLocks() {
               <TableBody>
                 {employeeRowsLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
-                      Loading employee rows...
+                    <TableCell colSpan={6} className="p-3">
+                      <TableLoadingState
+                        label="Loading employee rows"
+                        columns={6}
+                        rows={3}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : !selectedEmployeeId ? (

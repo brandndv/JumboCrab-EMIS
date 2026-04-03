@@ -8,6 +8,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type {
@@ -392,9 +393,7 @@ const PayrollHistoryPage = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           {loading ? (
-            <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-              Loading payroll history...
-            </div>
+            <InlineLoadingState label="Loading payroll history" lines={3} />
           ) : null}
           {!loading && error ? (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">

@@ -21,6 +21,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import { ContributionRow } from "@/hooks/use-contributions";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, IdCard, Pencil } from "lucide-react";
@@ -45,6 +46,33 @@ type ContributionFormState = {
   withholdingEr: number;
   isWithholdingActive: boolean;
 };
+
+type ContributionAgencyKey = "sss" | "philHealth" | "pagIbig" | "withholding";
+type ContributionAmountKey = `${ContributionAgencyKey}Ee` | `${ContributionAgencyKey}Er`;
+type ContributionActiveKey =
+  | "isSssActive"
+  | "isPhilHealthActive"
+  | "isPagIbigActive"
+  | "isWithholdingActive";
+
+const contributionEditorSections: {
+  label: string;
+  key: ContributionAgencyKey;
+  activeKey: ContributionActiveKey;
+}[] = [
+  { label: "SSS", key: "sss", activeKey: "isSssActive" },
+  {
+    label: "PhilHealth",
+    key: "philHealth",
+    activeKey: "isPhilHealthActive",
+  },
+  { label: "Pag-IBIG", key: "pagIbig", activeKey: "isPagIbigActive" },
+  {
+    label: "Tax",
+    key: "withholding",
+    activeKey: "isWithholdingActive",
+  },
+];
 
 function formatAmount(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -95,11 +123,7 @@ export function ContributionsTable({
   );
 
   if (loading) {
-    return (
-      <div className="rounded-2xl border border-border/70 bg-card/70 p-6 text-sm text-muted-foreground">
-        Loading contributions...
-      </div>
-    );
+    return <InlineLoadingState label="Loading contributions" lines={3} />;
   }
 
   if (!sortedRows.length) {
@@ -330,13 +354,13 @@ export function ContributionsTable({
                           </p>
                         </DialogHeader>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          {[
-                            ["SSS", "sss", "isSssActive"],
-                            ["PhilHealth", "philHealth", "isPhilHealthActive"],
-                            ["Pag-IBIG", "pagIbig", "isPagIbigActive"],
-                            ["Tax", "withholding", "isWithholdingActive"],
-                          ].map(([label, key, activeKey]) => (
-                            <div key={key} className="space-y-2">
+                          {contributionEditorSections.map(
+                            ({ label, key, activeKey }) => {
+                              const eeKey = `${key}Ee` as ContributionAmountKey;
+                              const erKey = `${key}Er` as ContributionAmountKey;
+
+                              return (
+                                <div key={key} className="space-y-2">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="text-sm font-medium capitalize">
                                   {label}
@@ -363,17 +387,13 @@ export function ContributionsTable({
                                   </p>
                                   <Input
                                     type="number"
-                                    value={
-                                      formState
-                                        ? (formState as any)[`${key}Ee`] ?? 0
-                                        : 0
-                                    }
+                                    value={formState ? formState[eeKey] ?? 0 : 0}
                                     onChange={(e) =>
                                       setFormState((prev) =>
                                         prev
                                           ? {
                                               ...prev,
-                                              [`${key}Ee`]:
+                                              [eeKey]:
                                                 e.target.value === ""
                                                   ? 0
                                                   : Number(e.target.value) || 0,
@@ -390,17 +410,13 @@ export function ContributionsTable({
                                   </p>
                                   <Input
                                     type="number"
-                                    value={
-                                      formState
-                                        ? (formState as any)[`${key}Er`] ?? 0
-                                        : 0
-                                    }
+                                    value={formState ? formState[erKey] ?? 0 : 0}
                                     onChange={(e) =>
                                       setFormState((prev) =>
                                         prev
                                           ? {
                                               ...prev,
-                                              [`${key}Er`]:
+                                              [erKey]:
                                                 e.target.value === ""
                                                   ? 0
                                                   : Number(e.target.value) || 0,
@@ -416,13 +432,7 @@ export function ContributionsTable({
                                 <input
                                   type="checkbox"
                                   className="h-4 w-4 rounded border-muted"
-                                  checked={
-                                    formState
-                                      ? ((formState as any)[
-                                          activeKey
-                                        ] as boolean) ?? true
-                                      : true
-                                  }
+                                  checked={formState ? formState[activeKey] ?? true : true}
                                   onChange={(e) =>
                                     setFormState((prev) =>
                                       prev
@@ -440,8 +450,10 @@ export function ContributionsTable({
                                 EE shows in directory; ER is stored for admin
                                 use. Disable to exclude this agency.
                               </p>
-                            </div>
-                          ))}
+                                </div>
+                              );
+                            },
+                          )}
                         </div>
                         {error && (
                           <p className="text-sm text-destructive">{error}</p>

@@ -33,6 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import {
   Dialog,
   DialogContent,
@@ -754,7 +755,7 @@ export default function EmployeeRequestsPage({
         <CardContent>
           {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading requests...</p>
+            <InlineLoadingState label="Loading requests" lines={3} />
           ) : null}
           {!loading && rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">

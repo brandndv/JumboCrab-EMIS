@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { Button } from "@/components/ui/button";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
 
 interface AddUsersEmployeeAccountProps {
   onAssign: (employee: Employee) => void;
@@ -46,7 +47,12 @@ const AddUsersEmployeeAccount = ({
   }, []);
 
   if (loading) {
-    return <div>Loading employees...</div>;
+    return (
+      <ModuleLoadingState
+        title="Unassigned Employees"
+        description="Loading employees without linked user accounts."
+      />
+    );
   }
 
   if (error) {

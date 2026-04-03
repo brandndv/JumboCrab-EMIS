@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TableLoadingState } from "@/components/loading/loading-states";
 
 type ViolationDefinitionRow = {
   violationId: string;
@@ -270,11 +271,12 @@ export default function ViolationsTable() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={5}
-                    className="text-sm text-muted-foreground"
-                  >
-                    Loading...
+                  <TableCell colSpan={5} className="p-3">
+                    <TableLoadingState
+                      label="Loading violation definitions"
+                      columns={5}
+                      rows={3}
+                    />
                   </TableCell>
                 </TableRow>
               ) : null}

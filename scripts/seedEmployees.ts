@@ -574,7 +574,7 @@ function buildStaffBlueprint() {
       "Cashier-clerk responsible for payroll encoding and receives a payroll-day allowance.",
     departmentName: "Cashier",
     positionName: "Cashier / Clerk",
-    userRole: Roles.Clerk,
+    userRole: Roles.Manager,
     supervisorUsername: "ops.manager",
   });
 
@@ -1365,8 +1365,7 @@ async function seedAttendance(
 
       const absenceModulo =
         employee.userRole === Roles.Manager ||
-        employee.userRole === Roles.Supervisor ||
-        employee.userRole === Roles.Clerk
+        employee.userRole === Roles.Supervisor
           ? 31
           : 19;
       const isAbsent =

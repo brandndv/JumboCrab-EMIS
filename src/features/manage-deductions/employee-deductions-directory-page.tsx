@@ -28,6 +28,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ModuleLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -64,14 +68,7 @@ export default function EmployeeDeductionsDirectoryPage({
   canManageAssignments = false,
 }: EmployeeDeductionsDirectoryPageProps) {
   return (
-    <Suspense
-      fallback={
-        <EmployeeDeductionsDirectoryFallback
-          rolePath={rolePath}
-          canManageAssignments={canManageAssignments}
-        />
-      }
-    >
+    <Suspense fallback={<EmployeeDeductionsDirectoryFallback />}>
       <EmployeeDeductionsDirectoryPageContent
         rolePath={rolePath}
         canManageAssignments={canManageAssignments}
@@ -80,32 +77,13 @@ export default function EmployeeDeductionsDirectoryPage({
   );
 }
 
-function EmployeeDeductionsDirectoryFallback({
-  rolePath,
-  canManageAssignments = false,
-}: EmployeeDeductionsDirectoryPageProps) {
+function EmployeeDeductionsDirectoryFallback() {
   return (
-    <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Employee Deductions</h1>
-          <p className="text-sm text-muted-foreground">
-            View current and past deduction assignments per employee.
-          </p>
-        </div>
-        {canManageAssignments ? (
-          <Button asChild type="button">
-            <Link href={`/${rolePath}/deductions/add`}>Assign Deduction</Link>
-          </Button>
-        ) : null}
-      </div>
-
-      <Card className="shadow-sm">
-        <CardContent className="py-10">
-          <p className="text-sm text-muted-foreground">Loading employee deductions...</p>
-        </CardContent>
-      </Card>
-    </div>
+    <ModuleLoadingState
+      title="Employee Deductions"
+      description="View current and past deduction assignments per employee."
+      cardCount={4}
+    />
   );
 }
 
@@ -435,11 +413,12 @@ function EmployeeDeductionsDirectoryPageContent({
               <TableBody>
                 {loadingRows ? (
                   <TableRow>
-                    <TableCell
-                      colSpan={selectedEmployee ? 8 : 9}
-                      className="text-muted-foreground"
-                    >
-                      Loading assignments...
+                    <TableCell colSpan={selectedEmployee ? 8 : 9} className="p-3">
+                      <TableLoadingState
+                        label="Loading assignments"
+                        columns={selectedEmployee ? 8 : 9}
+                        rows={4}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}

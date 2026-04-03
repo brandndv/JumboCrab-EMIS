@@ -37,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import { cn } from "@/lib/utils";
 import { openReportPdf } from "./report-pdf";
 import ReportsFilterBar from "./reports-filter-bar";
@@ -1064,9 +1065,11 @@ export default function ReportsPage({
         </CardHeader>
         <CardContent className="p-0">
           {isBusy ? (
-            <div className="m-6 rounded-xl border border-dashed px-6 py-10 text-sm text-muted-foreground">
-              Loading report...
-            </div>
+            <InlineLoadingState
+              label="Loading report"
+              lines={3}
+              className="m-6"
+            />
           ) : (
             <div className="overflow-x-auto px-1 pb-1">{renderTable()}</div>
           )}

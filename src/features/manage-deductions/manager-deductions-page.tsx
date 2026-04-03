@@ -20,6 +20,7 @@ import { DeductionProgress } from "@/features/manage-deductions/deduction-progre
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TableLoadingState } from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -200,8 +201,12 @@ export default function ManagerDeductionsPage({
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-muted-foreground">
-                      Loading drafts...
+                    <TableCell colSpan={9} className="p-3">
+                      <TableLoadingState
+                        label="Loading deduction drafts"
+                        columns={9}
+                        rows={3}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}

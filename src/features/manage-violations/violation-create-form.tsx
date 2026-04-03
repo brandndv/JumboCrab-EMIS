@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 
 const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -271,9 +272,11 @@ export default function ViolationCreateForm({
                 ) : null}
               </div>
               {employeesLoading ? (
-                <p className="text-xs text-muted-foreground">
-                  Loading employees...
-                </p>
+                <InlineLoadingState
+                  label="Loading employees"
+                  lines={2}
+                  className="border-border/60 bg-muted/10"
+                />
               ) : null}
               {selectedEmployee ? (
                 <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">

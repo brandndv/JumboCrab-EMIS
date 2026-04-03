@@ -19,6 +19,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  InlineLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 import { cn } from "@/lib/utils";
 import type {
   PayrollEmployeeAttendanceRow,
@@ -261,9 +265,11 @@ const PayrollRunDetailsCard = ({
         </CardHeader>
         <CardContent className="space-y-4">
           {loading ? (
-            <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
-              Loading details...
-            </div>
+            <InlineLoadingState
+              label="Loading details"
+              lines={3}
+              className="border-border/60 bg-muted/10"
+            />
           ) : null}
           {!loading && error ? (
             <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
@@ -616,9 +622,11 @@ const PayrollRunDetailsCard = ({
               {isAttendanceModal ? (
                 <>
                   {attendanceLoading ? (
-                    <p className="text-sm text-muted-foreground">
-                      Loading attendance rows...
-                    </p>
+                    <TableLoadingState
+                      label="Loading attendance rows"
+                      columns={5}
+                      rows={4}
+                    />
                   ) : null}
                   {!attendanceLoading && attendanceError ? (
                     <p className="text-sm text-destructive">{attendanceError}</p>

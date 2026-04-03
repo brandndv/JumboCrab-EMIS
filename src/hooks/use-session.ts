@@ -1,101 +1,184 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { Session } from "@/types/session";
 import { fetchSession } from "@/actions/auth/session-action";
 import { User } from "@/lib/validations/users";
 import { normalizeRole } from "@/lib/rbac";
+import { SessionContext } from "@/components/providers/session-provider";
+import type { RawSessionData } from "@/lib/session-shared";
 
-interface RawSession {
-  userId?: string;
-  id?: string;
-  username?: string;
-  email?: string;
-  role?: string;
-  employee?: Session["user"]["employee"];
-  isLoggedIn: boolean;
+type SharedSessionState = {
+  loaded: boolean;
+  session: Session | null;
+  error: Error | null;
+};
+
+let sharedSessionState: SharedSessionState = {
+  loaded: false,
+  session: null,
+  error: null,
+};
+
+let sharedSessionPromise: Promise<Session | null> | null = null;
+
+function toSessionData(rawSession: RawSessionData | null | undefined) {
+  if (!rawSession?.isLoggedIn || !(rawSession.userId || rawSession.id)) {
+    return null;
+  }
+
+  const role = normalizeRole(rawSession.role) ?? "employee";
+
+  const userData: User = {
+    userId: rawSession.userId || rawSession.id || "",
+    username: rawSession.username || "",
+    email: rawSession.email || "",
+    role,
+    isDisabled: false,
+  };
+
+  return {
+    user: {
+      ...userData,
+      employee: (rawSession.employee as Session["user"]["employee"]) ?? null,
+    },
+    expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+  } satisfies Session;
 }
 
-export function useSession() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+async function loadSharedSession() {
+  if (sharedSessionState.loaded) {
+    if (sharedSessionState.error) {
+      throw sharedSessionState.error;
+    }
+    return sharedSessionState.session;
+  }
 
-  useEffect(() => {
-    const loadSession = async () => {
-      try {
-        const result = await fetchSession();
-
-        if (!result.success || !result.session) {
+  if (!sharedSessionPromise) {
+    sharedSessionPromise = fetchSession()
+      .then((result) => {
+        if (!result.success) {
           throw new Error(result.error || "Failed to load session");
         }
 
-        const rawSession = result.session as unknown as RawSession;
+        const session = toSessionData(result.session as RawSessionData);
+        sharedSessionState = {
+          loaded: true,
+          session,
+          error: null,
+        };
+        return session;
+      })
+      .catch((error) => {
+        const sessionError =
+          error instanceof Error ? error : new Error("Unknown error");
+        sharedSessionState = {
+          loaded: true,
+          session: null,
+          error: sessionError,
+        };
+        throw sessionError;
+      })
+      .finally(() => {
+        sharedSessionPromise = null;
+      });
+  }
 
-        if (!rawSession.isLoggedIn || !(rawSession.userId || rawSession.id)) {
-          setSession(null);
+  return sharedSessionPromise;
+}
+
+export function useSession() {
+  const initialSession = useContext(SessionContext);
+  const hasProvidedSession = initialSession !== undefined;
+
+  const providedSession = useMemo(
+    () => (hasProvidedSession ? toSessionData(initialSession) : null),
+    [hasProvidedSession, initialSession],
+  );
+
+  const [session, setSession] = useState<Session | null>(
+    hasProvidedSession
+      ? providedSession
+      : sharedSessionState.loaded
+        ? sharedSessionState.session
+        : null,
+  );
+  const [loading, setLoading] = useState(
+    hasProvidedSession ? false : !sharedSessionState.loaded,
+  );
+  const [error, setError] = useState<Error | null>(
+    hasProvidedSession ? null : sharedSessionState.error,
+  );
+
+  useEffect(() => {
+    if (hasProvidedSession) {
+      setSession(providedSession);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let active = true;
+
+    const syncSession = async () => {
+      try {
+        const nextSession = await loadSharedSession();
+        if (!active) {
           return;
         }
-
-        const role = normalizeRole(rawSession.role) ?? "employee";
-
-        const userData: User = {
-          userId: rawSession.userId || rawSession.id || "",
-          username: rawSession.username || "",
-          email: rawSession.email || "",
-          role,
-          isDisabled: false,
-        };
-
-        const sessionData: Session = {
-          user: {
-            ...userData,
-            employee: rawSession.employee ?? null,
-          },
-          expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
-        };
-
-        setSession(sessionData);
+        setSession(nextSession);
+        setError(null);
       } catch (err) {
-        console.error("Session error:", err);
+        if (!active) {
+          return;
+        }
         setError(err instanceof Error ? err : new Error("Unknown error"));
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
-    loadSession();
-  }, []);
+    syncSession();
 
-  // Memoize the returned object to prevent unnecessary re-renders
+    return () => {
+      active = false;
+    };
+  }, [hasProvidedSession, providedSession]);
+
+  const resolvedSession = hasProvidedSession ? providedSession : session;
+  const resolvedLoading = hasProvidedSession ? false : loading;
+  const resolvedError = hasProvidedSession ? null : error;
+
   return useMemo(
     () => ({
-      session,
-      loading,
-      error,
+      session: resolvedSession,
+      loading: resolvedLoading,
+      error: resolvedError,
       // Helper getters
       get user() {
-        return session?.user;
+        return resolvedSession?.user;
       },
       get employee() {
-        return session?.user.employee;
+        return resolvedSession?.user.employee;
       },
       get isAdmin() {
-        return session?.user.role === "admin";
+        return resolvedSession?.user.role === "admin";
       },
       get isEmployee() {
-        return session?.user.role === "employee";
+        return resolvedSession?.user.role === "employee";
       },
       get isManager() {
-        return session?.user.role === "manager";
+        return resolvedSession?.user.role === "manager";
       },
       get isGeneralManager() {
-        return session?.user.role === "generalManager";
+        return resolvedSession?.user.role === "generalManager";
       },
       get isSupervisor() {
-        return session?.user.role === "supervisor";
+        return resolvedSession?.user.role === "supervisor";
       },
     }),
-    [session, loading, error],
+    [resolvedError, resolvedLoading, resolvedSession],
   );
 }

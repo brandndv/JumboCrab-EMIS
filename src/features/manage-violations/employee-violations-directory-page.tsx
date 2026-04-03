@@ -51,6 +51,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  InlineLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 
 type EmployeeViolationsDirectoryPageProps = {
   rolePath: "manager" | "generalManager";
@@ -781,7 +785,11 @@ const EmployeeViolationsDirectoryPage = ({
               : "Search and select one employee to continue."}
           </p>
           {employeesLoading ? (
-            <p className="text-xs text-muted-foreground">Loading employees...</p>
+            <InlineLoadingState
+              label="Loading employees"
+              lines={2}
+              className="border-border/60 bg-muted/10"
+            />
           ) : null}
         </CardHeader>
       </Card>
@@ -827,7 +835,11 @@ const EmployeeViolationsDirectoryPage = ({
             </CardHeader>
             <CardContent>
               {loadingStrikeProgress ? (
-                <p className="text-sm text-muted-foreground">Loading strike progress...</p>
+                <InlineLoadingState
+                  label="Loading strike progress"
+                  lines={2}
+                  className="border-border/60 bg-muted/10"
+                />
               ) : strikeProgressError ? (
                 <p className="text-sm text-destructive">{strikeProgressError}</p>
               ) : strikeProgress.length === 0 ? (
@@ -942,8 +954,12 @@ const EmployeeViolationsDirectoryPage = ({
                     <TableBody>
                       {loadingResetRows ? (
                         <TableRow>
-                          <TableCell colSpan={3} className="text-muted-foreground">
-                            Loading reset history...
+                          <TableCell colSpan={3} className="p-3">
+                            <TableLoadingState
+                              label="Loading reset history"
+                              columns={3}
+                              rows={3}
+                            />
                           </TableCell>
                         </TableRow>
                       ) : null}
@@ -985,7 +1001,8 @@ const EmployeeViolationsDirectoryPage = ({
         <CardHeader className="space-y-3">
           <CardTitle className="text-lg">Auto Reset Policies (Optional)</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Configure monthly/quarterly/yearly automatic resets. Use "Run Due Now" to trigger immediately.
+            Configure monthly/quarterly/yearly automatic resets. Use &ldquo;Run Due
+            Now&rdquo; to trigger immediately.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1140,8 +1157,12 @@ const EmployeeViolationsDirectoryPage = ({
               <TableBody>
                 {loadingPolicies ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      Loading policies...
+                    <TableCell colSpan={6} className="p-3">
+                      <TableLoadingState
+                        label="Loading policies"
+                        columns={6}
+                        rows={3}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -1467,8 +1488,12 @@ const EmployeeViolationsDirectoryPage = ({
               <TableBody>
                 {loadingViolations ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      Loading employee violations...
+                    <TableCell colSpan={5} className="p-3">
+                      <TableLoadingState
+                        label="Loading employee violations"
+                        columns={5}
+                        rows={4}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}

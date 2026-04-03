@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TableLoadingState } from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -178,8 +179,12 @@ const ManagerViolationsPage = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      Loading drafts...
+                    <TableCell colSpan={6} className="p-3">
+                      <TableLoadingState
+                        label="Loading violation drafts"
+                        columns={6}
+                        rows={3}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : null}

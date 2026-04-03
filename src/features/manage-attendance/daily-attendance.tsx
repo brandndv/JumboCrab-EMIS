@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TableLoadingState } from "@/components/loading/loading-states";
 
 const todayISO = () => new Date().toLocaleDateString("en-CA", { timeZone: TZ });
 const formatPunchLabel = (type: string) => {
@@ -287,9 +288,11 @@ export function DailyAttendance() {
             </div>
           </div>
           {loading ? (
-            <p className="text-sm text-muted-foreground">
-              Loading attendance...
-            </p>
+            <TableLoadingState
+              label="Loading attendance"
+              columns={10}
+              rows={4}
+            />
           ) : error ? (
             <p className="text-sm text-destructive">{error}</p>
           ) : filtered.length === 0 ? (

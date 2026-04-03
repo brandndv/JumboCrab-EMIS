@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableLoadingState } from "@/components/loading/loading-states";
 import { cn } from "@/lib/utils";
 import { RefreshCcw } from "lucide-react";
 import { ScheduleEntry, formatMinutes } from "@/types/schedule-types";
@@ -55,7 +56,11 @@ export function DailyScheduleCard({
       </CardHeader>
       <CardContent className="p-4 space-y-3">
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading schedule...</p>
+          <TableLoadingState
+            label="Loading schedule"
+            columns={4}
+            rows={4}
+          />
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : entries.length === 0 ? (

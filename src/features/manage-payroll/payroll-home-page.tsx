@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ComponentType } from "react";
 import { Calculator, ClipboardCheck, History, ReceiptText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
 import { useSession } from "@/hooks/use-session";
 
 type FeatureItem = {
@@ -69,7 +70,14 @@ const roleFeatureMap: Record<string, FeatureItem[]> = {
 const PayrollHomePage = () => {
   const { user, loading, error } = useSession();
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) {
+    return (
+      <ModuleLoadingState
+        title="Payroll"
+        description="Loading payroll tools, access scope, and release actions."
+      />
+    );
+  }
   if (error) return <div>Failed to load session</div>;
   if (!user) return <div>No session</div>;
 
