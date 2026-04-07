@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ContributionSchedule, PayrollFrequency } from "@prisma/client";
 
 // Treat empty strings as 0, enforce non-negative, keep simple upper bound to catch input mistakes.
 const moneyField = z
@@ -14,18 +15,40 @@ const moneyField = z
 
 export const employeeContributionSchema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
+  payrollFrequency: z.nativeEnum(PayrollFrequency).optional().default("BIMONTHLY"),
+  currencyCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(3, "Currency code must be at least 3 characters")
+    .max(8, "Currency code is too long")
+    .optional()
+    .default("PHP"),
   sssEe: moneyField,
   sssEr: moneyField,
   isSssActive: z.boolean().optional().default(true),
+  sssSchedule: z.nativeEnum(ContributionSchedule).optional().default("PER_PAYROLL"),
   philHealthEe: moneyField,
   philHealthEr: moneyField,
   isPhilHealthActive: z.boolean().optional().default(true),
+  philHealthSchedule: z
+    .nativeEnum(ContributionSchedule)
+    .optional()
+    .default("PER_PAYROLL"),
   pagIbigEe: moneyField,
   pagIbigEr: moneyField,
   isPagIbigActive: z.boolean().optional().default(true),
+  pagIbigSchedule: z
+    .nativeEnum(ContributionSchedule)
+    .optional()
+    .default("PER_PAYROLL"),
   withholdingEe: moneyField,
   withholdingEr: moneyField,
   isWithholdingActive: z.boolean().optional().default(true),
+  withholdingSchedule: z
+    .nativeEnum(ContributionSchedule)
+    .optional()
+    .default("PER_PAYROLL"),
   effectiveDate: z
     .union([z.string(), z.date()])
     .optional()

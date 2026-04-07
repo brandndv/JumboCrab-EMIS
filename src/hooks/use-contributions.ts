@@ -1,7 +1,14 @@
 "use client";
 
 import { listContributionDirectory } from "@/actions/contributions/contributions-action";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 export type ContributionRow = {
   employeeId: string;
@@ -25,6 +32,12 @@ export type ContributionRow = {
   philHealthEr?: number;
   pagIbigEr?: number;
   withholdingEr?: number;
+  payrollFrequency?: "WEEKLY" | "BIMONTHLY" | "MONTHLY";
+  currencyCode?: string;
+  sssSchedule?: "PER_PAYROLL" | "MONTHLY" | "QUARTERLY" | "YEARLY" | "AD_HOC";
+  philHealthSchedule?: "PER_PAYROLL" | "MONTHLY" | "QUARTERLY" | "YEARLY" | "AD_HOC";
+  pagIbigSchedule?: "PER_PAYROLL" | "MONTHLY" | "QUARTERLY" | "YEARLY" | "AD_HOC";
+  withholdingSchedule?: "PER_PAYROLL" | "MONTHLY" | "QUARTERLY" | "YEARLY" | "AD_HOC";
 };
 
 export function useContributionsState() {
@@ -41,8 +54,7 @@ export function useContributionsState() {
   // Load the directory from the API; keep it simple for now.
   useEffect(() => {
     refreshContributions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshContributions]);
 
   const filteredContributions = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -60,7 +72,7 @@ export function useContributionsState() {
     });
   }, [contributions, departmentFilter, searchTerm, statusFilter]);
 
-  const refreshContributions = async () => {
+  const refreshContributions = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -68,7 +80,7 @@ export function useContributionsState() {
       if (!result.success) {
         throw new Error(result.error || "Failed to fetch contributions");
       }
-      const rows: ContributionRow[] = (result.data || []).map((row: any) => ({
+      const rows: ContributionRow[] = (result.data || []).map((row) => ({
         employeeId: row.employeeId,
         employeeName: row.employeeName,
         employeeCode: row.employeeCode,
@@ -89,6 +101,14 @@ export function useContributionsState() {
         isPhilHealthActive: row.contribution?.isPhilHealthActive ?? true,
         isPagIbigActive: row.contribution?.isPagIbigActive ?? true,
         isWithholdingActive: row.contribution?.isWithholdingActive ?? true,
+        payrollFrequency: row.contribution?.payrollFrequency ?? "BIMONTHLY",
+        currencyCode: row.contribution?.currencyCode ?? "PHP",
+        sssSchedule: row.contribution?.sssSchedule ?? "PER_PAYROLL",
+        philHealthSchedule:
+          row.contribution?.philHealthSchedule ?? "PER_PAYROLL",
+        pagIbigSchedule: row.contribution?.pagIbigSchedule ?? "PER_PAYROLL",
+        withholdingSchedule:
+          row.contribution?.withholdingSchedule ?? "PER_PAYROLL",
       }));
       setContributions(rows);
 
@@ -110,7 +130,7 @@ export function useContributionsState() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   return {
     contributions,

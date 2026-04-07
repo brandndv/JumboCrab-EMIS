@@ -184,6 +184,12 @@ export const serializeDeductionLine = (line: {
   deductionCodeSnapshot: string | null;
   deductionNameSnapshot: string | null;
   assignmentId: string | null;
+  payrollFrequency: "WEEKLY" | "BIMONTHLY" | "MONTHLY" | null;
+  periodStartSnapshot: Date | null;
+  periodEndSnapshot: Date | null;
+  quantitySnapshot: unknown;
+  unitLabelSnapshot: string | null;
+  metadata: unknown;
   amount: unknown;
   minutes: number | null;
   rateSnapshot: unknown;
@@ -200,6 +206,15 @@ export const serializeDeductionLine = (line: {
   deductionCodeSnapshot: line.deductionCodeSnapshot,
   deductionNameSnapshot: line.deductionNameSnapshot,
   assignmentId: line.assignmentId,
+  payrollFrequency: line.payrollFrequency,
+  periodStartSnapshot: line.periodStartSnapshot?.toISOString() ?? null,
+  periodEndSnapshot: line.periodEndSnapshot?.toISOString() ?? null,
+  quantitySnapshot: toNumberOrNull(line.quantitySnapshot),
+  unitLabelSnapshot: line.unitLabelSnapshot,
+  metadata:
+    line.metadata && typeof line.metadata === "object"
+      ? (line.metadata as Record<string, unknown>)
+      : null,
   amount: toNumber(line.amount, 0),
   minutes: line.minutes ?? null,
   rateSnapshot: toNumberOrNull(line.rateSnapshot),

@@ -1,10 +1,10 @@
 "use server";
 
 import { checkConnection, db } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 import type { Employee as PrismaEmployee, Prisma } from "@prisma/client";
 import { SUFFIX } from "@/lib/validations/employees";
 import {
-  isMissingRateHistoryTableError,
   isSameRate,
   normalizeEmployeeRelationIds,
   parseDateInput,
@@ -50,6 +50,9 @@ export async function updateEmployee(
         lastName: true,
         nationality: true,
         dailyRate: true,
+        departmentId: true,
+        positionId: true,
+        startDate: true,
         updatedAt: true,
       },
     });
@@ -194,43 +197,59 @@ export async function updateEmployee(
       where: { employeeId },
       data: updateData as Prisma.EmployeeUncheckedUpdateInput,
     });
+    const session = await getSession();
+    const actorUserId = session.userId ?? null;
 
     if (hasDailyRateUpdate && !isSameRate(previousDailyRate, nextDailyRate)) {
-      try {
-        await db.employeeRateHistory.upsert({
-          where: {
-            employeeId_effectiveFrom: {
-              employeeId,
-              effectiveFrom: rateHistoryEffectiveFrom,
-            },
-          },
-          create: {
+      await db.employeeRateHistory.upsert({
+        where: {
+          employeeId_effectiveFrom: {
             employeeId,
-            dailyRate: nextDailyRate,
             effectiveFrom: rateHistoryEffectiveFrom,
-            reason:
-              normalizedRateReason ||
-              (nextDailyRate == null
-                ? "Daily rate cleared"
-                : "Daily rate updated"),
           },
-          update: {
-            dailyRate: nextDailyRate,
-            reason:
-              normalizedRateReason ||
-              (nextDailyRate == null
-                ? "Daily rate cleared (corrected)"
-                : "Daily rate corrected"),
-          },
-        });
-      } catch (error) {
-        if (!isMissingRateHistoryTableError(error)) {
-          throw error;
-        }
-        console.warn(
-          "EmployeeRateHistory table is not available yet. Skipping rate history write.",
-        );
-      }
+        },
+        create: {
+          employeeId,
+          dailyRate: nextDailyRate,
+          hourlyRate: nextDailyRate == null ? null : nextDailyRate / 8,
+          monthlyRate: nextDailyRate == null ? null : nextDailyRate * 22,
+          effectiveFrom: rateHistoryEffectiveFrom,
+          reason:
+            normalizedRateReason ||
+            (nextDailyRate == null ? "Daily rate cleared" : "Daily rate updated"),
+          createdByUserId: actorUserId,
+        },
+        update: {
+          dailyRate: nextDailyRate,
+          hourlyRate: nextDailyRate == null ? null : nextDailyRate / 8,
+          monthlyRate: nextDailyRate == null ? null : nextDailyRate * 22,
+          reason:
+            normalizedRateReason ||
+            (nextDailyRate == null
+              ? "Daily rate cleared (corrected)"
+              : "Daily rate corrected"),
+          createdByUserId: actorUserId,
+        },
+      });
+    }
+
+    const didPositionChange =
+      updatedEmployee.departmentId !== currentData.departmentId ||
+      updatedEmployee.positionId !== currentData.positionId;
+    if (didPositionChange) {
+      await db.employeePositionHistory.create({
+        data: {
+          employeeId,
+          departmentId: updatedEmployee.departmentId,
+          positionId: updatedEmployee.positionId,
+          effectiveFrom:
+            parseDateInput(updatedEmployee.startDate) ??
+            rateHistoryEffectiveFrom ??
+            new Date(),
+          reason: "Position assignment updated",
+          createdByUserId: actorUserId,
+        },
+      });
     }
 
     revalidateEmployeePages(employeeId);

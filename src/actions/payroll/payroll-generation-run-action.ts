@@ -4,6 +4,7 @@ import {
   DeductionFrequency,
   EmployeeDeductionAssignmentStatus,
   EmployeeDeductionWorkflowStatus,
+  PayrollFrequency,
   PayrollEmployeeStatus,
   PayrollReviewDecision,
   PayrollStatus,
@@ -255,6 +256,14 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
             applyGovernmentContributions,
             employeeAssignments,
             oneTimeAlreadyApplied,
+            payrollPeriodStart: period.startAt,
+            payrollPeriodEnd: period.endAt,
+            payrollFrequency:
+              input.payrollType === "WEEKLY"
+                ? PayrollFrequency.WEEKLY
+                : input.payrollType === "MONTHLY"
+                  ? PayrollFrequency.MONTHLY
+                  : PayrollFrequency.BIMONTHLY,
           });
 
           const payrollEmployee = await tx.payrollEmployee.create({
@@ -323,6 +332,12 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
                 assignmentId: line.assignmentId ?? null,
                 deductionCodeSnapshot: line.deductionCodeSnapshot ?? null,
                 deductionNameSnapshot: line.deductionNameSnapshot ?? null,
+                payrollFrequency: line.payrollFrequency ?? null,
+                periodStartSnapshot: line.periodStartSnapshot ?? null,
+                periodEndSnapshot: line.periodEndSnapshot ?? null,
+                quantitySnapshot: line.quantitySnapshot ?? null,
+                unitLabelSnapshot: line.unitLabelSnapshot ?? null,
+                metadata: line.metadata ?? null,
                 amount: line.amount,
                 minutes: line.minutes ?? null,
                 rateSnapshot: line.rateSnapshot ?? null,

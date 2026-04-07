@@ -41,18 +41,24 @@ const serializeContribution = (contribution: EmployeeContribution | null) => {
   return {
     id: contribution.id,
     employeeId: contribution.employeeId,
+    payrollFrequency: contribution.payrollFrequency,
+    currencyCode: contribution.currencyCode,
     sssEe: toNumber(contribution.sssEe),
     sssEr: toNumber(contribution.sssEr),
     isSssActive: contribution.isSssActive,
+    sssSchedule: contribution.sssSchedule,
     philHealthEe: toNumber(contribution.philHealthEe),
     philHealthEr: toNumber(contribution.philHealthEr),
     isPhilHealthActive: contribution.isPhilHealthActive,
+    philHealthSchedule: contribution.philHealthSchedule,
     pagIbigEe: toNumber(contribution.pagIbigEe),
     pagIbigEr: toNumber(contribution.pagIbigEr),
     isPagIbigActive: contribution.isPagIbigActive,
+    pagIbigSchedule: contribution.pagIbigSchedule,
     withholdingEe: toNumber(contribution.withholdingEe),
     withholdingEr: toNumber(contribution.withholdingEr),
     isWithholdingActive: contribution.isWithholdingActive,
+    withholdingSchedule: contribution.withholdingSchedule,
     effectiveDate: contribution.effectiveDate.toISOString(),
     createdAt: contribution.createdAt.toISOString(),
     updatedAt: contribution.updatedAt.toISOString(),
@@ -110,18 +116,24 @@ export async function upsertEmployeeContribution(input: UpsertPayload) {
     // 3. Prepare the data payload for the database
     // This maps the validated input to the database fields
     const payload = {
+      payrollFrequency: data.payrollFrequency,
+      currencyCode: data.currencyCode,
       sssEe: data.sssEe,
       sssEr: data.sssEr,
       isSssActive: data.isSssActive ?? true, // Default to true if undefined
+      sssSchedule: data.sssSchedule,
       philHealthEe: data.philHealthEe,
       philHealthEr: data.philHealthEr,
       isPhilHealthActive: data.isPhilHealthActive ?? true,
+      philHealthSchedule: data.philHealthSchedule,
       pagIbigEe: data.pagIbigEe,
       pagIbigEr: data.pagIbigEr,
       isPagIbigActive: data.isPagIbigActive ?? true,
+      pagIbigSchedule: data.pagIbigSchedule,
       withholdingEe: data.withholdingEe,
       withholdingEr: data.withholdingEr,
       isWithholdingActive: data.isWithholdingActive ?? true,
+      withholdingSchedule: data.withholdingSchedule,
       effectiveDate: data.effectiveDate ?? new Date(), // Default to now if undefined
       updatedById: actorId, // Track who updated this record (from session)
       // createdById is only set during creation (see below)

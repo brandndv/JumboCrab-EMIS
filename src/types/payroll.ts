@@ -97,6 +97,12 @@ export type PayrollDeductionLine = {
   deductionCodeSnapshot: string | null;
   deductionNameSnapshot: string | null;
   assignmentId: string | null;
+  payrollFrequency: "WEEKLY" | "BIMONTHLY" | "MONTHLY" | null;
+  periodStartSnapshot: string | null;
+  periodEndSnapshot: string | null;
+  quantitySnapshot: number | null;
+  unitLabelSnapshot: string | null;
+  metadata: Record<string, unknown> | null;
   amount: number;
   minutes: number | null;
   rateSnapshot: number | null;
