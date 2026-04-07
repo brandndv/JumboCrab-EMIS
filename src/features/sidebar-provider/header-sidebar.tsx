@@ -5,7 +5,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import Image from "next/image";
 import { Sora } from "next/font/google";
 
 const brandFont = Sora({
@@ -15,29 +15,30 @@ const brandFont = Sora({
 
 const HeaderSidebar = () => {
   return (
-    // Center logo when collapsed; tweak spacing in className below
-    <SidebarMenu className="my-4 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center">
-      <SidebarMenuItem className="group-data-[collapsible=icon]:justify-center">
-        {/* Center button when collapsed */}
+    <SidebarMenu className="my-4">
+      <SidebarMenuItem className="w-full">
         <SidebarMenuButton
           size="lg"
-          className="justify-start group-data-[collapsible=icon]:justify-center"
+          className="mx-auto transition-[width,height,padding,gap] duration-300 ease-out"
         >
-          <Avatar className="h-8 w-8 rounded-lg">
-            <AvatarImage
-              src={"/logo-icon.png"}
-              alt="Logo"
-              className="object-contain"
-            />
-            <AvatarFallback className="rounded-lg">Logo</AvatarFallback>
-          </Avatar>
-          {/* Hide text when collapsed; edit to change behavior */}
-          <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-            <span
-              className={`${brandFont.className} truncate text-[1.05rem] font-semibold tracking-tight`}
-            >
-              JumboCrab EMIS
-            </span>
+          <div className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
+            <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-lg">
+              <Image
+                src="/logo-icon.png"
+                alt="Logo"
+                fill
+                sizes="32px"
+                className="object-contain object-center"
+                priority
+              />
+            </div>
+            <div className="grid max-w-[12rem] flex-1 overflow-hidden text-left text-sm leading-tight opacity-100 transition-[max-width,opacity,transform] duration-300 ease-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
+              <span
+                className={`${brandFont.className} truncate text-[1.05rem] font-semibold tracking-tight`}
+              >
+                JumboCrab EMIS
+              </span>
+            </div>
           </div>
         </SidebarMenuButton>
       </SidebarMenuItem>

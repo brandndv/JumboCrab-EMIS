@@ -49,30 +49,29 @@ export function FooterSidebar({
       : undefined;
 
   return (
-    // Center footer when collapsed; tweak alignment in classes below
-    <SidebarMenu className="group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center">
-      <SidebarMenuItem className="group-data-[collapsible=icon]:justify-center">
+    <SidebarMenu>
+      <SidebarMenuItem className="w-full">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              // Center button when collapsed; keep left align when expanded
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground justify-start group-data-[collapsible=icon]:justify-center"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground mx-auto transition-[width,height,padding,gap] duration-300 ease-out"
             >
-              <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage
-                  src={avatarSrc}
-                  alt={user.name}
-                  className="object-cover"
-                />
-                <AvatarFallback className="rounded-lg">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              {/* Hide text when collapsed; edit to change behavior */}
-              <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs">{user.email}</span>
+              <div className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
+                <Avatar className="h-8 w-8 shrink-0 rounded-lg">
+                  <AvatarImage
+                    src={avatarSrc}
+                    alt={user.name}
+                    className="object-cover"
+                  />
+                  <AvatarFallback className="rounded-lg">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="grid max-w-[12rem] flex-1 overflow-hidden text-left text-sm leading-tight opacity-100 transition-[max-width,opacity,transform] duration-300 ease-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
+                  <span className="truncate font-medium">{user.name}</span>
+                  <span className="truncate text-xs">{user.email}</span>
+                </div>
               </div>
             </SidebarMenuButton>
           </DropdownMenuTrigger>
