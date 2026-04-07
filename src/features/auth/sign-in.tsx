@@ -104,7 +104,7 @@ const SignInForm = () => {
           </div>
         </div>
 
-        <Card className="w-full rounded-[2rem] border-white/70 bg-white/92 shadow-[0_28px_90px_-42px_rgba(15,23,42,0.35)] backdrop-blur-md dark:border-white/10 dark:bg-slate-950/78 dark:shadow-[0_30px_90px_-36px_rgba(0,0,0,0.78)]">
+        <Card className="w-full rounded-2xl border-white/70 bg-white/92 shadow-[0_28px_90px_-42px_rgba(15,23,42,0.35)] backdrop-blur-md dark:border-white/10 dark:bg-slate-950/78 dark:shadow-[0_30px_90px_-36px_rgba(0,0,0,0.78)]">
           <CardHeader className="space-y-2 px-6 pt-8 text-center sm:px-8">
             <CardTitle className="text-4xl font-extrabold tracking-tight text-foreground dark:text-white">
               Sign In
