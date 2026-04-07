@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   Popover,
   PopoverContent,
@@ -157,6 +158,7 @@ export function PatternsSection({
   onSavePatternEdit,
   onCancelPatternEdit,
 }: PatternsSectionProps) {
+  const toast = useToast();
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [patternSearch, setPatternSearch] = useState("");
   const shiftLabel = useMemo(
@@ -354,13 +356,19 @@ export function PatternsSection({
       }
 
       await onRefresh();
+      toast.success("Pattern override saved successfully.", {
+        description: "The employee assignment now uses the updated weekly pattern.",
+      });
       setAssignmentOverrideEdit(null);
     } catch (error) {
-      setAssignmentOverrideError(
+      const message =
         error instanceof Error
           ? error.message
-          : "Failed to create employee override"
-      );
+          : "Failed to create employee override";
+      setAssignmentOverrideError(message);
+      toast.error("Failed to save pattern override.", {
+        description: message,
+      });
     } finally {
       setAssignmentOverrideSaving(false);
     }

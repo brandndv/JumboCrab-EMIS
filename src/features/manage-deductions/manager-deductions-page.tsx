@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TableLoadingState } from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   Table,
   TableBody,
@@ -38,6 +39,7 @@ type ManagerDeductionsPageProps = {
 export default function ManagerDeductionsPage({
   rolePath = "manager",
 }: ManagerDeductionsPageProps) {
+  const toast = useToast();
   const [rows, setRows] = useState<DeductionAssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,10 +104,18 @@ export default function ManagerDeductionsPage({
         throw new Error(result.error || "Failed to review deduction draft");
       }
       await load();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to review deduction draft",
+      toast.success(
+        decision === "APPROVED"
+          ? "Deduction draft approved successfully."
+          : "Deduction draft returned successfully.",
       );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to review deduction draft";
+      setError(message);
+      toast.error("Failed to review deduction draft.", {
+        description: message,
+      });
     } finally {
       setReviewingId(null);
     }

@@ -18,6 +18,7 @@ import {
 } from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   Table,
   TableBody,
@@ -100,6 +101,7 @@ const isActionableRun = (run: PayrollRunSummary) =>
 const ACTIONABLE_RUN_WINDOW_DAYS = 60;
 
 const PayrollGeneratePage = () => {
+  const toast = useToast();
   const defaults = useMemo(() => getDefaultHalfConfig(), []);
 
   const [mode, setMode] = useState<RunMode>("STANDARD");
@@ -384,6 +386,7 @@ const PayrollGeneratePage = () => {
 
       const createdRun = result.data;
       setSuccess("Payroll draft generated successfully.");
+      toast.success("Payroll draft generated successfully.");
       if (createdRun) {
         setSelectedRunId(createdRun.payrollId);
       }
@@ -392,7 +395,12 @@ const PayrollGeneratePage = () => {
         loadReadiness(activeRange.start, activeRange.end, activeEmployeeScope),
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate payroll");
+      const message =
+        err instanceof Error ? err.message : "Failed to generate payroll";
+      setError(message);
+      toast.error("Failed to generate payroll.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }
@@ -409,14 +417,20 @@ const PayrollGeneratePage = () => {
         throw new Error(result.error || "Failed to regenerate rejected payroll");
       }
       setSuccess("Rejected payroll regenerated into a new draft.");
+      toast.success("Rejected payroll regenerated into a new draft.");
       if (result.data?.payrollId) {
         setSelectedRunId(result.data.payrollId);
       }
       await loadRuns();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to regenerate rejected payroll",
-      );
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to regenerate rejected payroll";
+      setError(message);
+      toast.error("Failed to regenerate rejected payroll.", {
+        description: message,
+      });
     } finally {
       setRegenerating(false);
     }

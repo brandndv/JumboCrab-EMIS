@@ -14,6 +14,8 @@ import {
   describeAssignmentValue,
 } from "@/features/manage-deductions/deduction-ui-helpers";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +43,7 @@ export function DeductionPaymentDialog({
   row,
   onRecorded,
 }: InstallmentPaymentDialogProps) {
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(today());
@@ -128,6 +131,9 @@ export function DeductionPaymentDialog({
 
       onRecorded(result.data);
       setOpen(false);
+      toast.success("Payment recorded successfully.", {
+        description: `${row.deductionName} has been updated with the new payment.`,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to record payment");
     } finally {
@@ -240,7 +246,14 @@ export function DeductionPaymentDialog({
             Cancel
           </Button>
           <Button type="button" onClick={submit} disabled={submitting}>
-            {submitting ? "Saving..." : "Record Payment"}
+            {submitting ? (
+              <span className="inline-flex items-center gap-2">
+                <Spinner className="h-4 w-4" />
+                Saving...
+              </span>
+            ) : (
+              "Record Payment"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

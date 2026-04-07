@@ -1,4 +1,5 @@
 import { ThemeProvider } from "@/components/theme-provider/theme-provider";
+import { ToastProvider } from "@/components/ui/toast-provider";
 import { OnlineStatus } from "@/components/pwa/online-status";
 import { RegisterSW } from "@/components/pwa/register-sw";
 
@@ -52,9 +53,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <RegisterSW />
-          <OnlineStatus />
-          {children}
+          <ToastProvider>
+            <RegisterSW />
+            <OnlineStatus />
+            {children}
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -1,10 +1,17 @@
 "use client";
 
-import React, { ElementType, ComponentPropsWithoutRef, forwardRef } from "react";
+import React, {
+  ElementType,
+  ComponentPropsWithoutRef,
+  forwardRef,
+  useState,
+} from "react";
 import { signOutUser } from "@/actions/auth/auth-action";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FullScreenLoadingState } from "@/components/loading/loading-states";
+import { withMinimumDelay } from "@/lib/min-loading-delay";
 
 // Define base props that don't conflict with HTML attributes
 interface BaseSignOutButtonProps {
@@ -45,15 +52,19 @@ const SignOutButton = forwardRef(function SignOutButton<T extends ElementType = 
   ref: React.ForwardedRef<HTMLElement>
 ) {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
   const handleSignOut = async (e: React.MouseEvent) => {
     if (onClick) {
       onClick(e);
       if (e.defaultPrevented) return;
     }
+
+    if (loading) return;
     
     try {
-      const result = await signOutUser();
+      setLoading(true);
+      const result = await withMinimumDelay(signOutUser());
       if (!result.success) {
         throw new Error(result.error || "Failed to sign out");
       }
@@ -61,26 +72,38 @@ const SignOutButton = forwardRef(function SignOutButton<T extends ElementType = 
       router.refresh();
     } catch (error) {
       console.error("Error signing out:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   // Cast to any to avoid TypeScript errors with polymorphic components
-  const TagComponent = Tag as any;
+  const TagComponent: ElementType = Tag;
 
   const baseClasses = unstyled 
     ? className 
     : cn("flex items-center gap-2 cursor-pointer", className);
 
   return (
-    <TagComponent
-      ref={ref}
-      onClick={handleSignOut}
-      className={baseClasses}
-      {...props}
-    >
-      {!unstyled && showIcon && <LogOut className={cn("shrink-0", iconClassName)} />}
-      {(!unstyled && !children) ? "Sign Out" : children}
-    </TagComponent>
+    <>
+      {loading ? (
+        <FullScreenLoadingState
+          title="Signing you out"
+          description="Clearing your session and returning you to the sign-in screen."
+        />
+      ) : null}
+
+      <TagComponent
+        ref={ref}
+        onClick={handleSignOut}
+        className={baseClasses}
+        aria-busy={loading}
+        {...props}
+      >
+        {!unstyled && showIcon && <LogOut className={cn("shrink-0", iconClassName)} />}
+        {(!unstyled && !children) ? "Sign Out" : children}
+      </TagComponent>
+    </>
   );
 }) as <T extends ElementType = 'button'>(
   props: SignOutButtonProps<T> & { ref?: React.ForwardedRef<HTMLElement> }

@@ -1,7 +1,7 @@
 "use client";
 
 import { listPositions } from "@/actions/organization/positions-action";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCcw } from "lucide-react";
@@ -31,15 +31,20 @@ type PositionRow = {
   }[];
 };
 
-export function PositionView() {
+export function PositionView({
+  onInitialLoadComplete,
+}: {
+  onInitialLoadComplete?: () => void;
+}) {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<PositionRow | null>(null);
   const [open, setOpen] = useState(false);
+  const hasReportedInitialLoadRef = useRef(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -52,12 +57,16 @@ export function PositionView() {
       setError(err instanceof Error ? err.message : "Failed to load positions");
     } finally {
       setLoading(false);
+      if (!hasReportedInitialLoadRef.current) {
+        hasReportedInitialLoadRef.current = true;
+        onInitialLoadComplete?.();
+      }
     }
-  };
+  }, [onInitialLoadComplete]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   const filtered = useMemo(() => {
     const term = filter.trim().toLowerCase();

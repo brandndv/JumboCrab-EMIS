@@ -2,7 +2,6 @@
 
 import {
   createShift,
-  deleteShift,
   deleteShift as deleteShiftAction,
   listShifts,
   updateShift,
@@ -29,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TableLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 
 type ShiftRow = {
   id: number;
@@ -105,6 +105,7 @@ const computeDerived = (
 };
 
 export function ShiftsManager() {
+  const toast = useToast();
   const [rows, setRows] = useState<ShiftRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -205,8 +206,14 @@ export function ShiftsManager() {
       }
       resetForm();
       await load();
+      toast.success("Shift created successfully.");
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Failed to save shift");
+      const message =
+        err instanceof Error ? err.message : "Failed to save shift";
+      setFormError(message);
+      toast.error("Failed to save shift.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }
@@ -265,23 +272,37 @@ export function ShiftsManager() {
       }
       resetEdit();
       await load();
+      toast.success("Shift updated successfully.");
     } catch (err) {
-      setEditError(
-        err instanceof Error ? err.message : "Failed to update shift"
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update shift";
+      setEditError(message);
+      toast.error("Failed to update shift.", {
+        description: message,
+      });
     } finally {
       setEditSaving(false);
     }
   };
 
   const handleDeleteShift = async (id: number) => {
-    const result = await deleteShiftAction(id);
-    if (!result.success) {
-      setError(result.error || "Failed to delete shift");
-      return;
+    try {
+      const result = await deleteShiftAction(id);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to delete shift");
+      }
+      if (editingId === id) resetEdit();
+      await load();
+      toast.success("Shift deleted successfully.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to delete shift";
+      setError(message);
+      setEditError(message);
+      toast.error("Failed to delete shift.", {
+        description: message,
+      });
     }
-    if (editingId === id) resetEdit();
-    await load();
   };
 
   return (
@@ -629,8 +650,7 @@ export function ShiftsManager() {
               disabled={editSaving || !editingId}
               onClick={async () => {
                 if (!editingId) return;
-                await deleteShift(editingId);
-                resetEdit();
+                await handleDeleteShift(editingId);
               }}
             >
               <Trash2 className="h-4 w-4" />

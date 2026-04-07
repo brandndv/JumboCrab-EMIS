@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 
 type ViolationDefinitionRow = {
   violationId: string;
@@ -38,6 +39,7 @@ type ViolationDefinitionRow = {
 };
 
 export default function ViolationsTable() {
+  const toast = useToast();
   const [rows, setRows] = useState<ViolationDefinitionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,10 +111,18 @@ export default function ViolationsTable() {
 
       await load();
       closeDialog(false);
-    } catch (err) {
-      setFormError(
-        err instanceof Error ? err.message : "Failed to save violation",
+      toast.success(
+        editingId
+          ? "Violation type updated successfully."
+          : "Violation type created successfully.",
       );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save violation";
+      setFormError(message);
+      toast.error("Failed to save violation type.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }

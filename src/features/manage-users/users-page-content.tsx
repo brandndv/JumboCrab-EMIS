@@ -6,6 +6,7 @@ import { useUsers } from "@/features/manage-users/users-provider";
 import { Button } from "@/components/ui/button";
 import { usePathname, useRouter } from "next/navigation"; // Note: Use 'next/navigation' instead of 'next/router'
 import { Search } from "lucide-react";
+import { useToast } from "@/components/ui/toast-provider";
 import { UnassignedEmployees } from "@/features/manage-users/unassigned-employees";
 import { deleteUser, updateUser } from "@/actions/users/users-action";
 import { UsersLoadingState } from "@/features/manage-users/users-loading-state";
@@ -17,6 +18,7 @@ export default function UsersPageContent() {
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [disabledSearch, setDisabledSearch] = useState("");
   const router = useRouter();
+  const toast = useToast();
   const pathname = usePathname();
   const basePath = pathname.replace(/\/$/, "");
 
@@ -47,9 +49,17 @@ export default function UsersPageContent() {
         throw new Error(result.error || "Failed to update user status");
       }
       await refreshUsers();
+      toast.success(
+        isDisabled ? "User disabled successfully." : "User enabled successfully.",
+        {
+          description: `${user.username} has been ${isDisabled ? "disabled" : "enabled"}.`,
+        },
+      );
     } catch (err) {
       console.error("Status update failed:", err);
-      alert(err instanceof Error ? err.message : "Failed to update user");
+      toast.error("Failed to update user.", {
+        description: err instanceof Error ? err.message : "Failed to update user.",
+      });
     }
   };
 
@@ -68,9 +78,14 @@ export default function UsersPageContent() {
         throw new Error(result.error || "Failed to delete user");
       }
       await refreshUsers();
+      toast.success("User deleted successfully.", {
+        description: `${user.username} has been removed.`,
+      });
     } catch (err) {
       console.error("Delete failed:", err);
-      alert(err instanceof Error ? err.message : "Failed to delete user");
+      toast.error("Failed to delete user.", {
+        description: err instanceof Error ? err.message : "Failed to delete user.",
+      });
     }
   };
 

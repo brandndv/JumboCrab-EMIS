@@ -5,7 +5,7 @@ import {
   updateEmployeesSupervisorBulk,
   updateEmployeeSupervisor,
 } from "@/actions/organization/organization-structure-action";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,6 +21,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { TableLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 
 type StructureRow = {
   employeeId: string;
@@ -33,7 +34,12 @@ type StructureRow = {
   position?: { positionId: string; name: string; isActive: boolean } | null;
 };
 
-export function StructureTable() {
+export function StructureTable({
+  onInitialLoadComplete,
+}: {
+  onInitialLoadComplete?: () => void;
+}) {
+  const toast = useToast();
   const [rows, setRows] = useState<StructureRow[]>([]);
   const [supervisors, setSupervisors] = useState<
     { userId: string; username: string; email: string; role: string }[]
@@ -54,8 +60,9 @@ export function StructureTable() {
   const [bulkSupervisorId, setBulkSupervisorId] = useState<string>("");
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const hasReportedInitialLoadRef = useRef(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -74,12 +81,16 @@ export function StructureTable() {
       setError(err instanceof Error ? err.message : "Failed to load structure");
     } finally {
       setLoading(false);
+      if (!hasReportedInitialLoadRef.current) {
+        hasReportedInitialLoadRef.current = true;
+        onInitialLoadComplete?.();
+      }
     }
-  };
+  }, [onInitialLoadComplete]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   const filtered = useMemo(() => {
     const term = filter.trim().toLowerCase();
@@ -171,8 +182,14 @@ export function StructureTable() {
       }
       await load();
       setAssignOpen(false);
+      toast.success("Supervisor updated successfully.");
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Failed to update supervisor");
+      const message =
+        err instanceof Error ? err.message : "Failed to update supervisor";
+      setFormError(message);
+      toast.error("Failed to update supervisor.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }
@@ -196,10 +213,16 @@ export function StructureTable() {
       await load();
       setSelectedEmployeeIds([]);
       setBulkAssignOpen(false);
+      toast.success("Supervisors updated successfully.", {
+        description: `${selectedEmployeeIds.length} employee assignment(s) were updated.`,
+      });
     } catch (err) {
-      setBulkError(
-        err instanceof Error ? err.message : "Failed to update supervisors",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update supervisors";
+      setBulkError(message);
+      toast.error("Failed to update supervisors.", {
+        description: message,
+      });
     } finally {
       setBulkSaving(false);
     }

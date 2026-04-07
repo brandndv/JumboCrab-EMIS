@@ -2,18 +2,23 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { getUsers } from "@/actions/users/users-action";
-import { User } from "@/lib/validations/users";
+import { UserWithEmployee } from "@/lib/validations/users";
 
-export function useUsersState(initialUsers: User[] = []) {
-  const [users, setUsers] = useState<User[]>(initialUsers);
-  const [filteredUsers, setFilteredUsers] = useState<User[]>(initialUsers);
+export function useUsersState(initialUsers?: UserWithEmployee[]) {
+  const seededUsers = initialUsers ?? [];
+  const hasInitialUsers = initialUsers !== undefined;
+  const [users, setUsers] = useState<UserWithEmployee[]>(seededUsers);
+  const [filteredUsers, setFilteredUsers] = useState<UserWithEmployee[]>(seededUsers);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
 
-  const fetchUsersData = useCallback(async () => {
-    setLoading(true);
+  const fetchUsersData = useCallback(async (options?: { showLoading?: boolean }) => {
+    const showLoading = options?.showLoading ?? true;
+    if (showLoading) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const response = await getUsers();
@@ -25,13 +30,17 @@ export function useUsersState(initialUsers: User[] = []) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch users");
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    fetchUsersData();
-  }, [fetchUsersData]);
+    if (!hasInitialUsers) {
+      fetchUsersData();
+    }
+  }, [fetchUsersData, hasInitialUsers]);
 
   useEffect(() => {
     let result = [...users];

@@ -33,6 +33,7 @@ import {
   InlineLoadingState,
   ModuleLoadingState,
 } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 import type { Employee } from "@/lib/validations/employees";
 
 type EmployeeType = Partial<Employee>;
@@ -107,6 +108,7 @@ const InfoSection = ({
 );
 
 const MyAccountPage = () => {
+  const toast = useToast();
   const { user, loading, error, isEmployee } = useSession();
   const employeeId = user?.employee?.employeeId;
   const [employeeInfoTab, setEmployeeInfoTab] =
@@ -268,10 +270,14 @@ const MyAccountPage = () => {
         throw new Error(result.error || "Failed to update password.");
       }
       handlePasswordModalChange(false);
+      toast.success("Password updated successfully.");
     } catch (err) {
-      setPasswordError(
-        err instanceof Error ? err.message : "Failed to update password.",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update password.";
+      setPasswordError(message);
+      toast.error("Failed to update password.", {
+        description: message,
+      });
     } finally {
       setPasswordSaving(false);
     }

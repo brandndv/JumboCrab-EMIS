@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TableLoadingState } from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   Table,
   TableBody,
@@ -34,6 +35,7 @@ const formatStatus = (status: ViolationRow["status"]) => {
 };
 
 const ManagerViolationsPage = () => {
+  const toast = useToast();
   const [rows, setRows] = useState<ViolationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,10 +102,18 @@ const ManagerViolationsPage = () => {
         throw new Error(result.error || "Failed to review violation");
       }
       await load();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to review violation",
+      toast.success(
+        decision === "APPROVED"
+          ? "Violation approved successfully."
+          : "Violation rejected successfully.",
       );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to review violation";
+      setError(message);
+      toast.error("Failed to review violation.", {
+        description: message,
+      });
     } finally {
       setReviewingId(null);
     }

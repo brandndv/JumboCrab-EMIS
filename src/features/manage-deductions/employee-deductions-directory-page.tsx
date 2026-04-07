@@ -41,6 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useToast } from "@/components/ui/toast-provider";
 import { EmployeeDeductionAssignmentStatus } from "@prisma/client";
 
 type EmployeeDeductionsDirectoryPageProps = {
@@ -92,6 +93,7 @@ function EmployeeDeductionsDirectoryPageContent({
   canManageAssignments = false,
 }: EmployeeDeductionsDirectoryPageProps) {
   const searchParams = useSearchParams();
+  const toast = useToast();
   const [employees, setEmployees] = useState<DeductionEmployeeOption[]>([]);
   const [employeeQuery, setEmployeeQuery] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(
@@ -231,10 +233,16 @@ function EmployeeDeductionsDirectoryPageContent({
       setRows((current) =>
         current.map((row) => (row.id === id ? result.data! : row)),
       );
+      toast.success("Deduction status updated successfully.", {
+        description: `Status changed to ${runtimeStatusLabel(nextStatus)}.`,
+      });
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to update deduction status",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update deduction status";
+      setError(message);
+      toast.error("Failed to update deduction status.", {
+        description: message,
+      });
     } finally {
       setUpdatingStatusId(null);
     }

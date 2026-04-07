@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { InlineLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 import { ContributionRow } from "@/hooks/use-contributions";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, IdCard, Pencil } from "lucide-react";
@@ -94,6 +95,7 @@ export function ContributionsTable({
   loading,
   onRefresh,
 }: ContributionsTableProps) {
+  const toast = useToast();
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -189,8 +191,13 @@ export function ContributionsTable({
       }
       setEditingId(null);
       onRefresh?.();
+      toast.success("Contributions saved successfully.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
+      const message = err instanceof Error ? err.message : "Failed to save";
+      setError(message);
+      toast.error("Failed to save contributions.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }

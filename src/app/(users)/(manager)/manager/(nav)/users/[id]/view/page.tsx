@@ -6,10 +6,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Pencil, Loader2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getUserById } from "@/actions/users/users-action";
 import type { UserWithEmployee } from "@/lib/validations/users";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
 
 const InfoField = ({
   label,
@@ -89,9 +90,10 @@ function UserViewPageContent({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[220px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <ModuleLoadingState
+        title="Loading user"
+        description="Preparing account details and linked employee information."
+      />
     );
   }
 

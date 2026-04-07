@@ -30,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast-provider";
 import { DeductionAmountMode, DeductionFrequency, EmployeeDeductionAssignmentStatus } from "@prisma/client";
 
 const toDateInputValue = (value?: string | null) =>
@@ -81,6 +82,7 @@ function DeductionAssignmentFormPageContent({
   description,
 }: DeductionAssignmentFormPageProps) {
   const router = useRouter();
+  const toast = useToast();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const assignmentId = searchParams.get("assignmentId");
@@ -334,13 +336,21 @@ function DeductionAssignmentFormPageContent({
         throw new Error(result.error || "Failed to save deduction assignment");
       }
 
+      toast.success(
+        assignmentId
+          ? "Deduction assignment updated successfully."
+          : "Deduction assignment created successfully.",
+      );
       router.push(inferredSuccessPath);
     } catch (err) {
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Failed to save deduction assignment",
-      );
+          : "Failed to save deduction assignment";
+      setError(message);
+      toast.error("Failed to save deduction assignment.", {
+        description: message,
+      });
     } finally {
       setSubmitting(false);
     }

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   Card,
   CardContent,
@@ -50,6 +52,7 @@ function getUsersBasePath(pathname: string): string {
 
 const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
   const router = useRouter();
+  const toast = useToast();
   const pathname = usePathname();
   const usersBasePath = useMemo(() => getUsersBasePath(pathname), [pathname]);
   const [username, setUsername] = useState("");
@@ -67,6 +70,10 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
   );
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    router.prefetch(usersBasePath);
+  }, [router, usersBasePath]);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -120,7 +127,7 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
     e.preventDefault();
 
     if (password.length < 6) {
-      alert("Password must be at least 6 characters long");
+      toast.error("Password must be at least 6 characters long.");
       return;
     }
     if (!role) {
@@ -128,7 +135,7 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
       return;
     }
     if (role === "employee" && !selectedEmployee) {
-      alert("Please select an employee");
+      toast.error("Please select an employee.");
       return;
     }
 
@@ -152,12 +159,18 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
       setEmail("");
       setPassword("");
       setRole("");
+      setSelectedEmployee(null);
+      setSearchTerm("");
 
-      alert("User created successfully!");
-      router.push(usersBasePath);
+      toast.success("User created successfully.", {
+        description: "The account is ready to sign in.",
+      });
+      router.replace(usersBasePath);
     } catch (error) {
       console.error("Error creating user:", error);
-      alert(error instanceof Error ? error.message : "An error occurred");
+      toast.error("Failed to create user.", {
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
     } finally {
       setLoading(false);
     }
@@ -399,7 +412,14 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
                 Cancel
               </Button>
               <Button type="submit" disabled={loading} className="min-w-36">
-                {loading ? "Creating..." : "Create Account"}
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner className="h-4 w-4" />
+                    Creating...
+                  </span>
+                ) : (
+                  "Create Account"
+                )}
               </Button>
             </div>
           </form>

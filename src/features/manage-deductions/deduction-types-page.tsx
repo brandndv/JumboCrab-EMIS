@@ -41,6 +41,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TableLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 import { DeductionAmountMode, DeductionFrequency } from "@prisma/client";
 import { Pencil, Plus, RefreshCcw } from "lucide-react";
 
@@ -68,6 +69,7 @@ const emptyForm = (): FormState => ({
 });
 
 export default function DeductionTypesPage() {
+  const toast = useToast();
   const [rows, setRows] = useState<DeductionTypeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -160,10 +162,18 @@ export default function DeductionTypesPage() {
 
       await load();
       closeDialog(false);
-    } catch (err) {
-      setFormError(
-        err instanceof Error ? err.message : "Failed to save deduction type",
+      toast.success(
+        form.id
+          ? "Deduction type updated successfully."
+          : "Deduction type created successfully.",
       );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save deduction type";
+      setFormError(message);
+      toast.error("Failed to save deduction type.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }

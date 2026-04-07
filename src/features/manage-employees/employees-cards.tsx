@@ -7,6 +7,7 @@ import {
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast-provider";
 import { Employee } from "@/lib/validations/employees";
 import {
   Pagination,
@@ -45,15 +46,19 @@ function getEntityName(value: unknown, fallback: string) {
   return fallback;
 }
 
+function getEmployeeDisplayName(employee: Employee) {
+  return `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim() || "Employee";
+}
+
 export default function EmployeesCards({
   employees,
 }: {
   employees: Employee[];
 }) {
   const router = useRouter();
+  const toast = useToast();
   const pathname = usePathname();
   const basePath = pathname.replace(/\/$/, "");
-  const roleRoot = pathname.split("/")[1] ?? "";
   const { refreshEmployees, showArchived } = useEmployees();
   // State for pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -78,46 +83,52 @@ export default function EmployeesCards({
   };
 
   // Handle archive employee
-  const handleArchiveClick = (employee: Employee) => {
+  const handleArchiveClick = async (employee: Employee) => {
     if (!employee.employeeId) return;
     const confirmed = window.confirm(
       `Archive ${employee.firstName ?? ""} ${employee.lastName ?? ""}?`,
     );
     if (!confirmed) return;
 
-    setEmployeeArchiveStatus(employee.employeeId, true)
-      .then(async (result) => {
-        if (!result.success) {
-          throw new Error(result.error || "Failed to archive employee");
-        }
-        await refreshEmployees();
-      })
-      .catch((err) => {
-        console.error("Archive failed:", err);
-        alert(
-          err instanceof Error ? err.message : "Failed to archive employee",
-        );
+    try {
+      const result = await setEmployeeArchiveStatus(employee.employeeId, true);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to archive employee");
+      }
+      await refreshEmployees();
+      toast.success("Employee archived successfully.", {
+        description: `${getEmployeeDisplayName(employee)} moved to archived records.`,
       });
+    } catch (err) {
+      console.error("Archive failed:", err);
+      toast.error("Failed to archive employee.", {
+        description:
+          err instanceof Error ? err.message : "Failed to archive employee.",
+      });
+    }
   };
 
-  const handleUnarchiveClick = (employee: Employee) => {
+  const handleUnarchiveClick = async (employee: Employee) => {
     if (!employee.employeeId) return;
-    setEmployeeArchiveStatus(employee.employeeId, false)
-      .then(async (result) => {
-        if (!result.success) {
-          throw new Error(result.error || "Failed to unarchive employee");
-        }
-        await refreshEmployees();
-      })
-      .catch((err) => {
-        console.error("Unarchive failed:", err);
-        alert(
-          err instanceof Error ? err.message : "Failed to unarchive employee",
-        );
+    try {
+      const result = await setEmployeeArchiveStatus(employee.employeeId, false);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to unarchive employee");
+      }
+      await refreshEmployees();
+      toast.success("Employee restored successfully.", {
+        description: `${getEmployeeDisplayName(employee)} is active again.`,
       });
+    } catch (err) {
+      console.error("Unarchive failed:", err);
+      toast.error("Failed to restore employee.", {
+        description:
+          err instanceof Error ? err.message : "Failed to unarchive employee.",
+      });
+    }
   };
 
-  const handleDeleteClick = (employee: Employee) => {
+  const handleDeleteClick = async (employee: Employee) => {
     if (!employee.employeeId) return;
     const confirmed = window.confirm(
       `Permanently delete ${employee.firstName ?? ""} ${
@@ -126,17 +137,22 @@ export default function EmployeesCards({
     );
     if (!confirmed) return;
 
-    deleteEmployee(employee.employeeId)
-      .then(async (result) => {
-        if (!result.success) {
-          throw new Error(result.error || "Failed to delete employee");
-        }
-        await refreshEmployees();
-      })
-      .catch((err) => {
-        console.error("Delete failed:", err);
-        alert(err instanceof Error ? err.message : "Failed to delete employee");
+    try {
+      const result = await deleteEmployee(employee.employeeId);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to delete employee");
+      }
+      await refreshEmployees();
+      toast.success("Employee deleted successfully.", {
+        description: `${getEmployeeDisplayName(employee)} has been removed.`,
       });
+    } catch (err) {
+      console.error("Delete failed:", err);
+      toast.error("Failed to delete employee.", {
+        description:
+          err instanceof Error ? err.message : "Failed to delete employee.",
+      });
+    }
   };
 
   // Calculate pagination

@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/components/ui/toast-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -81,6 +83,7 @@ export default function EmployeeForm({
   initialData = null,
 }: EmployeeFormProps) {
   const router = useRouter();
+  const toast = useToast();
   const pathname = usePathname();
   const employeesBasePath = useMemo(
     () => getEmployeesBasePath(pathname),
@@ -524,9 +527,14 @@ export default function EmployeeForm({
         throw new Error(result.error || "Failed to save employee");
       }
 
-      // Show success message
-      alert(
-        `Employee ${mode === "create" ? "created" : "updated"} successfully!`,
+      toast.success(
+        `Employee ${mode === "create" ? "created" : "updated"} successfully.`,
+        {
+          description:
+            mode === "create"
+              ? "The employee record is now available in the directory."
+              : "The employee profile changes have been saved.",
+        },
       );
 
       // Redirect back to employees list
@@ -645,9 +653,12 @@ export default function EmployeeForm({
             </div>
             {mode !== "view" && (
               <div className="text-center">
-                {isImageUploading && (
-                  <p className="text-xs text-muted-foreground">Uploading...</p>
-                )}
+                {isImageUploading ? (
+                  <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    <Spinner className="h-3.5 w-3.5" />
+                    Uploading photo...
+                  </div>
+                ) : null}
                 <FormError message={errors.img} />
               </div>
             )}
@@ -1478,9 +1489,18 @@ export default function EmployeeForm({
           Cancel
         </Button>
         {mode !== "view" && (
-          <Button type="submit" disabled={isSubmitting || isImageUploading}>
+          <Button
+            type="submit"
+            disabled={isSubmitting || isImageUploading}
+            aria-busy={isSubmitting}
+          >
             {isSubmitting
-              ? "Saving..."
+              ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner className="h-4 w-4" />
+                  Saving...
+                </span>
+              )
               : mode === "create"
                 ? "Create Employee"
                 : "Save Changes"}

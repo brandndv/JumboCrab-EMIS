@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { InlineLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 
 const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -41,6 +42,7 @@ export default function ViolationCreateForm({
 }: ViolationCreateFormProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const toast = useToast();
 
   const [employees, setEmployees] = useState<ViolationEmployeeOption[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
@@ -196,14 +198,22 @@ export default function ViolationCreateForm({
           ? "Violation draft submitted for manager approval."
           : "Violation assigned successfully.",
       );
+      toast.success(
+        result.data?.status === "DRAFT"
+          ? "Violation draft submitted successfully."
+          : "Violation assigned successfully.",
+      );
       setRemarks("");
       setViolationDate(toDateInputValue(new Date()));
     } catch (err) {
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Failed to save violation assignment",
-      );
+          : "Failed to save violation assignment";
+      setError(message);
+      toast.error("Failed to save violation assignment.", {
+        description: message,
+      });
     } finally {
       setSubmitting(false);
     }

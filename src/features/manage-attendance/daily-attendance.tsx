@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TableLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 
 const todayISO = () => new Date().toLocaleDateString("en-CA", { timeZone: TZ });
 const formatPunchLabel = (type: string) => {
@@ -81,6 +82,7 @@ const formatMinutesToClock12 = (minutes: number) => {
 };
 
 export function DailyAttendance() {
+  const toast = useToast();
   const {
     rows,
     loading,
@@ -188,10 +190,14 @@ export function DailyAttendance() {
       }
       await load();
       setPunchEdit(null);
+      toast.success("Attendance punch updated successfully.");
     } catch (err) {
-      setPunchError(
-        err instanceof Error ? err.message : "Failed to update punch",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update punch";
+      setPunchError(message);
+      toast.error("Failed to update punch.", {
+        description: message,
+      });
     } finally {
       setPunchSaving(false);
     }
@@ -213,10 +219,14 @@ export function DailyAttendance() {
         setPunchEdit(null);
       }
       await load();
+      toast.success("Attendance punch deleted successfully.");
     } catch (err) {
-      setPunchError(
-        err instanceof Error ? err.message : "Failed to delete punch",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to delete punch";
+      setPunchError(message);
+      toast.error("Failed to delete punch.", {
+        description: message,
+      });
     } finally {
       setPunchDeletingId(null);
     }

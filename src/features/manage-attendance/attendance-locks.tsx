@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   Table,
   TableBody,
@@ -135,6 +136,7 @@ const lockStateLabel = (state: LockSummaryRow["lockState"]) => {
 };
 
 export function AttendanceLocks() {
+  const toast = useToast();
   const { options: periodOptions, defaultPeriod } = useMemo(
     () => buildCurrentMonthBimonthlyOptions(),
     [],
@@ -281,10 +283,21 @@ export function AttendanceLocks() {
           ? `${successPrefix} (${updated} row(s) affected, ${blocked} payroll-linked row(s) skipped)`
           : `${successPrefix} (${updated} row(s) affected)`,
       );
+      toast.success(successPrefix, {
+        description:
+          blocked > 0
+            ? `${updated} row(s) updated. ${blocked} payroll-linked row(s) were skipped.`
+            : `${updated} row(s) updated.`,
+      });
       await loadSummary();
       await loadEmployeeRows();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update lock state");
+      const message =
+        err instanceof Error ? err.message : "Failed to update lock state";
+      setError(message);
+      toast.error("Failed to update attendance lock state.", {
+        description: message,
+      });
     } finally {
       setActionLoading(false);
     }
