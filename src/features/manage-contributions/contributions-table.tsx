@@ -21,74 +21,35 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { InlineLoadingState } from "@/components/loading/loading-states";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast-provider";
 import { ContributionRow } from "@/hooks/use-contributions";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, IdCard, Pencil } from "lucide-react";
+import {
+  buildContributionFormState,
+  contributionEditorSections,
+  contributionScheduleOptions,
+  formatContributionCurrency,
+  humanizeContributionSchedule,
+  humanizePayrollFrequency,
+  payrollFrequencyOptions,
+  type ContributionFormState,
+} from "@/features/manage-contributions/contribution-editor-shared";
 
 type ContributionsTableProps = {
   rows: ContributionRow[];
   loading?: boolean;
   onRefresh?: () => void;
 };
-
-type ContributionFormState = {
-  sssEe: number;
-  sssEr: number;
-  isSssActive: boolean;
-  philHealthEe: number;
-  philHealthEr: number;
-  isPhilHealthActive: boolean;
-  pagIbigEe: number;
-  pagIbigEr: number;
-  isPagIbigActive: boolean;
-  withholdingEe: number;
-  withholdingEr: number;
-  isWithholdingActive: boolean;
-};
-
-type ContributionAgencyKey = "sss" | "philHealth" | "pagIbig" | "withholding";
-type ContributionAmountKey = `${ContributionAgencyKey}Ee` | `${ContributionAgencyKey}Er`;
-type ContributionActiveKey =
-  | "isSssActive"
-  | "isPhilHealthActive"
-  | "isPagIbigActive"
-  | "isWithholdingActive";
-
-const contributionEditorSections: {
-  label: string;
-  key: ContributionAgencyKey;
-  activeKey: ContributionActiveKey;
-}[] = [
-  { label: "SSS", key: "sss", activeKey: "isSssActive" },
-  {
-    label: "PhilHealth",
-    key: "philHealth",
-    activeKey: "isPhilHealthActive",
-  },
-  { label: "Pag-IBIG", key: "pagIbig", activeKey: "isPagIbigActive" },
-  {
-    label: "Tax",
-    key: "withholding",
-    activeKey: "isWithholdingActive",
-  },
-];
-
-function formatAmount(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "PHP",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-const agencies: { key: keyof ContributionRow; label: string }[] = [
-  { key: "sssEe", label: "SSS" },
-  { key: "philHealthEe", label: "PhilHealth" },
-  { key: "pagIbigEe", label: "Pag-IBIG" },
-  { key: "withholdingEe", label: "Tax" },
-];
 
 export function ContributionsTable({
   rows,
@@ -137,25 +98,26 @@ export function ContributionsTable({
 
   const startEdit = (row: ContributionRow) => {
     setEditingId(row.employeeId);
-    setFormState({
-      sssEe: row.sssEe ?? 0,
-      sssEr: row.sssEr ?? 0,
-      isSssActive: row.isSssActive ?? true,
-      philHealthEe: row.philHealthEe ?? 0,
-      philHealthEr: row.philHealthEr ?? 0,
-      isPhilHealthActive: row.isPhilHealthActive ?? true,
-      pagIbigEe: row.pagIbigEe ?? 0,
-      pagIbigEr: row.pagIbigEr ?? 0,
-      isPagIbigActive: row.isPagIbigActive ?? true,
-      withholdingEe: row.withholdingEe ?? 0,
-      withholdingEr: row.withholdingEr ?? 0,
-      isWithholdingActive: row.isWithholdingActive ?? true,
-    });
+    setFormState(buildContributionFormState(row));
     setError(null);
     // Load Government IDs for context inside the editor
     getGovernmentIdByEmployee(row.employeeId)
       .then((result) => setGovId(result.success ? result.data || null : null))
       .catch(() => setGovId(null));
+  };
+
+  const updateNumberField = (
+    field: keyof ContributionFormState,
+    value: string
+  ) => {
+    setFormState((prev) =>
+      prev
+        ? {
+            ...prev,
+            [field]: value === "" ? 0 : Number(value) || 0,
+          }
+        : null
+    );
   };
 
   const handleSave = async (employeeId: string) => {
@@ -246,19 +208,43 @@ export function ContributionsTable({
                       <Badge variant={row.isSet ? "default" : "outline"}>
                         {row.isSet ? "Set" : "Not set"}
                       </Badge>
+                      <Badge variant="secondary">
+                        {humanizePayrollFrequency(
+                          row.payrollFrequency ?? "BIMONTHLY"
+                        )}
+                      </Badge>
+                      <Badge variant="outline">
+                        {(row.currencyCode ?? "PHP").toUpperCase()}
+                      </Badge>
                       {row.isSet ? (
                         <>
                           <Badge variant="outline">
-                            SSS {formatAmount(row.sssEe ?? 0)}
+                            SSS{" "}
+                            {formatContributionCurrency(
+                              row.sssEe ?? 0,
+                              row.currencyCode
+                            )}
                           </Badge>
                           <Badge variant="outline">
-                            PhilHealth {formatAmount(row.philHealthEe ?? 0)}
+                            PhilHealth{" "}
+                            {formatContributionCurrency(
+                              row.philHealthEe ?? 0,
+                              row.currencyCode
+                            )}
                           </Badge>
                           <Badge variant="outline">
-                            Pag-IBIG {formatAmount(row.pagIbigEe ?? 0)}
+                            Pag-IBIG{" "}
+                            {formatContributionCurrency(
+                              row.pagIbigEe ?? 0,
+                              row.currencyCode
+                            )}
                           </Badge>
                           <Badge variant="outline">
-                            Tax {formatAmount(row.withholdingEe ?? 0)}
+                            Tax{" "}
+                            {formatContributionCurrency(
+                              row.withholdingEe ?? 0,
+                              row.currencyCode
+                            )}
                           </Badge>
                         </>
                       ) : (
@@ -288,35 +274,76 @@ export function ContributionsTable({
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="px-4 pb-4">
+                  <div className="mb-3 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs">
+                      <p className="text-xs text-muted-foreground">
+                        Payroll cadence
+                      </p>
+                      <p className="mt-1 text-sm font-medium">
+                        {humanizePayrollFrequency(
+                          row.payrollFrequency ?? "BIMONTHLY"
+                        )}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs">
+                      <p className="text-xs text-muted-foreground">Currency</p>
+                      <p className="mt-1 text-sm font-medium">
+                        {(row.currencyCode ?? "PHP").toUpperCase()}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs">
+                      <p className="text-xs text-muted-foreground">
+                        Auto-apply behavior
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Each agency schedule below controls when payroll creates
+                        the deduction automatically.
+                      </p>
+                    </div>
+                  </div>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {agencies.map((agency) => (
+                    {contributionEditorSections.map((agency) => (
                       <div
-                        key={agency.key}
+                        key={agency.eeKey}
                         className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs"
                       >
                         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                          <span>{agency.label} (EE)</span>
+                          <span>{agency.label}</span>
                           {govIds[row.employeeId] && (
                             <span className="flex items-center gap-1">
                               <IdCard className="h-3 w-3" />
-                              {agency.key === "sssEe" &&
-                                (govIds[row.employeeId]?.sssNumber || "No SSS")}
-                              {agency.key === "philHealthEe" &&
-                                (govIds[row.employeeId]?.philHealthNumber ||
-                                  "No PhilHealth")}
-                              {agency.key === "pagIbigEe" &&
-                                (govIds[row.employeeId]?.pagIbigNumber ||
-                                  "No Pag-IBIG")}
-                              {agency.key === "withholdingEe" &&
-                                (govIds[row.employeeId]?.tinNumber || "No TIN")}
+                              {govIds[row.employeeId]?.[agency.governmentIdKey] ||
+                                `No ${agency.label}`}
                             </span>
                           )}
                         </div>
                         <div className="text-lg font-semibold">
-                          {formatAmount((row[agency.key] as number) ?? 0)}
+                          {formatContributionCurrency(
+                            (row[agency.eeKey] as number) ?? 0,
+                            row.currencyCode
+                          )}
                         </div>
-                        <div className="text-[11px] text-muted-foreground mt-1">
-                          EE only. ER stored for admin views.
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge
+                            variant={
+                              row[agency.activeKey] ? "default" : "outline"
+                            }
+                          >
+                            {row[agency.activeKey] ? "Active" : "Inactive"}
+                          </Badge>
+                          <Badge variant="outline">
+                            {humanizeContributionSchedule(
+                              row[agency.scheduleKey] ?? "PER_PAYROLL"
+                            )}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 text-[11px] text-muted-foreground">
+                          ER{" "}
+                          {formatContributionCurrency(
+                            (row[agency.erKey] as number) ?? 0,
+                            row.currencyCode
+                          )}{" "}
+                          stored for payroll/admin reporting.
                         </div>
                       </div>
                     ))}
@@ -340,111 +367,207 @@ export function ContributionsTable({
                             Edit contributions for {row.employeeName}
                           </DialogTitle>
                           <p id="contrib-dialog-desc" className="sr-only">
-                            Update EE/ER amounts and activate/deactivate
-                            agencies for payroll.
+                            Update payroll cadence, currency, EE/ER amounts,
+                            contribution schedules, and agency status for
+                            payroll.
                           </p>
                         </DialogHeader>
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-4">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor={`payroll-frequency-${row.employeeId}`}>
+                                Payroll frequency
+                              </Label>
+                              <Select
+                                value={formState?.payrollFrequency ?? "BIMONTHLY"}
+                                onValueChange={(value) =>
+                                  setFormState((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          payrollFrequency:
+                                            value as ContributionFormState["payrollFrequency"],
+                                        }
+                                      : null
+                                  )
+                                }
+                              >
+                                <SelectTrigger
+                                  id={`payroll-frequency-${row.employeeId}`}
+                                  className="w-full"
+                                >
+                                  <SelectValue placeholder="Select payroll frequency" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {payrollFrequencyOptions.map((option) => (
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`currency-code-${row.employeeId}`}>
+                                Currency code
+                              </Label>
+                              <Input
+                                id={`currency-code-${row.employeeId}`}
+                                value={formState?.currencyCode ?? "PHP"}
+                                onChange={(event) =>
+                                  setFormState((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          currencyCode: event.target.value
+                                            .toUpperCase()
+                                            .slice(0, 8),
+                                        }
+                                      : null
+                                  )
+                                }
+                                placeholder="PHP"
+                                maxLength={8}
+                              />
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                            This editor now controls the contribution cadence
+                            used by payroll generation on this screen, not just
+                            the predefined EE/ER amounts.
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
                           {contributionEditorSections.map(
-                            ({ label, key, activeKey }) => {
-                              const eeKey = `${key}Ee` as ContributionAmountKey;
-                              const erKey = `${key}Er` as ContributionAmountKey;
+                            ({
+                              label,
+                              eeKey,
+                              erKey,
+                              activeKey,
+                              scheduleKey,
+                              governmentIdKey,
+                            }) => {
+                              const currentSchedule =
+                                formState?.[scheduleKey] ?? "PER_PAYROLL";
 
                               return (
-                                <div key={key} className="space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="text-sm font-medium capitalize">
-                                  {label}
-                                </div>
-                                {govId && (
-                                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                    <IdCard className="h-3 w-3" />
-                                    {key === "sss" &&
-                                      (govId.sssNumber || "No SSS")}
-                                    {key === "philHealth" &&
-                                      (govId.philHealthNumber ||
-                                        "No PhilHealth")}
-                                    {key === "pagIbig" &&
-                                      (govId.pagIbigNumber || "No Pag-IBIG")}
-                                    {key === "withholding" &&
-                                      (govId.tinNumber || "No TIN")}
+                                <div
+                                  key={eeKey}
+                                  className="space-y-3 rounded-xl border border-border/70 bg-background/40 p-4"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="text-sm font-medium capitalize">
+                                      {label}
+                                    </div>
+                                    {govId && (
+                                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                        <IdCard className="h-3 w-3" />
+                                        {govId[governmentIdKey] ||
+                                          `No ${label}`}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                      <p className="text-[11px] text-muted-foreground">
+                                        EE
+                                      </p>
+                                      <Input
+                                        type="number"
+                                        value={
+                                          formState ? formState[eeKey] ?? 0 : 0
+                                        }
+                                        onChange={(e) =>
+                                          updateNumberField(eeKey, e.target.value)
+                                        }
+                                        placeholder="EE"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="text-[11px] text-muted-foreground">
+                                        ER
+                                      </p>
+                                      <Input
+                                        type="number"
+                                        value={
+                                          formState ? formState[erKey] ?? 0 : 0
+                                        }
+                                        onChange={(e) =>
+                                          updateNumberField(erKey, e.target.value)
+                                        }
+                                        placeholder="ER"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-[11px] text-muted-foreground">
+                                      Auto-apply schedule
+                                    </Label>
+                                    <Select
+                                      value={currentSchedule}
+                                      onValueChange={(value) =>
+                                        setFormState((prev) =>
+                                          prev
+                                            ? {
+                                                ...prev,
+                                                [scheduleKey]:
+                                                  value as ContributionFormState[typeof scheduleKey],
+                                              }
+                                            : null
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select a schedule" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {contributionScheduleOptions.map(
+                                          (option) => (
+                                            <SelectItem
+                                              key={option.value}
+                                              value={option.value}
+                                            >
+                                              {option.label}
+                                            </SelectItem>
+                                          )
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-muted"
+                                      checked={
+                                        formState
+                                          ? formState[activeKey] ?? true
+                                          : true
+                                      }
+                                      onChange={(e) =>
+                                        setFormState((prev) =>
+                                          prev
+                                            ? {
+                                                ...prev,
+                                                [activeKey]: e.target.checked,
+                                              }
+                                            : null
+                                        )
+                                      }
+                                    />
+                                    Active in payroll
+                                  </label>
                                   <p className="text-[11px] text-muted-foreground">
-                                    EE
+                                    EE shows in the directory. ER is stored for
+                                    admin reporting. Schedule decides when this
+                                    deduction is auto-created during payroll.
                                   </p>
-                                  <Input
-                                    type="number"
-                                    value={formState ? formState[eeKey] ?? 0 : 0}
-                                    onChange={(e) =>
-                                      setFormState((prev) =>
-                                        prev
-                                          ? {
-                                              ...prev,
-                                              [eeKey]:
-                                                e.target.value === ""
-                                                  ? 0
-                                                  : Number(e.target.value) || 0,
-                                            }
-                                          : null
-                                      )
-                                    }
-                                    placeholder="EE"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <p className="text-[11px] text-muted-foreground">
-                                    ER
-                                  </p>
-                                  <Input
-                                    type="number"
-                                    value={formState ? formState[erKey] ?? 0 : 0}
-                                    onChange={(e) =>
-                                      setFormState((prev) =>
-                                        prev
-                                          ? {
-                                              ...prev,
-                                              [erKey]:
-                                                e.target.value === ""
-                                                  ? 0
-                                                  : Number(e.target.value) || 0,
-                                            }
-                                          : null
-                                      )
-                                    }
-                                    placeholder="ER"
-                                  />
-                                </div>
-                              </div>
-                              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-muted"
-                                  checked={formState ? formState[activeKey] ?? true : true}
-                                  onChange={(e) =>
-                                    setFormState((prev) =>
-                                      prev
-                                        ? {
-                                            ...prev,
-                                            [activeKey]: e.target.checked,
-                                          }
-                                        : null
-                                    )
-                                  }
-                                />
-                                Active in payroll
-                              </label>
-                              <p className="text-[11px] text-muted-foreground">
-                                EE shows in directory; ER is stored for admin
-                                use. Disable to exclude this agency.
-                              </p>
                                 </div>
                               );
                             },
                           )}
+                          </div>
                         </div>
                         {error && (
                           <p className="text-sm text-destructive">{error}</p>

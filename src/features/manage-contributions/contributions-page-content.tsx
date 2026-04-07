@@ -92,7 +92,7 @@ export default function ContributionsPageContent() {
         <div>
           <h1 className="text-2xl font-bold">Contributions</h1>
           <p className="text-muted-foreground text-sm">
-            Manage contribution records
+            Manage contribution amounts, payroll cadence, and auto-apply schedules
           </p>
         </div>
       </div>
