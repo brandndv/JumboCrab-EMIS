@@ -8,7 +8,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InlineLoadingState } from "@/components/loading/loading-states";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type {
@@ -257,6 +260,15 @@ const PayrollHistoryPage = () => {
     }),
     [filteredRuns],
   );
+
+  if (loading && runs.length === 0 && !error) {
+    return (
+      <ModuleLoadingState
+        title="Payroll History"
+        description="Loading payroll runs, archive filters, and run details."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">

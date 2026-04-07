@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast-provider";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
 import {
   Card,
   CardContent,
@@ -175,6 +176,18 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
       setLoading(false);
     }
   };
+
+  const isInitialEmployeeSelectionLoading =
+    Boolean(defaultEmployeeId) && isLoading && employees.length === 0;
+
+  if (isInitialEmployeeSelectionLoading) {
+    return (
+      <ModuleLoadingState
+        title="Create User Account"
+        description="Loading the employee record for account setup."
+      />
+    );
+  }
 
   return (
     <div className="w-full max-w-4xl mx-auto">

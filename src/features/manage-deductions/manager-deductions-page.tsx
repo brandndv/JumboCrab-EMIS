@@ -20,7 +20,10 @@ import { DeductionProgress } from "@/features/manage-deductions/deduction-progre
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TableLoadingState } from "@/components/loading/loading-states";
+import {
+  ModuleLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast-provider";
 import {
@@ -87,6 +90,15 @@ export default function ManagerDeductionsPage({
         .slice(0, 10),
     [rows],
   );
+
+  if (loading && rows.length === 0 && !error) {
+    return (
+      <ModuleLoadingState
+        title="Deduction Review Queue"
+        description="Loading pending drafts, review notes, and approval history."
+      />
+    );
+  }
 
   const handleReview = async (
     id: string,

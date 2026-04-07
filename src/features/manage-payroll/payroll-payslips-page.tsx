@@ -9,7 +9,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InlineLoadingState } from "@/components/loading/loading-states";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 import {
   Dialog,
   DialogContent,
@@ -547,6 +550,25 @@ const PayrollPayslipsPage = ({
       setSelectedPayslipId(filteredRows[0].payrollEmployeeId);
     }
   }, [filteredRows, isEmployeeHistoryView, selectedPayslipId]);
+
+  const isInitialPageLoading =
+    sessionLoading ||
+    (!rowsError &&
+      !detailError &&
+      ((loadingRows && rows.length === 0) ||
+        (!isEmployeeHistoryView &&
+          !loadingRows &&
+          rows.length > 0 &&
+          (!selectedPayslipId || (loadingDetail && !selectedPayslip)))));
+
+  if (isInitialPageLoading) {
+    return (
+      <ModuleLoadingState
+        title={isEmployeeHistoryView ? "Payslip History" : "Payslips"}
+        description="Loading payroll periods and the selected payslip breakdown."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">

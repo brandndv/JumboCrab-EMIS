@@ -10,7 +10,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InlineLoadingState } from "@/components/loading/loading-states";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast-provider";
 import { useSession } from "@/hooks/use-session";
@@ -228,6 +231,24 @@ const PayrollReviewPage = () => {
       setSelectedRunId(visibleRuns[0].payrollId);
     }
   }, [selectedRunId, visibleRuns]);
+
+  const isInitialPageLoading =
+    sessionLoading ||
+    (!runsError &&
+      !detailError &&
+      ((loadingRuns && runs.length === 0) ||
+        (!loadingRuns &&
+          runs.length > 0 &&
+          (!selectedRunId || (loadingDetail && !selectedRun)))));
+
+  if (isInitialPageLoading) {
+    return (
+      <ModuleLoadingState
+        title="Review Payroll"
+        description="Loading the payroll queue and selected run details."
+      />
+    );
+  }
 
   const executeReview = async (
     level: "MANAGER" | "GENERAL_MANAGER",

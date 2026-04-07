@@ -130,6 +130,7 @@ const EmployeeAttendance = () => {
   const [rows, setRows] = useState<AttendanceRow[]>([]);
   const [rowsLoading, setRowsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
+  const [hasLoadedRows, setHasLoadedRows] = useState(false);
 
   const { options: periodOptions, defaultPeriod } = useMemo(
     () => buildCurrentMonthBimonthlyOptions(),
@@ -147,6 +148,7 @@ const EmployeeAttendance = () => {
     const loadBimonthlyAttendance = async () => {
       if (!employeeId || !selectedRange) {
         setRows([]);
+        setHasLoadedRows(true);
         return;
       }
       try {
@@ -167,6 +169,7 @@ const EmployeeAttendance = () => {
         );
       } finally {
         setRowsLoading(false);
+        setHasLoadedRows(true);
       }
     };
 
@@ -207,6 +210,14 @@ const EmployeeAttendance = () => {
   }
   if (error) return <div>Failed to load session</div>;
   if (!user) return <div>No session</div>;
+  if (employeeId && !hasLoadedRows && !rowsError) {
+    return (
+      <ModuleLoadingState
+        title="Attendance"
+        description="Loading your attendance ranges, punches, and daily breakdown."
+      />
+    );
+  }
 
   const displayName =
     [employee?.firstName, employee?.lastName]

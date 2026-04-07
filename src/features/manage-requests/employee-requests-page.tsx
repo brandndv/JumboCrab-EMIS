@@ -33,7 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScreenOverlayLoadingState } from "@/components/loading/loading-states";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
 import {
   Dialog,
@@ -480,14 +480,28 @@ export default function EmployeeRequestsPage({
           : "Schedule swap request details, counterpart, and current shift snapshots."
     : "";
 
+  const isInitialPageLoading =
+    loading &&
+    !error &&
+    cashAdvanceRows.length === 0 &&
+    dayOffRows.length === 0 &&
+    leaveRows.length === 0 &&
+    scheduleChangeRows.length === 0 &&
+    scheduleSwapRows.length === 0 &&
+    !leaveBalanceSummary &&
+    !dayOffMonthlySummary;
+
+  if (isInitialPageLoading) {
+    return (
+      <ModuleLoadingState
+        title="Requests"
+        description="Loading your requests, balances, and approval history."
+      />
+    );
+  }
+
   return (
     <div className="relative min-h-[70vh] space-y-6 px-4 py-8 sm:px-8 lg:px-12">
-      {loading ? (
-        <ScreenOverlayLoadingState
-          title="Loading requests"
-          description="Syncing your request history and preparing the next view."
-        />
-      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">{pageTitle}</h1>

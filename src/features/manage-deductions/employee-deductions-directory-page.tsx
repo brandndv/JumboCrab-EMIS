@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   listEmployeeDeductionAssignments,
@@ -101,9 +101,12 @@ function EmployeeDeductionsDirectoryPageContent({
   );
   const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
   const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [hasLoadedEmployees, setHasLoadedEmployees] = useState(false);
+  const employeeSearchActivatedRef = useRef(false);
 
   const [rows, setRows] = useState<DeductionAssignmentRow[]>([]);
   const [loadingRows, setLoadingRows] = useState(false);
+  const [hasLoadedAssignments, setHasLoadedAssignments] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
@@ -184,6 +187,7 @@ function EmployeeDeductionsDirectoryPageContent({
       setError(err instanceof Error ? err.message : "Failed to load employees");
     } finally {
       setEmployeesLoading(false);
+      setHasLoadedEmployees(true);
     }
   };
 
@@ -213,6 +217,7 @@ function EmployeeDeductionsDirectoryPageContent({
       );
     } finally {
       setLoadingRows(false);
+      setHasLoadedAssignments(true);
     }
   };
 
@@ -266,6 +271,10 @@ function EmployeeDeductionsDirectoryPageContent({
   }, []);
 
   useEffect(() => {
+    if (!employeeSearchActivatedRef.current) {
+      return;
+    }
+
     const handle = setTimeout(() => {
       void loadEmployees(employeeQuery);
     }, 250);
@@ -276,6 +285,18 @@ function EmployeeDeductionsDirectoryPageContent({
   useEffect(() => {
     void loadAssignments(selectedEmployeeId);
   }, [selectedEmployeeId]);
+
+  const isInitialPageLoading =
+    !error && (!hasLoadedEmployees || !hasLoadedAssignments);
+
+  if (isInitialPageLoading) {
+    return (
+      <ModuleLoadingState
+        title="Employee Deductions"
+        description="Loading employee selections and deduction assignments."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">
@@ -306,6 +327,7 @@ function EmployeeDeductionsDirectoryPageContent({
             <Input
               value={employeeQuery}
               onChange={(event) => {
+                employeeSearchActivatedRef.current = true;
                 setEmployeeQuery(event.target.value);
                 setSelectedEmployeeId("");
                 setEmployeeDropdownOpen(true);

@@ -15,7 +15,7 @@ import {
 import { DeductionProgress } from "@/features/manage-deductions/deduction-progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InlineLoadingState } from "@/components/loading/loading-states";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
 import { DeductionFrequency, EmployeeDeductionAssignmentStatus } from "@prisma/client";
 
 export default function EmployeeDeductionsPage() {
@@ -82,6 +82,15 @@ export default function EmployeeDeductionsPage() {
     [rows],
   );
 
+  if (loading && rows.length === 0 && !error) {
+    return (
+      <ModuleLoadingState
+        title="My Deductions"
+        description="Loading your deduction balances, schedules, and approved assignments."
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">
       <div>
@@ -140,9 +149,6 @@ export default function EmployeeDeductionsPage() {
         </CardHeader>
         <CardContent>
           {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
-          {loading ? (
-            <InlineLoadingState label="Loading deductions" lines={3} />
-          ) : null}
           {!loading && rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No approved deductions found.

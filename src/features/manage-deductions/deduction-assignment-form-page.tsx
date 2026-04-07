@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   createEmployeeDeductionAssignment,
@@ -90,11 +90,14 @@ function DeductionAssignmentFormPageContent({
   const [employees, setEmployees] = useState<DeductionEmployeeOption[]>([]);
   const [employeeQuery, setEmployeeQuery] = useState("");
   const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [hasLoadedEmployees, setHasLoadedEmployees] = useState(false);
+  const employeeSearchActivatedRef = useRef(false);
   const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
 
   const [types, setTypes] = useState<DeductionTypeRow[]>([]);
   const [typesLoading, setTypesLoading] = useState(false);
+  const [hasLoadedTypes, setHasLoadedTypes] = useState(false);
   const [selectedTypeId, setSelectedTypeId] = useState("");
   const [typeQuery, setTypeQuery] = useState("");
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
@@ -117,6 +120,7 @@ function DeductionAssignmentFormPageContent({
   const [reason, setReason] = useState("");
 
   const [loadingExisting, setLoadingExisting] = useState(false);
+  const [hasResolvedExisting, setHasResolvedExisting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -211,6 +215,7 @@ function DeductionAssignmentFormPageContent({
       setError(err instanceof Error ? err.message : "Failed to load employees");
     } finally {
       setEmployeesLoading(false);
+      setHasLoadedEmployees(true);
     }
   }, [selectedEmployeeId]);
 
@@ -232,6 +237,7 @@ function DeductionAssignmentFormPageContent({
       );
     } finally {
       setTypesLoading(false);
+      setHasLoadedTypes(true);
     }
   }, []);
 
@@ -287,6 +293,7 @@ function DeductionAssignmentFormPageContent({
       );
     } finally {
       setLoadingExisting(false);
+      setHasResolvedExisting(true);
     }
   }, []);
 
@@ -363,10 +370,16 @@ function DeductionAssignmentFormPageContent({
   useEffect(() => {
     if (assignmentId) {
       void loadExisting(assignmentId);
+    } else {
+      setHasResolvedExisting(true);
     }
   }, [assignmentId, loadExisting]);
 
   useEffect(() => {
+    if (!employeeSearchActivatedRef.current) {
+      return;
+    }
+
     const handle = setTimeout(() => {
       void loadEmployees(employeeQuery);
     }, 250);
@@ -385,6 +398,14 @@ function DeductionAssignmentFormPageContent({
       setAmountOverrideOpen(false);
     }
   }, [showAmountOverride]);
+
+  const isInitialPageLoading =
+    !error &&
+    (!hasLoadedEmployees || !hasLoadedTypes || !hasResolvedExisting);
+
+  if (isInitialPageLoading) {
+    return <ModuleLoadingState title={title} description={description} />;
+  }
 
   return (
     <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">
@@ -419,6 +440,7 @@ function DeductionAssignmentFormPageContent({
                     id="deduction-employee"
                     value={employeeQuery}
                     onChange={(event) => {
+                      employeeSearchActivatedRef.current = true;
                       setEmployeeQuery(event.target.value);
                       setSelectedEmployeeId("");
                       setEmployeeDropdownOpen(true);

@@ -28,7 +28,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { TableLoadingState } from "@/components/loading/loading-states";
+import {
+  ModuleLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
 
 const todayISO = () => new Date().toLocaleDateString("en-CA", { timeZone: TZ });
@@ -231,6 +234,15 @@ export function DailyAttendance() {
       setPunchDeletingId(null);
     }
   };
+
+  if (loading && rows.length === 0 && punches.length === 0 && !error) {
+    return (
+      <ModuleLoadingState
+        title="Attendance"
+        description="Loading daily attendance, punch logs, and department filters."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">

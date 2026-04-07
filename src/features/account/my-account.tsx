@@ -117,10 +117,14 @@ const MyAccountPage = () => {
     null,
   );
   const [employeeDetailsLoading, setEmployeeDetailsLoading] = useState(false);
+  const [hasResolvedEmployeeDetails, setHasResolvedEmployeeDetails] =
+    useState(false);
   const [governmentIds, setGovernmentIds] = useState<GovernmentIdRecord | null>(
     null,
   );
   const [governmentIdsLoading, setGovernmentIdsLoading] = useState(false);
+  const [hasResolvedGovernmentIds, setHasResolvedGovernmentIds] =
+    useState(false);
   const [governmentIdsError, setGovernmentIdsError] = useState<string | null>(
     null,
   );
@@ -135,6 +139,7 @@ const MyAccountPage = () => {
   useEffect(() => {
     if (!isEmployee || !employeeId) {
       setEmployeeDetails(null);
+      setHasResolvedEmployeeDetails(true);
       return;
     }
 
@@ -150,6 +155,7 @@ const MyAccountPage = () => {
       } finally {
         if (!cancelled) {
           setEmployeeDetailsLoading(false);
+          setHasResolvedEmployeeDetails(true);
         }
       }
     };
@@ -166,6 +172,7 @@ const MyAccountPage = () => {
       setGovernmentIds(null);
       setGovernmentIdsError(null);
       setGovernmentIdsLoading(false);
+      setHasResolvedGovernmentIds(true);
       return;
     }
 
@@ -196,6 +203,7 @@ const MyAccountPage = () => {
       } finally {
         if (!cancelled) {
           setGovernmentIdsLoading(false);
+          setHasResolvedGovernmentIds(true);
         }
       }
     };
@@ -313,6 +321,19 @@ const MyAccountPage = () => {
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  if (
+    isEmployee &&
+    employeeId &&
+    (!hasResolvedEmployeeDetails || !hasResolvedGovernmentIds)
+  ) {
+    return (
+      <ModuleLoadingState
+        title="My Account"
+        description="Loading account credentials, employee profile, and linked records."
+      />
     );
   }
 

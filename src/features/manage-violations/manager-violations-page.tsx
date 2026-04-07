@@ -9,7 +9,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TableLoadingState } from "@/components/loading/loading-states";
+import {
+  ModuleLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast-provider";
 import {
@@ -84,6 +87,15 @@ const ManagerViolationsPage = () => {
 
   const approvedCount = rows.filter((row) => row.status === "APPROVED").length;
   const rejectedCount = rows.filter((row) => row.status === "REJECTED").length;
+
+  if (loading && rows.length === 0 && !error) {
+    return (
+      <ModuleLoadingState
+        title="Violation Review Queue"
+        description="Loading supervisor drafts, review notes, and violation history."
+      />
+    );
+  }
 
   const handleReview = async (
     id: string,

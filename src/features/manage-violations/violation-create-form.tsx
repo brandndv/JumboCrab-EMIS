@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   createEmployeeViolation,
@@ -21,7 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { InlineLoadingState } from "@/components/loading/loading-states";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
 
 const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
@@ -46,6 +49,8 @@ export default function ViolationCreateForm({
 
   const [employees, setEmployees] = useState<ViolationEmployeeOption[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [hasLoadedEmployees, setHasLoadedEmployees] = useState(false);
+  const employeeSearchActivatedRef = useRef(false);
   const [employeeQuery, setEmployeeQuery] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(
     initialEmployeeId ?? "",
@@ -56,6 +61,7 @@ export default function ViolationCreateForm({
     [],
   );
   const [definitionsLoading, setDefinitionsLoading] = useState(false);
+  const [hasLoadedDefinitions, setHasLoadedDefinitions] = useState(false);
   const [selectedViolationId, setSelectedViolationId] = useState("");
 
   const [violationDate, setViolationDate] = useState(
@@ -126,6 +132,7 @@ export default function ViolationCreateForm({
       setError(err instanceof Error ? err.message : "Failed to load employees");
     } finally {
       setEmployeesLoading(false);
+      setHasLoadedEmployees(true);
     }
   };
 
@@ -152,6 +159,7 @@ export default function ViolationCreateForm({
       );
     } finally {
       setDefinitionsLoading(false);
+      setHasLoadedDefinitions(true);
     }
   };
 
@@ -225,12 +233,28 @@ export default function ViolationCreateForm({
   }, []);
 
   useEffect(() => {
+    if (!employeeSearchActivatedRef.current) {
+      return;
+    }
+
     const handle = setTimeout(() => {
       void loadEmployees(employeeQuery);
     }, 250);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeQuery]);
+
+  const isInitialPageLoading =
+    !error && (!hasLoadedEmployees || !hasLoadedDefinitions);
+
+  if (isInitialPageLoading) {
+    return (
+      <ModuleLoadingState
+        title="Assign Violation"
+        description="Loading employees and violation definitions."
+      />
+    );
+  }
 
   return (
     <Card className="shadow-sm">
@@ -251,6 +275,7 @@ export default function ViolationCreateForm({
                   id="employee-combined"
                   value={employeeQuery}
                   onChange={(event) => {
+                    employeeSearchActivatedRef.current = true;
                     setEmployeeQuery(event.target.value);
                     setSelectedEmployeeId("");
                     setEmployeeDropdownOpen(true);

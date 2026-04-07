@@ -34,7 +34,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InlineLoadingState } from "@/components/loading/loading-states";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
 import {
   Dialog,
@@ -338,6 +341,23 @@ export default function ManagerRequestsPage() {
       ),
     [rows],
   );
+
+  if (
+    loading &&
+    !error &&
+    cashAdvanceRows.length === 0 &&
+    dayOffRows.length === 0 &&
+    leaveRows.length === 0 &&
+    scheduleChangeRows.length === 0 &&
+    scheduleSwapRows.length === 0
+  ) {
+    return (
+      <ModuleLoadingState
+        title="Requests"
+        description="Loading pending requests, review actions, and request history."
+      />
+    );
+  }
 
   const getDefaultPaidDateKeys = (row: Extract<ManagerRequestItem, { requestType: "LEAVE" }>) =>
     row.leaveType === "UNPAID"

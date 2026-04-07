@@ -40,7 +40,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TableLoadingState } from "@/components/loading/loading-states";
+import {
+  ModuleLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
 import { DeductionAmountMode, DeductionFrequency } from "@prisma/client";
 import { Pencil, Plus, RefreshCcw } from "lucide-react";
@@ -109,6 +112,15 @@ export default function DeductionTypesPage() {
       `${row.name} ${row.description ?? ""}`.toLowerCase().includes(term),
     );
   }, [filter, rows]);
+
+  if (loading && rows.length === 0 && !error) {
+    return (
+      <ModuleLoadingState
+        title="Deduction Types"
+        description="Loading deduction definitions, frequency rules, and amount settings."
+      />
+    );
+  }
 
   const closeDialog = (nextOpen: boolean) => {
     if (!nextOpen) {

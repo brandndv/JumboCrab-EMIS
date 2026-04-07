@@ -3,7 +3,7 @@
 import { upsertEmployeeContribution } from "@/actions/contributions/contributions-action";
 import { getGovernmentIdByEmployee } from "@/actions/contributions/government-ids-action";
 import type { GovernmentIdRecord } from "@/actions/contributions/government-ids-action";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -108,27 +108,11 @@ export function ContributionsTable({
   >({});
   const [govId, setGovId] = useState<GovernmentIdRecord | null>(null);
 
-  const sortedRows = useMemo(
-    () =>
-      [...rows].sort((a, b) => {
-        const nameA =
-          typeof a.employeeName === "string"
-            ? a.employeeName
-            : String(a.employeeName ?? "");
-        const nameB =
-          typeof b.employeeName === "string"
-            ? b.employeeName
-            : String(b.employeeName ?? "");
-        return nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
-      }),
-    [rows]
-  );
-
   if (loading) {
     return <InlineLoadingState label="Loading contributions" lines={3} />;
   }
 
-  if (!sortedRows.length) {
+  if (!rows.length) {
     return (
       <div className="rounded-2xl border border-border/70 bg-card/70 p-6 text-sm text-muted-foreground">
         No contributions found.
@@ -211,7 +195,7 @@ export function ContributionsTable({
         <div className="col-span-3 text-right">Last Updated</div>
       </div>
       <div className="divide-y divide-border/70">
-        {sortedRows.map((row) => {
+        {rows.map((row) => {
           const isOpen = openId === row.employeeId;
           return (
             <Collapsible
