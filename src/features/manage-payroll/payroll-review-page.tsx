@@ -10,8 +10,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InlineLoadingState } from "@/components/loading/loading-states";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast-provider";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
 import type {
@@ -108,6 +112,7 @@ const ApprovalCell = ({
 
 const PayrollReviewPage = () => {
   const { user, loading: sessionLoading } = useSession();
+  const toast = useToast();
 
   const [runs, setRuns] = useState<PayrollRunSummary[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
@@ -227,6 +232,24 @@ const PayrollReviewPage = () => {
     }
   }, [selectedRunId, visibleRuns]);
 
+  const isInitialPageLoading =
+    sessionLoading ||
+    (!runsError &&
+      !detailError &&
+      ((loadingRuns && runs.length === 0) ||
+        (!loadingRuns &&
+          runs.length > 0 &&
+          (!selectedRunId || (loadingDetail && !selectedRun)))));
+
+  if (isInitialPageLoading) {
+    return (
+      <ModuleLoadingState
+        title="Review Payroll"
+        description="Loading the payroll queue and selected run details."
+      />
+    );
+  }
+
   const executeReview = async (
     level: "MANAGER" | "GENERAL_MANAGER",
     decision: "APPROVED" | "REJECTED",
@@ -246,13 +269,17 @@ const PayrollReviewPage = () => {
         throw new Error(result.error || "Failed to review payroll run");
       }
       setActionSuccess("Payroll review updated.");
+      toast.success("Payroll review updated successfully.");
       setReviewRemarks("");
       setSelectedRun(result.data ?? null);
       await loadRuns();
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Failed to review payroll run",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to review payroll run";
+      setActionError(message);
+      toast.error("Failed to review payroll run.", {
+        description: message,
+      });
     } finally {
       setWorking(false);
     }
@@ -269,12 +296,16 @@ const PayrollReviewPage = () => {
         throw new Error(result.error || "Failed to release payroll run");
       }
       setActionSuccess("Payroll run released.");
+      toast.success("Payroll run released successfully.");
       setSelectedRun(result.data ?? null);
       await loadRuns();
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Failed to release payroll run",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to release payroll run";
+      setActionError(message);
+      toast.error("Failed to release payroll run.", {
+        description: message,
+      });
     } finally {
       setWorking(false);
     }

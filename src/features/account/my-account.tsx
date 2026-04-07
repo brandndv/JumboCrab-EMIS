@@ -33,6 +33,7 @@ import {
   InlineLoadingState,
   ModuleLoadingState,
 } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 import type { Employee } from "@/lib/validations/employees";
 
 type EmployeeType = Partial<Employee>;
@@ -107,6 +108,7 @@ const InfoSection = ({
 );
 
 const MyAccountPage = () => {
+  const toast = useToast();
   const { user, loading, error, isEmployee } = useSession();
   const employeeId = user?.employee?.employeeId;
   const [employeeInfoTab, setEmployeeInfoTab] =
@@ -115,10 +117,14 @@ const MyAccountPage = () => {
     null,
   );
   const [employeeDetailsLoading, setEmployeeDetailsLoading] = useState(false);
+  const [hasResolvedEmployeeDetails, setHasResolvedEmployeeDetails] =
+    useState(false);
   const [governmentIds, setGovernmentIds] = useState<GovernmentIdRecord | null>(
     null,
   );
   const [governmentIdsLoading, setGovernmentIdsLoading] = useState(false);
+  const [hasResolvedGovernmentIds, setHasResolvedGovernmentIds] =
+    useState(false);
   const [governmentIdsError, setGovernmentIdsError] = useState<string | null>(
     null,
   );
@@ -133,6 +139,7 @@ const MyAccountPage = () => {
   useEffect(() => {
     if (!isEmployee || !employeeId) {
       setEmployeeDetails(null);
+      setHasResolvedEmployeeDetails(true);
       return;
     }
 
@@ -148,6 +155,7 @@ const MyAccountPage = () => {
       } finally {
         if (!cancelled) {
           setEmployeeDetailsLoading(false);
+          setHasResolvedEmployeeDetails(true);
         }
       }
     };
@@ -164,6 +172,7 @@ const MyAccountPage = () => {
       setGovernmentIds(null);
       setGovernmentIdsError(null);
       setGovernmentIdsLoading(false);
+      setHasResolvedGovernmentIds(true);
       return;
     }
 
@@ -194,6 +203,7 @@ const MyAccountPage = () => {
       } finally {
         if (!cancelled) {
           setGovernmentIdsLoading(false);
+          setHasResolvedGovernmentIds(true);
         }
       }
     };
@@ -268,10 +278,14 @@ const MyAccountPage = () => {
         throw new Error(result.error || "Failed to update password.");
       }
       handlePasswordModalChange(false);
+      toast.success("Password updated successfully.");
     } catch (err) {
-      setPasswordError(
-        err instanceof Error ? err.message : "Failed to update password.",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update password.";
+      setPasswordError(message);
+      toast.error("Failed to update password.", {
+        description: message,
+      });
     } finally {
       setPasswordSaving(false);
     }
@@ -307,6 +321,19 @@ const MyAccountPage = () => {
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  if (
+    isEmployee &&
+    employeeId &&
+    (!hasResolvedEmployeeDetails || !hasResolvedGovernmentIds)
+  ) {
+    return (
+      <ModuleLoadingState
+        title="My Account"
+        description="Loading account credentials, employee profile, and linked records."
+      />
     );
   }
 

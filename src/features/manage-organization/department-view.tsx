@@ -1,7 +1,7 @@
 "use client";
 
 import { listDepartments } from "@/actions/organization/departments-action";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCcw } from "lucide-react";
@@ -40,15 +40,20 @@ type Dept = {
   }[];
 };
 
-export function DepartmentView() {
+export function DepartmentView({
+  onInitialLoadComplete,
+}: {
+  onInitialLoadComplete?: () => void;
+}) {
   const [data, setData] = useState<Dept[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<Dept | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const hasReportedInitialLoadRef = useRef(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -61,12 +66,16 @@ export function DepartmentView() {
       setError(err instanceof Error ? err.message : "Failed to load departments");
     } finally {
       setLoading(false);
+      if (!hasReportedInitialLoadRef.current) {
+        hasReportedInitialLoadRef.current = true;
+        onInitialLoadComplete?.();
+      }
     }
-  };
+  }, [onInitialLoadComplete]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   return (
     <Card className="shadow-sm">

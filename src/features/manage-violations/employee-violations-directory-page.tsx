@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createViolationAutoResetPolicy,
   deleteViolationAutoResetPolicy,
@@ -53,8 +53,10 @@ import {
 } from "@/components/ui/table";
 import {
   InlineLoadingState,
+  ModuleLoadingState,
   TableLoadingState,
 } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 
 type EmployeeViolationsDirectoryPageProps = {
   rolePath: "manager" | "generalManager";
@@ -97,16 +99,21 @@ const toDateInputValue = (value: string | null | undefined) => {
 const EmployeeViolationsDirectoryPage = ({
   rolePath,
 }: EmployeeViolationsDirectoryPageProps) => {
+  const toast = useToast();
   const [employees, setEmployees] = useState<ViolationEmployeeOption[]>([]);
   const [employeeQuery, setEmployeeQuery] = useState<string>("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [employeeDropdownOpen, setEmployeeDropdownOpen] =
     useState<boolean>(false);
   const [employeesLoading, setEmployeesLoading] = useState<boolean>(false);
+  const [hasLoadedEmployees, setHasLoadedEmployees] = useState<boolean>(false);
+  const employeeSearchActivatedRef = useRef(false);
 
   const [definitions, setDefinitions] = useState<ViolationDefinitionOption[]>(
     [],
   );
+  const [hasLoadedDefinitions, setHasLoadedDefinitions] =
+    useState<boolean>(false);
   const [rows, setRows] = useState<ViolationRow[]>([]);
   const [loadingViolations, setLoadingViolations] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +144,7 @@ const EmployeeViolationsDirectoryPage = ({
 
   const [policies, setPolicies] = useState<ViolationAutoResetPolicyRow[]>([]);
   const [loadingPolicies, setLoadingPolicies] = useState<boolean>(false);
+  const [hasLoadedPolicies, setHasLoadedPolicies] = useState<boolean>(false);
   const [policyError, setPolicyError] = useState<string | null>(null);
 
   const [autoName, setAutoName] = useState<string>("");
@@ -188,6 +196,8 @@ const EmployeeViolationsDirectoryPage = ({
           ? err.message
           : "Failed to load violation definitions",
       );
+    } finally {
+      setHasLoadedDefinitions(true);
     }
   };
 
@@ -207,6 +217,7 @@ const EmployeeViolationsDirectoryPage = ({
       setError(err instanceof Error ? err.message : "Failed to load employees");
     } finally {
       setEmployeesLoading(false);
+      setHasLoadedEmployees(true);
     }
   };
 
@@ -302,6 +313,7 @@ const EmployeeViolationsDirectoryPage = ({
       );
     } finally {
       setLoadingPolicies(false);
+      setHasLoadedPolicies(true);
     }
   };
 
@@ -466,12 +478,16 @@ const EmployeeViolationsDirectoryPage = ({
       }
 
       setResetSuccess("Violation strike reset recorded.");
+      toast.success("Violation strike reset recorded.");
       setResetReason("");
       await refreshSelectedEmployeeData(selectedEmployeeId);
     } catch (err) {
-      setResetError(
-        err instanceof Error ? err.message : "Failed to reset strikes",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to reset strikes";
+      setResetError(message);
+      toast.error("Failed to reset strikes.", {
+        description: message,
+      });
     } finally {
       setSubmittingReset(false);
     }
@@ -516,14 +532,18 @@ const EmployeeViolationsDirectoryPage = ({
       }
 
       setAutoActionMessage("Auto-reset policy created.");
+      toast.success("Auto-reset policy created.");
       resetAutoPolicyCreateForm();
       await loadPolicies();
     } catch (err) {
-      setPolicyError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Failed to create auto reset policy",
-      );
+          : "Failed to create auto reset policy";
+      setPolicyError(message);
+      toast.error("Failed to create auto reset policy.", {
+        description: message,
+      });
     } finally {
       setCreatingPolicy(false);
     }
@@ -574,12 +594,16 @@ const EmployeeViolationsDirectoryPage = ({
       }
 
       setAutoActionMessage("Auto-reset policy updated.");
+      toast.success("Auto-reset policy updated.");
       closeEditPolicy();
       await loadPolicies();
     } catch (err) {
-      setPolicyError(
-        err instanceof Error ? err.message : "Failed to update auto reset policy",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update auto reset policy";
+      setPolicyError(message);
+      toast.error("Failed to update auto reset policy.", {
+        description: message,
+      });
     } finally {
       setSavingEditedPolicy(false);
     }
@@ -601,6 +625,12 @@ const EmployeeViolationsDirectoryPage = ({
           ? "No due auto-reset policies right now. Use a policy row's Run Now to force one immediately."
           : `Auto-reset run complete. Policies processed: ${processed}, resets created: ${created}.`,
       );
+      toast.success("Auto-reset run completed.", {
+        description:
+          processed === 0
+            ? "No due policies were processed this time."
+            : `Policies processed: ${processed}, resets created: ${created}.`,
+      });
 
       await Promise.all([
         loadPolicies(),
@@ -609,9 +639,12 @@ const EmployeeViolationsDirectoryPage = ({
           : Promise.resolve(),
       ]);
     } catch (err) {
-      setPolicyError(
-        err instanceof Error ? err.message : "Failed to run due auto resets",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to run due auto resets";
+      setPolicyError(message);
+      toast.error("Failed to run due auto resets.", {
+        description: message,
+      });
     } finally {
       setRunningAutoNow(false);
     }
@@ -635,6 +668,9 @@ const EmployeeViolationsDirectoryPage = ({
       setAutoActionMessage(
         `Policy run completed. Resets created: ${created}. Effective from ${runAtLabel}.`,
       );
+      toast.success("Policy run completed.", {
+        description: `Resets created: ${created}. Effective from ${runAtLabel}.`,
+      });
 
       await Promise.all([
         loadPolicies(),
@@ -643,7 +679,12 @@ const EmployeeViolationsDirectoryPage = ({
           : Promise.resolve(),
       ]);
     } catch (err) {
-      setPolicyError(err instanceof Error ? err.message : "Failed to run policy now");
+      const message =
+        err instanceof Error ? err.message : "Failed to run policy now";
+      setPolicyError(message);
+      toast.error("Failed to run policy now.", {
+        description: message,
+      });
     } finally {
       setRunningViewedPolicy(false);
     }
@@ -667,10 +708,16 @@ const EmployeeViolationsDirectoryPage = ({
             : policy,
         ),
       );
-    } catch (err) {
-      setPolicyError(
-        err instanceof Error ? err.message : "Failed to update policy status",
+      toast.success(
+        !isActive ? "Auto-reset policy enabled." : "Auto-reset policy disabled.",
       );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to update policy status";
+      setPolicyError(message);
+      toast.error("Failed to update policy status.", {
+        description: message,
+      });
     } finally {
       setTogglingViewedPolicy(false);
     }
@@ -693,13 +740,19 @@ const EmployeeViolationsDirectoryPage = ({
       }
 
       setAutoActionMessage("Auto-reset policy deleted.");
+      toast.success("Auto-reset policy deleted.");
       setPolicies((prev) => prev.filter((policy) => policy.id !== id));
       closeEditPolicy();
       if (selectedEmployeeId) {
         await refreshSelectedEmployeeData(selectedEmployeeId);
       }
     } catch (err) {
-      setPolicyError(err instanceof Error ? err.message : "Failed to delete policy");
+      const message =
+        err instanceof Error ? err.message : "Failed to delete policy";
+      setPolicyError(message);
+      toast.error("Failed to delete policy.", {
+        description: message,
+      });
     } finally {
       setDeletingViewedPolicy(false);
     }
@@ -719,12 +772,30 @@ const EmployeeViolationsDirectoryPage = ({
   }, []);
 
   useEffect(() => {
+    if (!employeeSearchActivatedRef.current) {
+      return;
+    }
+
     const handle = setTimeout(() => {
       void loadEmployees(employeeQuery);
     }, 250);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeQuery]);
+
+  const isInitialPageLoading =
+    !error &&
+    !policyError &&
+    (!hasLoadedEmployees || !hasLoadedDefinitions || !hasLoadedPolicies);
+
+  if (isInitialPageLoading) {
+    return (
+      <ModuleLoadingState
+        title="Employee Violations"
+        description="Loading employees, violation definitions, and reset policies."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">
@@ -747,6 +818,7 @@ const EmployeeViolationsDirectoryPage = ({
             <Input
               value={employeeQuery}
               onChange={(event) => {
+                employeeSearchActivatedRef.current = true;
                 setEmployeeQuery(event.target.value);
                 setSelectedEmployeeId("");
                 setRows([]);

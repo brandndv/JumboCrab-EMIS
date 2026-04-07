@@ -33,7 +33,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InlineLoadingState } from "@/components/loading/loading-states";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   Dialog,
   DialogContent,
@@ -129,6 +130,7 @@ type EmployeeRequestsPageProps = {
 export default function EmployeeRequestsPage({
   view = "all",
 }: EmployeeRequestsPageProps) {
+  const toast = useToast();
   const [cashAdvanceRows, setCashAdvanceRows] = useState<CashAdvanceRequestRow[]>(
     [],
   );
@@ -449,10 +451,18 @@ export default function EmployeeRequestsPage({
       }
 
       await load();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to respond to schedule swap",
+      toast.success(
+        decision === "ACCEPTED"
+          ? "Schedule swap accepted successfully."
+          : "Schedule swap declined successfully.",
       );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to respond to schedule swap";
+      setError(message);
+      toast.error("Failed to respond to schedule swap.", {
+        description: message,
+      });
     } finally {
       setRespondingSwapKey(null);
     }
@@ -470,8 +480,28 @@ export default function EmployeeRequestsPage({
           : "Schedule swap request details, counterpart, and current shift snapshots."
     : "";
 
+  const isInitialPageLoading =
+    loading &&
+    !error &&
+    cashAdvanceRows.length === 0 &&
+    dayOffRows.length === 0 &&
+    leaveRows.length === 0 &&
+    scheduleChangeRows.length === 0 &&
+    scheduleSwapRows.length === 0 &&
+    !leaveBalanceSummary &&
+    !dayOffMonthlySummary;
+
+  if (isInitialPageLoading) {
+    return (
+      <ModuleLoadingState
+        title="Requests"
+        description="Loading your requests, balances, and approval history."
+      />
+    );
+  }
+
   return (
-    <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">
+    <div className="relative min-h-[70vh] space-y-6 px-4 py-8 sm:px-8 lg:px-12">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">{pageTitle}</h1>
@@ -754,9 +784,6 @@ export default function EmployeeRequestsPage({
         </CardHeader>
         <CardContent>
           {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
-          {loading ? (
-            <InlineLoadingState label="Loading requests" lines={3} />
-          ) : null}
           {!loading && rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {view === "leave"

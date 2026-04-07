@@ -41,6 +41,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InlineLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 import { IdCard, Loader2, Plus } from "lucide-react";
 import EmployeeForm from "./employee-form";
 import {
@@ -107,6 +108,7 @@ export function EmployeeProfileTabs({
   employee: EmployeeProfileData;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
   const [currentDailyRate, setCurrentDailyRate] = useState<number | null>(
     employee.dailyRate ?? null,
@@ -320,9 +322,15 @@ export function EmployeeProfileTabs({
 
       setGovernmentId(result.data || null);
       setIsModalOpen(false);
+      toast.success("Government IDs saved successfully.");
     } catch (error) {
       console.error("Error saving government IDs:", error);
-      setGovIdError("Failed to save government IDs");
+      const message =
+        error instanceof Error ? error.message : "Failed to save government IDs";
+      setGovIdError(message);
+      toast.error("Failed to save government IDs.", {
+        description: message,
+      });
     } finally {
       setIsSaving(false);
     }
@@ -393,14 +401,20 @@ export function EmployeeProfileTabs({
           `${effectiveFrom}T00:00:00`,
         ).toLocaleDateString()}).`,
       );
+      toast.success("Daily rate updated successfully.", {
+        description: `New rate: ${formatRate(savedRate)}.`,
+      });
       setDailyRateReason("");
       await reloadRateHistory();
       router.refresh();
     } catch (error) {
       console.error("Failed to update daily rate:", error);
-      setDailyRateSaveError(
-        error instanceof Error ? error.message : "Failed to update daily rate",
-      );
+      const message =
+        error instanceof Error ? error.message : "Failed to update daily rate";
+      setDailyRateSaveError(message);
+      toast.error("Failed to update daily rate.", {
+        description: message,
+      });
       setDailyRateSaveSuccess(null);
     } finally {
       setSavingDailyRate(false);

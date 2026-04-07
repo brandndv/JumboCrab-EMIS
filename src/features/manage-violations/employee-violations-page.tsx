@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   InlineLoadingState,
+  ModuleLoadingState,
   TableLoadingState,
 } from "@/components/loading/loading-states";
 import {
@@ -121,6 +122,23 @@ const EmployeeViolationsPage = () => {
       ),
     [strikeProgress],
   );
+
+  const isInitialPageLoading =
+    sessionLoading ||
+    (!error &&
+      !strikeError &&
+      rows.length === 0 &&
+      strikeProgress.length === 0 &&
+      (loading || strikeLoading));
+
+  if (isInitialPageLoading) {
+    return (
+      <ModuleLoadingState
+        title="My Violations"
+        description="Loading your violation history and strike progress."
+      />
+    );
+  }
 
   const acknowledge = async (id: string) => {
     try {

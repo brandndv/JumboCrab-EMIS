@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DateRange } from "react-day-picker";
 import { TZ } from "@/lib/timezone";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   createPattern,
   deletePattern as deletePatternAction,
@@ -27,7 +28,6 @@ import { PatternEditState, PatternsSection } from "./patterns-section";
 import { OverridesSection } from "./overrides-section";
 import { ShiftEditState, ShiftsSection } from "./shifts-section";
 import {
-  EmployeeLite,
   minutesToTimeInput,
   normalizeOverride,
   normalizePattern,
@@ -47,6 +47,7 @@ type ScheduleBoardProps = {
 };
 
 export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
+  const toast = useToast();
   const [date, setDate] = useState(todayISO());
   const [entries, setEntries] = useState<ScheduleEntry[]>([]);
   const [patterns, setPatterns] = useState<Pattern[]>([]);
@@ -165,7 +166,11 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       }
 
       setEntries(
-        (scheduleResult.schedule ?? []).map((entry: any) => ({
+        (
+          (scheduleResult.schedule ?? []) as Array<
+            ScheduleEntry & { shift?: ShiftLite | null }
+          >
+        ).map((entry) => ({
           ...entry,
           shift: entry.shift ? normalizeShift(entry.shift) : null,
         }))
@@ -176,7 +181,11 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
 
       if (assignmentsResult.success && Array.isArray(assignmentsResult.data)) {
         setPatternAssignments(
-          assignmentsResult.data.map((a: any) => ({
+          (
+            assignmentsResult.data as Array<
+              PatternAssignment & { pattern?: Pattern | null; isLatest?: boolean }
+            >
+          ).map((a) => ({
             ...a,
             pattern: a.pattern ? normalizePattern(a.pattern) : null,
             isLatest: a.isLatest,
@@ -260,10 +269,14 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       }
       cancelShiftEdit();
       await load();
+      toast.success("Shift updated successfully.");
     } catch (err) {
-      setShiftEditError(
-        err instanceof Error ? err.message : "Failed to update shift"
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update shift";
+      setShiftEditError(message);
+      toast.error("Failed to update shift.", {
+        description: message,
+      });
     } finally {
       setShiftEditSaving(false);
     }
@@ -307,7 +320,7 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
     try {
       setPatternEditSaving(true);
       setPatternEditError(null);
-      const payload: Record<string, any> = {
+      const payload: Record<string, string | number | null> = {
         id: editingPatternId,
         code: patternEdit.code.trim(),
         name: patternEdit.name.trim(),
@@ -315,35 +328,49 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       Object.entries(patternEdit.dayShifts).forEach(([key, val]) => {
         payload[key] = val ? Number(val) : null;
       });
-      const result = await updatePattern(payload as any);
+      const result = await updatePattern(
+        payload as Parameters<typeof updatePattern>[0],
+      );
       if (!result.success) {
         throw new Error(result.error || "Failed to update pattern");
       }
       cancelPatternEdit();
       await load();
+      toast.success("Pattern updated successfully.");
     } catch (err) {
-      setPatternEditError(
-        err instanceof Error ? err.message : "Failed to update pattern"
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update pattern";
+      setPatternEditError(message);
+      toast.error("Failed to update pattern.", {
+        description: message,
+      });
     } finally {
       setPatternEditSaving(false);
     }
   };
 
   const handleDeletePattern = async (id: string) => {
+    let succeeded = false;
     try {
       const result = await deletePatternAction(id);
       if (!result.success) {
         throw new Error(result.error || "Failed to disable pattern");
       }
+      succeeded = true;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to disable pattern";
       setPatternError(message);
       setPatternEditError(message);
+      toast.error("Failed to disable pattern.", {
+        description: message,
+      });
     } finally {
       if (editingPatternId === id) cancelPatternEdit();
       await load();
+      if (succeeded) {
+        toast.success("Pattern disabled successfully.");
+      }
     }
   };
 
@@ -374,14 +401,21 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
         setAssignSuccess(
           `Assigned ${emp.firstName} ${emp.lastName} to ${pat.name}`
         );
+        toast.success("Pattern assigned successfully.", {
+          description: `${emp.firstName} ${emp.lastName} is now assigned to ${pat.name}.`,
+        });
       } else {
         setAssignSuccess("Pattern assigned successfully");
+        toast.success("Pattern assigned successfully.");
       }
       await load();
     } catch (err) {
-      setAssignError(
-        err instanceof Error ? err.message : "Failed to assign pattern"
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to assign pattern";
+      setAssignError(message);
+      toast.error("Failed to assign pattern.", {
+        description: message,
+      });
     } finally {
       setAssignSaving(false);
     }
@@ -442,11 +476,20 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       setOverrideDate("");
       setOverrideEndDate(null);
       setOverrideIsRange(false);
+      toast.success("Schedule override saved successfully.", {
+        description:
+          dates.length > 1
+            ? `${dates.length} dates were updated.`
+            : "The selected date was updated.",
+      });
       return true;
     } catch (err) {
-      setOverrideError(
-        err instanceof Error ? err.message : "Failed to save override"
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to save override";
+      setOverrideError(message);
+      toast.error("Failed to save schedule override.", {
+        description: message,
+      });
       return false;
     } finally {
       setOverrideSaving(false);
@@ -461,14 +504,16 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
     try {
       setPatternSaving(true);
       setPatternError(null);
-      const payload: Record<string, any> = {
+      const payload: Record<string, string | number | null> = {
         code: patternCode,
         name: patternName,
       };
       Object.entries(dayShifts).forEach(([key, val]) => {
         payload[key] = val ? Number(val) : null;
       });
-      const result = await createPattern(payload as any);
+      const result = await createPattern(
+        payload as Parameters<typeof createPattern>[0],
+      );
       if (!result.success) {
         throw new Error(result.error || "Failed to create pattern");
       }
@@ -484,10 +529,14 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
         satShiftId: "",
       });
       await load();
+      toast.success("Pattern created successfully.");
     } catch (err) {
-      setPatternError(
-        err instanceof Error ? err.message : "Failed to create pattern"
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to create pattern";
+      setPatternError(message);
+      toast.error("Failed to create pattern.", {
+        description: message,
+      });
     } finally {
       setPatternSaving(false);
     }
@@ -520,10 +569,14 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
       setShiftBreakStart("");
       setShiftBreakEnd("");
       await load();
+      toast.success("Shift created successfully.");
     } catch (err) {
-      setShiftError(
-        err instanceof Error ? err.message : "Failed to create shift"
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to create shift";
+      setShiftError(message);
+      toast.error("Failed to create shift.", {
+        description: message,
+      });
     } finally {
       setShiftSaving(false);
     }
@@ -569,10 +622,15 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
   const deleteOverride = async (id: string) => {
     const result = await deleteScheduleOverride(id);
     if (!result.success) {
-      setOverrideError(result.error || "Failed to delete override");
+      const message = result.error || "Failed to delete override";
+      setOverrideError(message);
+      toast.error("Failed to delete schedule override.", {
+        description: message,
+      });
       return;
     }
     await load();
+    toast.success("Schedule override deleted successfully.");
   };
 
   const handleOverrideEditOpenChange = (open: boolean) => {
@@ -677,10 +735,15 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
           onDeleteAssignment={async (id) => {
             const result = await deletePatternAssignment(id);
             if (!result.success) {
-              setAssignError(result.error || "Failed to delete assignment");
+              const message = result.error || "Failed to delete assignment";
+              setAssignError(message);
+              toast.error("Failed to delete pattern assignment.", {
+                description: message,
+              });
               return;
             }
             await load();
+            toast.success("Pattern assignment deleted successfully.");
           }}
         />
       )}
@@ -743,10 +806,15 @@ export function ScheduleBoard({ mode = "full" }: ScheduleBoardProps) {
         onDeleteShift={async (id) => {
           const result = await deleteShift(id);
           if (!result.success) {
-            setShiftEditError(result.error || "Failed to delete shift");
+            const message = result.error || "Failed to delete shift";
+            setShiftEditError(message);
+            toast.error("Failed to delete shift.", {
+              description: message,
+            });
             return;
           }
           await load();
+          toast.success("Shift deleted successfully.");
         }}
         onCreateShift={handleCreateShift}
         onChangeField={handleShiftFormChange}

@@ -8,7 +8,7 @@ import {
   unarchivePosition,
   updatePosition,
 } from "@/actions/organization/positions-action";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,6 +25,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { TableLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 
 type PositionRow = {
   positionId: string;
@@ -35,7 +36,12 @@ type PositionRow = {
   department?: { departmentId: string; name: string } | null;
 };
 
-export function PositionTable() {
+export function PositionTable({
+  onInitialLoadComplete,
+}: {
+  onInitialLoadComplete?: () => void;
+}) {
+  const toast = useToast();
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [departments, setDepartments] = useState<{ departmentId: string; name: string }[]>([]);
   const [filter, setFilter] = useState("");
@@ -50,6 +56,7 @@ export function PositionTable() {
   const [formError, setFormError] = useState<string | null>(null);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const hasReportedInitialLoadRef = useRef(false);
 
   const load = useCallback(async (includeArchived = showArchived) => {
     try {
@@ -72,8 +79,12 @@ export function PositionTable() {
       setError(err instanceof Error ? err.message : "Failed to load positions");
     } finally {
       setLoading(false);
+      if (!hasReportedInitialLoadRef.current) {
+        hasReportedInitialLoadRef.current = true;
+        onInitialLoadComplete?.();
+      }
     }
-  }, [showArchived]);
+  }, [onInitialLoadComplete, showArchived]);
 
   useEffect(() => {
     void load(showArchived);
@@ -124,8 +135,15 @@ export function PositionTable() {
       setName("");
       setDescription("");
       setDepartmentId("");
+      toast.success(
+        editingId ? "Position updated successfully." : "Position created successfully.",
+      );
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Failed to save position");
+      const message = err instanceof Error ? err.message : "Failed to save position";
+      setFormError(message);
+      toast.error("Failed to save position.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }
@@ -165,8 +183,14 @@ export function PositionTable() {
         throw new Error(result.error || "Failed to archive position");
       }
       await load();
+      toast.success("Position archived successfully.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive position");
+      const message =
+        err instanceof Error ? err.message : "Failed to archive position";
+      setError(message);
+      toast.error("Failed to archive position.", {
+        description: message,
+      });
     } finally {
       setMutatingId(null);
     }
@@ -185,10 +209,14 @@ export function PositionTable() {
         throw new Error(result.error || "Failed to unarchive position");
       }
       await load();
+      toast.success("Position restored successfully.");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to unarchive position",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to unarchive position";
+      setError(message);
+      toast.error("Failed to restore position.", {
+        description: message,
+      });
     } finally {
       setMutatingId(null);
     }

@@ -7,7 +7,7 @@ import {
   unarchiveDepartment,
   updateDepartment,
 } from "@/actions/organization/departments-action";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { TableLoadingState } from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 
 type DepartmentRow = {
   departmentId: string;
@@ -32,7 +33,12 @@ type DepartmentRow = {
   description?: string | null;
 };
 
-export function DepartmentTable() {
+export function DepartmentTable({
+  onInitialLoadComplete,
+}: {
+  onInitialLoadComplete?: () => void;
+}) {
+  const toast = useToast();
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +50,7 @@ export function DepartmentTable() {
   const [formError, setFormError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
+  const hasReportedInitialLoadRef = useRef(false);
 
   const load = useCallback(async (includeArchived = showArchived) => {
     try {
@@ -59,8 +66,12 @@ export function DepartmentTable() {
       setError(err instanceof Error ? err.message : "Failed to load departments");
     } finally {
       setLoading(false);
+      if (!hasReportedInitialLoadRef.current) {
+        hasReportedInitialLoadRef.current = true;
+        onInitialLoadComplete?.();
+      }
     }
-  }, [showArchived]);
+  }, [onInitialLoadComplete, showArchived]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -88,8 +99,18 @@ export function DepartmentTable() {
       setEditingId(null);
       setName("");
       setDescription("");
+      toast.success(
+        editingId
+          ? "Department updated successfully."
+          : "Department created successfully.",
+      );
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Failed to save department");
+      const message =
+        err instanceof Error ? err.message : "Failed to save department";
+      setFormError(message);
+      toast.error("Failed to save department.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }
@@ -126,10 +147,14 @@ export function DepartmentTable() {
         throw new Error(result.error || "Failed to archive department");
       }
       await load();
+      toast.success("Department archived successfully.");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to archive department",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to archive department";
+      setError(message);
+      toast.error("Failed to archive department.", {
+        description: message,
+      });
     } finally {
       setMutatingId(null);
     }
@@ -148,10 +173,14 @@ export function DepartmentTable() {
         throw new Error(result.error || "Failed to unarchive department");
       }
       await load();
+      toast.success("Department restored successfully.");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to unarchive department",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to unarchive department";
+      setError(message);
+      toast.error("Failed to restore department.", {
+        description: message,
+      });
     } finally {
       setMutatingId(null);
     }

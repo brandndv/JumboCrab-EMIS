@@ -23,9 +23,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Save } from "lucide-react";
+import { useToast } from "@/components/ui/toast-provider";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import { getUserById, updateUser } from "@/actions/users/users-action";
 import { MANAGEABLE_APP_ROLES } from "@/lib/rbac";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
 
 const Field = ({
   label,
@@ -85,6 +87,7 @@ export default function UserEditPage({
   params: { id: string } | Promise<{ id: string }>;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -180,9 +183,16 @@ export default function UserEditPage({
         throw new Error(result.error || "Failed to update user");
       }
 
+      toast.success("User updated successfully.", {
+        description: `${username.trim()} has been updated.`,
+      });
       router.push(`/admin/users/${userId}/view`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update user");
+      const message = err instanceof Error ? err.message : "Failed to update user";
+      setError(message);
+      toast.error("Failed to update user.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }
@@ -190,9 +200,10 @@ export default function UserEditPage({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[240px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <ModuleLoadingState
+        title="Loading user"
+        description="Preparing account fields and employee details."
+      />
     );
   }
 

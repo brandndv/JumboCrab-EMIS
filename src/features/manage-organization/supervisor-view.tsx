@@ -1,7 +1,7 @@
 "use client";
 
 import { getOrganizationStructure } from "@/actions/organization/organization-structure-action";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCcw } from "lucide-react";
@@ -37,7 +37,11 @@ type SupervisorGroup = {
   reports: EmployeeRow[];
 };
 
-export function SupervisorView() {
+export function SupervisorView({
+  onInitialLoadComplete,
+}: {
+  onInitialLoadComplete?: () => void;
+}) {
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [supervisors, setSupervisors] = useState<SupervisorUser[]>([]);
   const [groupsFromApi, setGroupsFromApi] = useState<SupervisorGroup[]>([]);
@@ -46,8 +50,9 @@ export function SupervisorView() {
   const [error, setError] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState<{ supId: string } | null>(null);
+  const hasReportedInitialLoadRef = useRef(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -63,12 +68,16 @@ export function SupervisorView() {
       setError(err instanceof Error ? err.message : "Failed to load structure");
     } finally {
       setLoading(false);
+      if (!hasReportedInitialLoadRef.current) {
+        hasReportedInitialLoadRef.current = true;
+        onInitialLoadComplete?.();
+      }
     }
-  };
+  }, [onInitialLoadComplete]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   const grouped = useMemo(() => {
     if (groupsFromApi.length || unassignedFromApi.length) {

@@ -34,7 +34,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InlineLoadingState } from "@/components/loading/loading-states";
+import {
+  InlineLoadingState,
+  ModuleLoadingState,
+} from "@/components/loading/loading-states";
+import { useToast } from "@/components/ui/toast-provider";
 import {
   Dialog,
   DialogContent,
@@ -129,6 +133,7 @@ type ManagerRequestItem =
     };
 
 export default function ManagerRequestsPage() {
+  const toast = useToast();
   const [cashAdvanceRows, setCashAdvanceRows] = useState<CashAdvanceRequestRow[]>(
     [],
   );
@@ -337,6 +342,23 @@ export default function ManagerRequestsPage() {
     [rows],
   );
 
+  if (
+    loading &&
+    !error &&
+    cashAdvanceRows.length === 0 &&
+    dayOffRows.length === 0 &&
+    leaveRows.length === 0 &&
+    scheduleChangeRows.length === 0 &&
+    scheduleSwapRows.length === 0
+  ) {
+    return (
+      <ModuleLoadingState
+        title="Requests"
+        description="Loading pending requests, review actions, and request history."
+      />
+    );
+  }
+
   const getDefaultPaidDateKeys = (row: Extract<ManagerRequestItem, { requestType: "LEAVE" }>) =>
     row.leaveType === "UNPAID"
       ? []
@@ -402,8 +424,21 @@ export default function ManagerRequestsPage() {
       }
 
       await load();
+      toast.success(
+        decision === "APPROVED"
+          ? "Request approved successfully."
+          : "Request rejected successfully.",
+        {
+          description: `${requestTypeLabel(row.requestType)} request for ${"employeeName" in row ? row.employeeName : row.requesterEmployeeName} was ${decision === "APPROVED" ? "approved" : "rejected"}.`,
+        },
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to review request");
+      const message =
+        err instanceof Error ? err.message : "Failed to review request";
+      setError(message);
+      toast.error("Failed to review request.", {
+        description: message,
+      });
     } finally {
       setReviewingKey(null);
     }

@@ -5,16 +5,13 @@ import { Button } from "@/components/ui/button";
 import { RotateCcw } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEmployees } from "@/features/manage-employees/employees-provider";
-import {
-  DynamicBlockLoadingState,
-  ModuleLoadingState,
-} from "@/components/loading/loading-states";
+import { ModuleLoadingState } from "@/components/loading/loading-states";
 
 const EmployeesCard = dynamic(
   () => import("@/features/manage-employees/employees-cards"),
   {
     ssr: false,
-    loading: () => <DynamicBlockLoadingState label="Loading employee cards" />,
+    loading: () => null,
   },
 );
 
@@ -23,12 +20,7 @@ const EmployeeComboBox = dynamic(
     import("@/features/manage-employees/employee-combo/employee-combobox"),
   {
     ssr: false,
-    loading: () => (
-      <DynamicBlockLoadingState
-        label="Loading employee filters"
-        className="min-h-[120px]"
-      />
-    ),
+    loading: () => null,
   },
 );
 

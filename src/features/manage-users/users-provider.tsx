@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
 import { useUsersState } from "@/hooks/use-users";
-import type { User } from "@/lib/validations/users";
+import type { UserWithEmployee } from "@/lib/validations/users";
 
 const UsersContext = createContext<
   ReturnType<typeof useUsersState> | undefined
@@ -11,10 +11,10 @@ const UsersContext = createContext<
 
 export function UsersProvider({
   children,
-  initialUsers = [],
+  initialUsers,
 }: {
   children: ReactNode;
-  initialUsers?: User[];
+  initialUsers?: UserWithEmployee[];
 }) {
   const contextValue = useUsersState(initialUsers);
 

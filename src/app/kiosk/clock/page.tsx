@@ -24,6 +24,7 @@ import {
   recordKioskPunch,
   searchKioskUsers,
 } from "@/actions/attendance/kiosk-attendance-action";
+import { useToast } from "@/components/ui/toast-provider";
 
 type Punch = {
   punchTime: string;
@@ -98,6 +99,7 @@ const formatPunchLabel = (punchType: Punch["punchType"]) => {
 };
 
 export default function KioskClockPage() {
+  const toast = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [authMode, setAuthMode] = useState<KioskAuthMode>("password");
@@ -262,12 +264,17 @@ export default function KioskClockPage() {
         throw new Error(msg);
       }
       setInfo(reasonMessage(result.reason, "Punch recorded"));
+      toast.success(reasonMessage(result.reason, "Punch recorded"));
       setPassword("");
       setSuggestions([]);
       setStatusUser(username);
       await loadStatus(username);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to punch");
+      const message = err instanceof Error ? err.message : "Failed to punch";
+      setError(message);
+      toast.error("Failed to record punch.", {
+        description: message,
+      });
     } finally {
       setPunching(null);
     }

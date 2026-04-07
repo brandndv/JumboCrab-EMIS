@@ -15,7 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TableLoadingState } from "@/components/loading/loading-states";
+import {
+  ModuleLoadingState,
+  TableLoadingState,
+} from "@/components/loading/loading-states";
 import { useSession } from "@/hooks/use-session";
 import ViolationCreateForm from "./violation-create-form";
 
@@ -84,6 +87,15 @@ const SupervisorViolationsPage = () => {
     () => rows.filter((row) => row.status === "REJECTED").length,
     [rows],
   );
+
+  if ((sessionLoading || loading) && rows.length === 0 && !error) {
+    return (
+      <ModuleLoadingState
+        title="Supervisor Violations"
+        description="Loading your drafts, review statuses, and violation form access."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">

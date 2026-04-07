@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast-provider";
 import Link from "next/link";
 
 type ContributionForm = {
@@ -53,6 +54,7 @@ export default function ContributionEditPage({
   params: { employeeId: string };
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [form, setForm] = useState<ContributionForm>(emptyForm());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -111,9 +113,15 @@ export default function ContributionEditPage({
       if (!result.success) {
         throw new Error(result.error || "Failed to save contribution");
       }
+      toast.success("Contribution saved successfully.");
       router.push("/manager/contributions");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save contribution");
+      const message =
+        err instanceof Error ? err.message : "Failed to save contribution";
+      setError(message);
+      toast.error("Failed to save contribution.", {
+        description: message,
+      });
     } finally {
       setSaving(false);
     }

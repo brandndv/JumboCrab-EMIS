@@ -101,6 +101,7 @@ const EmployeeScheduleHistory = () => {
   const [rows, setRows] = useState<AttendanceRow[]>([]);
   const [rowsLoading, setRowsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
+  const [hasLoadedRows, setHasLoadedRows] = useState(false);
 
   const yearOptions = useMemo(
     () => Array.from({ length: 6 }, (_, index) => currentYear - 4 + index),
@@ -142,7 +143,10 @@ const EmployeeScheduleHistory = () => {
             : "Failed to load attendance history",
         );
       } finally {
-        if (mounted) setRowsLoading(false);
+        if (mounted) {
+          setRowsLoading(false);
+          setHasLoadedRows(true);
+        }
       }
     };
 
@@ -182,6 +186,14 @@ const EmployeeScheduleHistory = () => {
   }
   if (error) return <div>Failed to load session</div>;
   if (!user) return <div>No session</div>;
+  if (employee?.employeeId && !hasLoadedRows && !rowsError) {
+    return (
+      <ModuleLoadingState
+        title="Attendance History"
+        description="Loading your monthly attendance timeline and shift history."
+      />
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">

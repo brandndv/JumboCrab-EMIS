@@ -8,6 +8,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast-provider";
 import { formatZonedTime } from "@/lib/timezone";
 import {
   getSelfAttendanceStatus,
@@ -114,6 +115,7 @@ function EmployeeScanPageContent() {
   const reader = useMemo(() => new BrowserMultiFormatReader(), []);
   const searchParams = useSearchParams();
   const handledChallengeRef = useRef<string | null>(null);
+  const toast = useToast();
 
   const [step, setStep] = useState<Step>("READY");
   const [error, setError] = useState("");
@@ -179,11 +181,18 @@ function EmployeeScanPageContent() {
         punchTime: punchResult.data.punchTime,
       });
       setStep("RESULT");
+      toast.success("Punch recorded successfully.", {
+        description: `${employeeName} ${formatPunchLabel(punchResult.data.punchType as PunchType)} recorded.`,
+      });
     } catch (err) {
-      setError(toErrorMessage(err, "Network error. Please try again."));
+      const message = toErrorMessage(err, "Network error. Please try again.");
+      setError(message);
       setStep("ERROR");
+      toast.error("Failed to record punch.", {
+        description: message,
+      });
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     const parsed = parseKioskQuery(searchParams);

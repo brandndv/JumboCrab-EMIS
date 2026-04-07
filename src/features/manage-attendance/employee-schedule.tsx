@@ -164,6 +164,7 @@ const EmployeeScedule = () => {
   const [days, setDays] = useState<EmployeeMonthScheduleDay[]>([]);
   const [monthLoading, setMonthLoading] = useState(false);
   const [monthError, setMonthError] = useState<string | null>(null);
+  const [hasLoadedMonth, setHasLoadedMonth] = useState(false);
 
   const todayKey = useMemo(() => toIsoDate(getNowInTz()), []);
 
@@ -194,7 +195,10 @@ const EmployeeScedule = () => {
           err instanceof Error ? err.message : "Failed to load schedule",
         );
       } finally {
-        if (mounted) setMonthLoading(false);
+        if (mounted) {
+          setMonthLoading(false);
+          setHasLoadedMonth(true);
+        }
       }
     };
 
@@ -368,6 +372,14 @@ const EmployeeScedule = () => {
   }
   if (error) return <div>Failed to load session</div>;
   if (!user) return <div>No session</div>;
+  if (employee?.employeeId && !hasLoadedMonth && !monthError) {
+    return (
+      <ModuleLoadingState
+        title="Schedule"
+        description="Loading your calendar, shift overlays, and daily schedule details."
+      />
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
