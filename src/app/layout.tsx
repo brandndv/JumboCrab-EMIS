@@ -18,9 +18,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  applicationName: "Jumbo Crab EMIS",
-  title: "Jumbo Crab EMIS",
-  description: "Jumbo Crab EMIS",
+  applicationName: "JumboCrab EMIS",
+  title: "JumboCrab EMIS",
+  description: "JumboCrab EMIS",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -28,8 +28,8 @@ export const metadata: Metadata = {
     title: "Jumbo Crab EMIS",
   },
   icons: {
-    icon: "/favicon.ico",
-    apple: "/pwa-192.png",
+    icon: "/logo-icon.png",
+    apple: "/logo-icon.png",
   },
 };
 

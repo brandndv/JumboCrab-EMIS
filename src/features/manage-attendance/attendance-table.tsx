@@ -15,6 +15,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -31,7 +40,7 @@ import {
 } from "@/components/ui/table";
 import { TableLoadingState } from "@/components/loading/loading-states";
 import { TZ } from "@/lib/timezone";
-import { Clock4, RefreshCcw, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, Clock4, RefreshCcw, RotateCcw, Search } from "lucide-react";
 
 type AttendanceRow = {
   id: string;
@@ -188,6 +197,21 @@ export function AttendanceHistoryTable() {
     if (!departmentIdFilter) return positions;
     return positions.filter((position) => position.departmentId === departmentIdFilter);
   }, [positions, departmentIdFilter]);
+
+  const visiblePageNumbers = useMemo(() => {
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const start = Math.max(1, page - 1);
+    const end = Math.min(totalPages, start + 2);
+    const adjustedStart = Math.max(1, end - 2);
+
+    return Array.from(
+      { length: end - adjustedStart + 1 },
+      (_, index) => adjustedStart + index,
+    );
+  }, [page, totalPages]);
 
   const filteredEmployees = useMemo(() => {
     const term = employeeSearch.trim().toLowerCase();
@@ -683,40 +707,131 @@ export function AttendanceHistoryTable() {
             Showing {totalFrom}-{totalTo} of {totalCount}
           </p>
 
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <select
-              className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-              value={pageSize}
-              onChange={(e) => {
-                const nextSize = Number(e.target.value);
-                setPageSize(nextSize);
-                void load({ page: 1, pageSize: nextSize });
-              }}
-            >
-              <option value={50}>50 / page</option>
-              <option value={100}>100 / page</option>
-              <option value={150}>150 / page</option>
-            </select>
+          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+            <label className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span className="whitespace-nowrap">Rows per page</span>
+              <span className="relative">
+                <select
+                  className="h-10 min-w-[92px] appearance-none rounded-md border border-border bg-background px-3 pr-10 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={pageSize}
+                  onChange={(e) => {
+                    const nextSize = Number(e.target.value);
+                    setPageSize(nextSize);
+                    void load({ page: 1, pageSize: nextSize });
+                  }}
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={150}>150</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              </span>
+            </label>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void load({ page: page - 1 })}
-              disabled={loading || page <= 1}
-            >
-              Previous
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              Page {page} / {Math.max(1, totalPages)}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void load({ page: page + 1 })}
-              disabled={loading || page >= totalPages}
-            >
-              Next
-            </Button>
+            {totalPages > 1 ? (
+              <Pagination className="m-0 w-auto justify-end">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        if (page > 1) {
+                          void load({ page: page - 1 });
+                        }
+                      }}
+                      className={
+                        loading || page <= 1
+                          ? "pointer-events-none opacity-50"
+                          : "cursor-pointer"
+                      }
+                    />
+                  </PaginationItem>
+
+                  {visiblePageNumbers[0] > 1 && (
+                    <>
+                      <PaginationItem>
+                        <PaginationLink
+                          href="#"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            void load({ page: 1 });
+                          }}
+                          className="cursor-pointer"
+                        >
+                          1
+                        </PaginationLink>
+                      </PaginationItem>
+                      {visiblePageNumbers[0] > 2 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )}
+                    </>
+                  )}
+
+                  {visiblePageNumbers.map((pageNumber) => (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void load({ page: pageNumber });
+                        }}
+                        isActive={page === pageNumber}
+                        className="cursor-pointer"
+                      >
+                        {pageNumber}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+
+                  {visiblePageNumbers[visiblePageNumbers.length - 1] < totalPages && (
+                    <>
+                      {visiblePageNumbers[visiblePageNumbers.length - 1] <
+                        totalPages - 1 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )}
+                      <PaginationItem>
+                        <PaginationLink
+                          href="#"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            void load({ page: totalPages });
+                          }}
+                          className="cursor-pointer"
+                        >
+                          {totalPages}
+                        </PaginationLink>
+                      </PaginationItem>
+                    </>
+                  )}
+
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        if (page < totalPages) {
+                          void load({ page: page + 1 });
+                        }
+                      }}
+                      className={
+                        loading || page >= totalPages
+                          ? "pointer-events-none opacity-50"
+                          : "cursor-pointer"
+                      }
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            ) : (
+              <span className="whitespace-nowrap text-sm text-muted-foreground">
+                Page {page} / {Math.max(1, totalPages)}
+              </span>
+            )}
           </div>
         </div>
       </CardContent>

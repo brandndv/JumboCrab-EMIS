@@ -10,6 +10,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   Table,
   TableBody,
   TableCell,
@@ -74,6 +83,8 @@ const emptyDayShifts = () => ({
   friShiftId: "",
   satShiftId: "",
 });
+
+const ASSIGNMENT_PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 type PatternsSectionProps = {
   showAssignPattern: boolean;
@@ -188,6 +199,15 @@ export function PatternsSection({
   }, [patterns, patternSearch]);
 
   const [assignmentEmployeeFilter, setAssignmentEmployeeFilter] = useState("");
+  const [assignmentPagination, setAssignmentPagination] = useState<{
+    datasetKey: string;
+    page: number;
+    pageSize: number;
+  }>({
+    datasetKey: "",
+    page: 1,
+    pageSize: ASSIGNMENT_PAGE_SIZE_OPTIONS[0],
+  });
   const filteredAssignments = useMemo(() => {
     if (!assignmentEmployeeFilter) return assignments;
     return assignments.filter((a) => a.employeeId === assignmentEmployeeFilter);
@@ -230,6 +250,57 @@ export function PatternsSection({
       return { employee: g.employee, latest, older };
     });
   }, [filteredAssignments]);
+  const groupedAssignmentsDatasetKey = useMemo(
+    () =>
+      groupedAssignments
+        .map(({ employee, latest }) => `${employee.employeeId}:${latest.id}`)
+        .join("|"),
+    [groupedAssignments],
+  );
+  const assignmentPageSize = assignmentPagination.pageSize;
+  const assignmentCurrentPage =
+    assignmentPagination.datasetKey === groupedAssignmentsDatasetKey
+      ? assignmentPagination.page
+      : 1;
+  const assignmentTotalPages = Math.max(
+    1,
+    Math.ceil(groupedAssignments.length / assignmentPageSize),
+  );
+  const safeAssignmentPage = Math.min(
+    assignmentCurrentPage,
+    assignmentTotalPages,
+  );
+  const assignmentPageStart = (safeAssignmentPage - 1) * assignmentPageSize;
+  const paginatedGroupedAssignments = groupedAssignments.slice(
+    assignmentPageStart,
+    assignmentPageStart + assignmentPageSize,
+  );
+  const assignmentShowingFrom =
+    groupedAssignments.length === 0 ? 0 : assignmentPageStart + 1;
+  const assignmentShowingTo =
+    groupedAssignments.length === 0
+      ? 0
+      : Math.min(
+          assignmentPageStart + assignmentPageSize,
+          groupedAssignments.length,
+        );
+  const visibleAssignmentPageNumbers = useMemo(() => {
+    if (assignmentTotalPages <= 5) {
+      return Array.from(
+        { length: assignmentTotalPages },
+        (_, index) => index + 1,
+      );
+    }
+
+    const start = Math.max(1, safeAssignmentPage - 1);
+    const end = Math.min(assignmentTotalPages, start + 2);
+    const adjustedStart = Math.max(1, end - 2);
+
+    return Array.from(
+      { length: end - adjustedStart + 1 },
+      (_, index) => adjustedStart + index,
+    );
+  }, [assignmentTotalPages, safeAssignmentPage]);
 
   const resolveAssignmentDayShift = (
     assignment: PatternAssignment,
@@ -613,7 +684,7 @@ export function PatternsSection({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {groupedAssignments.map(({ employee, latest, older }) => {
+                  {paginatedGroupedAssignments.map(({ employee, latest, older }) => {
                     const expanded =
                       expandedEmployees[employee.employeeId] ?? false;
                     return (
@@ -752,6 +823,165 @@ export function PatternsSection({
               </Table>
             </div>
           )}
+          <div className="flex flex-col gap-3 border-t border-border/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {groupedAssignments.length === 0
+                ? "Showing 0 of 0 assignments"
+                : `Showing ${assignmentShowingFrom}-${assignmentShowingTo} of ${groupedAssignments.length} assignments`}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+              <label className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span className="whitespace-nowrap">Rows per page</span>
+                <span className="relative">
+                  <select
+                    value={assignmentPageSize}
+                    onChange={(e) => {
+                      setAssignmentPagination((prev) => ({
+                        ...prev,
+                        datasetKey: groupedAssignmentsDatasetKey,
+                        page: 1,
+                        pageSize: Number(e.target.value),
+                      }));
+                    }}
+                    className="h-10 min-w-[72px] appearance-none rounded-md border border-border bg-background px-3 pr-9 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    {ASSIGNMENT_PAGE_SIZE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </span>
+              </label>
+
+              {assignmentTotalPages > 1 && (
+                <Pagination className="m-0 w-auto justify-end">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (safeAssignmentPage > 1) {
+                            setAssignmentPagination((prev) => ({
+                              ...prev,
+                              datasetKey: groupedAssignmentsDatasetKey,
+                              page: safeAssignmentPage - 1,
+                            }));
+                          }
+                        }}
+                        className={
+                          safeAssignmentPage === 1
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+
+                    {visibleAssignmentPageNumbers[0] > 1 && (
+                      <>
+                        <PaginationItem>
+                          <PaginationLink
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setAssignmentPagination((prev) => ({
+                                ...prev,
+                                datasetKey: groupedAssignmentsDatasetKey,
+                                page: 1,
+                              }));
+                            }}
+                            className="cursor-pointer"
+                          >
+                            1
+                          </PaginationLink>
+                        </PaginationItem>
+                        {visibleAssignmentPageNumbers[0] > 2 && (
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        )}
+                      </>
+                    )}
+
+                    {visibleAssignmentPageNumbers.map((pageNumber) => (
+                      <PaginationItem key={pageNumber}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            setAssignmentPagination((prev) => ({
+                              ...prev,
+                              datasetKey: groupedAssignmentsDatasetKey,
+                              page: pageNumber,
+                            }));
+                          }}
+                          isActive={safeAssignmentPage === pageNumber}
+                          className="cursor-pointer"
+                        >
+                          {pageNumber}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+
+                    {visibleAssignmentPageNumbers[
+                      visibleAssignmentPageNumbers.length - 1
+                    ] < assignmentTotalPages && (
+                      <>
+                        {visibleAssignmentPageNumbers[
+                          visibleAssignmentPageNumbers.length - 1
+                        ] <
+                          assignmentTotalPages - 1 && (
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        )}
+                        <PaginationItem>
+                          <PaginationLink
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setAssignmentPagination((prev) => ({
+                                ...prev,
+                                datasetKey: groupedAssignmentsDatasetKey,
+                                page: assignmentTotalPages,
+                              }));
+                            }}
+                            className="cursor-pointer"
+                          >
+                            {assignmentTotalPages}
+                          </PaginationLink>
+                        </PaginationItem>
+                      </>
+                    )}
+
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (safeAssignmentPage < assignmentTotalPages) {
+                            setAssignmentPagination((prev) => ({
+                              ...prev,
+                              datasetKey: groupedAssignmentsDatasetKey,
+                              page: safeAssignmentPage + 1,
+                            }));
+                          }
+                        }}
+                        className={
+                          safeAssignmentPage === assignmentTotalPages
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

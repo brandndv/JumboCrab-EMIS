@@ -4,14 +4,16 @@ import {
   deleteEmployee,
   setEmployeeArchiveStatus,
 } from "@/actions/employees/employees-action";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast-provider";
 import { Employee } from "@/lib/validations/employees";
+import { ChevronDown } from "lucide-react";
 import {
   Pagination,
   PaginationContent,
+  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
   PaginationNext,
@@ -21,6 +23,8 @@ import { EmployeesActions } from "./employees-crud";
 import { Separator } from "@/components/ui/separator";
 import { useEmployees } from "./employees-provider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+const PAGE_SIZE_OPTIONS = [8, 12, 24] as const;
 
 const getEmployeeInitials = (employee: Employee) => {
   const first = employee.firstName?.charAt(0) ?? "";
@@ -60,9 +64,43 @@ export default function EmployeesCards({
   const pathname = usePathname();
   const basePath = pathname.replace(/\/$/, "");
   const { refreshEmployees, showArchived } = useEmployees();
-  // State for pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const [pagination, setPagination] = useState<{
+    datasetKey: string;
+    page: number;
+    pageSize: number;
+  }>({
+    datasetKey: "",
+    page: 1,
+    pageSize: PAGE_SIZE_OPTIONS[0],
+  });
+
+  const datasetKey = useMemo(
+    () => employees.map((employee) => employee.employeeId ?? "").join("|"),
+    [employees],
+  );
+  const pageSize = pagination.pageSize;
+  const currentPage = pagination.datasetKey === datasetKey ? pagination.page : 1;
+  const totalPages = Math.max(1, Math.ceil(employees.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = (safeCurrentPage - 1) * pageSize;
+  const currentItems = employees.slice(pageStart, pageStart + pageSize);
+  const showingFrom = employees.length === 0 ? 0 : pageStart + 1;
+  const showingTo = employees.length === 0 ? 0 : Math.min(pageStart + pageSize, employees.length);
+
+  const visiblePageNumbers = useMemo(() => {
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const start = Math.max(1, safeCurrentPage - 1);
+    const end = Math.min(totalPages, start + 2);
+    const adjustedStart = Math.max(1, end - 2);
+
+    return Array.from(
+      { length: end - adjustedStart + 1 },
+      (_, index) => adjustedStart + index,
+    );
+  }, [safeCurrentPage, totalPages]);
 
   // Handle view employee
   const handleViewEmployee = (employeeId: string | undefined) => {
@@ -155,54 +193,29 @@ export default function EmployeesCards({
     }
   };
 
-  // Calculate pagination
-  const totalPages = Math.ceil(employees.length / itemsPerPage);
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = employees.slice(indexOfFirstItem, indexOfLastItem);
-
-  // Handle page change
   const paginate = (pageNumber: number) => {
-    setCurrentPage(pageNumber);
-    window.scrollTo({ top: 0, behavior: "smooth" }); // Optional: Scroll to top on page change
+    setPagination((prev) => ({
+      ...prev,
+      datasetKey,
+      page: pageNumber,
+    }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Generate page numbers to show
-  const getPageNumbers = () => {
-    const pageNumbers = [];
-    const maxPageButtons = 5; // Maximum number of page buttons to show
-    let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
-    const endPage = Math.min(startPage + maxPageButtons - 1, totalPages);
-
-    if (endPage - startPage + 1 < maxPageButtons) {
-      startPage = Math.max(1, endPage - maxPageButtons + 1);
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      pageNumbers.push(i);
-    }
-
-    return pageNumbers;
-  };
-
-  // Handle previous and next page
   const handlePrevious = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    if (safeCurrentPage > 1) {
+      paginate(safeCurrentPage - 1);
     }
   };
 
   const handleNext = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    if (safeCurrentPage < totalPages) {
+      paginate(safeCurrentPage + 1);
     }
   };
 
   return (
     <div className="w-full">
-      {/* Grid: auto-fill with a min card width so cards don't shrink too much. Tweak 280px as needed. */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 p-4">
         {currentItems.map((employee) => (
           <div
@@ -391,87 +404,137 @@ export default function EmployeesCards({
         ))}
       </div>
 
-      <Pagination className="m-0 mt-5">
-        <PaginationContent>
-          {/* Back to Start Button - Shows when current page > 3 */}
-          {currentPage > 3 && (
-            <PaginationItem>
-              <PaginationLink
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  paginate(1);
+      <div className="flex flex-col gap-3 border-t border-border/70 px-4 pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          {employees.length === 0
+            ? "Showing 0 of 0 employees"
+            : `Showing ${showingFrom}-${showingTo} of ${employees.length} employees`}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+          <label className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span className="whitespace-nowrap">Rows per page</span>
+            <span className="relative">
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPagination((prev) => ({
+                    ...prev,
+                    datasetKey,
+                    page: 1,
+                    pageSize: Number(e.target.value),
+                  }));
                 }}
-                className="cursor-pointer"
+                className="h-10 min-w-[72px] appearance-none rounded-md border border-border bg-background px-3 pr-9 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
-                «
-              </PaginationLink>
-            </PaginationItem>
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            </span>
+          </label>
+
+          {totalPages > 1 && (
+            <Pagination className="m-0 w-auto justify-end">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handlePrevious();
+                    }}
+                    className={
+                      safeCurrentPage === 1
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                  />
+                </PaginationItem>
+
+                {visiblePageNumbers[0] > 1 && (
+                  <>
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          paginate(1);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        1
+                      </PaginationLink>
+                    </PaginationItem>
+                    {visiblePageNumbers[0] > 2 && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                  </>
+                )}
+
+                {visiblePageNumbers.map((number) => (
+                  <PaginationItem key={number}>
+                    <PaginationLink
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        paginate(number);
+                      }}
+                      isActive={safeCurrentPage === number}
+                      className="cursor-pointer"
+                    >
+                      {number}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+
+                {visiblePageNumbers[visiblePageNumbers.length - 1] < totalPages && (
+                  <>
+                    {visiblePageNumbers[visiblePageNumbers.length - 1] <
+                      totalPages - 1 && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          paginate(totalPages);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        {totalPages}
+                      </PaginationLink>
+                    </PaginationItem>
+                  </>
+                )}
+
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleNext();
+                    }}
+                    className={
+                      safeCurrentPage === totalPages
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           )}
-
-          <PaginationItem>
-            <PaginationPrevious
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                handlePrevious();
-              }}
-              className={
-                currentPage === 1
-                  ? "pointer-events-none opacity-50"
-                  : "cursor-pointer"
-              }
-            />
-          </PaginationItem>
-
-          {getPageNumbers().map((number) => (
-            <PaginationItem key={number}>
-              <PaginationLink
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  paginate(number);
-                }}
-                isActive={currentPage === number}
-                className="cursor-pointer"
-              >
-                {number}
-              </PaginationLink>
-            </PaginationItem>
-          ))}
-
-          <PaginationItem>
-            <PaginationNext
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                handleNext();
-              }}
-              className={
-                currentPage === totalPages
-                  ? "pointer-events-none opacity-50"
-                  : "cursor-pointer"
-              }
-            />
-          </PaginationItem>
-
-          {/* Go to End Button - Shows when current page < totalPages - 2 */}
-          {currentPage < totalPages - 2 && (
-            <PaginationItem>
-              <PaginationLink
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  paginate(totalPages);
-                }}
-                className="cursor-pointer"
-              >
-                »
-              </PaginationLink>
-            </PaginationItem>
-          )}
-        </PaginationContent>
-      </Pagination>
+        </div>
+      </div>
     </div>
   );
 }

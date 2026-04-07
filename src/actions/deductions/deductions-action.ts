@@ -134,6 +134,11 @@ type EmployeeDeductionAssignmentRecord =
           firstName: true;
           lastName: true;
           img: true;
+          department: {
+            select: {
+              name: true;
+            };
+          };
         };
       };
       deductionType: {
@@ -207,6 +212,7 @@ export type DeductionEmployeeOption = {
   employeeCode: string;
   firstName: string;
   lastName: string;
+  departmentName?: string | null;
 };
 
 export type DeductionAssignmentRow = {
@@ -214,6 +220,7 @@ export type DeductionAssignmentRow = {
   employeeId: string;
   employeeName: string;
   employeeCode: string;
+  departmentName?: string | null;
   avatarUrl?: string | null;
   deductionTypeId: string;
   deductionCode: string;
@@ -299,6 +306,7 @@ const serializeDeductionAssignment = (
     employeeId: row.employeeId,
     employeeName: employeeName || "Employee",
     employeeCode: row.employee.employeeCode,
+    departmentName: row.employee.department?.name ?? null,
     avatarUrl: row.employee.img ?? null,
     deductionTypeId: row.deductionTypeId,
     deductionCode: row.deductionType.code,
@@ -458,6 +466,11 @@ const loadAssignmentRecord = async (id: string) =>
           firstName: true,
           lastName: true,
           img: true,
+          department: {
+            select: {
+              name: true,
+            },
+          },
         },
       },
       deductionType: {
@@ -767,6 +780,11 @@ export async function listEmployeesForDeduction(input?: {
         employeeCode: true,
         firstName: true,
         lastName: true,
+        department: {
+          select: {
+            name: true,
+          },
+        },
       },
     });
 
@@ -786,6 +804,11 @@ export async function listEmployeesForDeduction(input?: {
         employeeCode: true,
         firstName: true,
         lastName: true,
+        department: {
+          select: {
+            name: true,
+          },
+        },
         isArchived: true,
       },
     });
@@ -872,6 +895,11 @@ export async function listEmployeeDeductionAssignments(input?: {
             firstName: true,
             lastName: true,
             img: true,
+            department: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
         deductionType: {
@@ -1075,6 +1103,11 @@ export async function createEmployeeDeductionAssignment(
             firstName: true,
             lastName: true,
             img: true,
+            department: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
         deductionType: {
@@ -1254,6 +1287,11 @@ export async function updateEmployeeDeductionAssignment(
             firstName: true,
             lastName: true,
             img: true,
+            department: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
         deductionType: {
@@ -1374,6 +1412,11 @@ export async function reviewEmployeeDeductionAssignment(input: {
             firstName: true,
             lastName: true,
             img: true,
+            department: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
         deductionType: {
@@ -1559,6 +1602,11 @@ export async function recordEmployeeDeductionPayment(
               firstName: true,
               lastName: true,
               img: true,
+              department: {
+                select: {
+                  name: true,
+                },
+              },
             },
           },
           deductionType: {
@@ -1659,6 +1707,11 @@ export async function setEmployeeDeductionAssignmentStatus(input: {
             firstName: true,
             lastName: true,
             img: true,
+            department: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
         deductionType: {
