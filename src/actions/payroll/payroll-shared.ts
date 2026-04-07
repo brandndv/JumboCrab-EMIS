@@ -1,5 +1,7 @@
 import { revalidatePath } from "next/cache";
 import {
+  ContributionSchedule,
+  PayrollFrequency,
   PayrollDeductionType,
   PayrollEarningType,
   PayrollLineSource,
@@ -65,6 +67,103 @@ export const isStandardFirstHalfBimonthlyRun = (input: {
     start.day === 1 &&
     end.day === 15
   );
+};
+
+export const payrollTypeToFrequency = (
+  payrollType: PayrollType,
+): PayrollFrequency | null => {
+  if (payrollType === PayrollType.WEEKLY) return PayrollFrequency.WEEKLY;
+  if (payrollType === PayrollType.BIMONTHLY) return PayrollFrequency.BIMONTHLY;
+  if (payrollType === PayrollType.MONTHLY) return PayrollFrequency.MONTHLY;
+  return null;
+};
+
+const monthStartKey = (year: number, month: number) =>
+  `${year}-${String(month).padStart(2, "0")}-01`;
+
+const listMonthStartKeysInRange = (startKey: string, endKey: string) => {
+  const start = parseDateKeyParts(startKey);
+  const end = parseDateKeyParts(endKey);
+  if (!start || !end) return [];
+
+  const keys: string[] = [];
+  let year = start.year;
+  let month = start.month;
+
+  while (year < end.year || (year === end.year && month <= end.month)) {
+    const key = monthStartKey(year, month);
+    if (key >= startKey && key <= endKey) {
+      keys.push(key);
+    }
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+
+  return keys;
+};
+
+export const isContributionScheduleApplicable = (input: {
+  payrollType: PayrollType;
+  payrollPeriodStart: string;
+  payrollPeriodEnd: string;
+  isScopedRun: boolean;
+  runFrequency: PayrollFrequency | null;
+  contributionFrequency: PayrollFrequency;
+  schedule: ContributionSchedule;
+}) => {
+  if (!input.runFrequency) return false;
+  if (input.runFrequency !== input.contributionFrequency) return false;
+
+  if (input.schedule === ContributionSchedule.PER_PAYROLL) return true;
+  if (input.schedule === ContributionSchedule.AD_HOC) return false;
+  if (input.schedule === ContributionSchedule.WEEKLY) {
+    return input.runFrequency === PayrollFrequency.WEEKLY;
+  }
+
+  const firstHalfBimonthly = isStandardFirstHalfBimonthlyRun({
+    payrollType: input.payrollType,
+    payrollPeriodStart: input.payrollPeriodStart,
+    payrollPeriodEnd: input.payrollPeriodEnd,
+    isScopedRun: input.isScopedRun,
+  });
+
+  const monthStarts = listMonthStartKeysInRange(
+    input.payrollPeriodStart,
+    input.payrollPeriodEnd,
+  );
+  const hasMonthStart = monthStarts.length > 0;
+  const hasQuarterStart = monthStarts.some((key) => {
+    const month = Number(key.slice(5, 7));
+    return [1, 4, 7, 10].includes(month);
+  });
+  const hasYearStart = monthStarts.some((key) => key.slice(5, 10) === "01-01");
+
+  if (input.schedule === ContributionSchedule.MONTHLY) {
+    if (input.runFrequency === PayrollFrequency.MONTHLY) return true;
+    if (input.runFrequency === PayrollFrequency.BIMONTHLY) {
+      return firstHalfBimonthly;
+    }
+    return hasMonthStart;
+  }
+
+  if (input.schedule === ContributionSchedule.QUARTERLY) {
+    if (input.runFrequency === PayrollFrequency.BIMONTHLY) {
+      return firstHalfBimonthly && hasQuarterStart;
+    }
+    return hasQuarterStart;
+  }
+
+  if (input.schedule === ContributionSchedule.YEARLY) {
+    if (input.runFrequency === PayrollFrequency.BIMONTHLY) {
+      return firstHalfBimonthly && hasYearStart;
+    }
+    return hasYearStart;
+  }
+
+  return false;
 };
 
 export const normalizeEmployeeIds = (employeeIds?: string[]) =>
@@ -151,6 +250,11 @@ const sumCurrencyFromValues = (values: Array<unknown>) =>
     values.reduce<number>((acc, value) => acc + toNumber(value, 0), 0),
   );
 
+const serializeJsonObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
 export const serializeEarningLine = (line: {
   id: string;
   earningType: PayrollEarningType;
@@ -184,6 +288,12 @@ export const serializeDeductionLine = (line: {
   deductionCodeSnapshot: string | null;
   deductionNameSnapshot: string | null;
   assignmentId: string | null;
+  payrollFrequency: PayrollFrequency | null;
+  periodStartSnapshot: Date | null;
+  periodEndSnapshot: Date | null;
+  quantitySnapshot: unknown;
+  unitLabelSnapshot: string | null;
+  metadata: unknown;
   amount: unknown;
   minutes: number | null;
   rateSnapshot: unknown;
@@ -200,6 +310,12 @@ export const serializeDeductionLine = (line: {
   deductionCodeSnapshot: line.deductionCodeSnapshot,
   deductionNameSnapshot: line.deductionNameSnapshot,
   assignmentId: line.assignmentId,
+  payrollFrequency: line.payrollFrequency,
+  periodStartSnapshot: toIsoString(line.periodStartSnapshot),
+  periodEndSnapshot: toIsoString(line.periodEndSnapshot),
+  quantitySnapshot: toNumberOrNull(line.quantitySnapshot),
+  unitLabelSnapshot: line.unitLabelSnapshot,
+  metadata: serializeJsonObject(line.metadata),
   amount: toNumber(line.amount, 0),
   minutes: line.minutes ?? null,
   rateSnapshot: toNumberOrNull(line.rateSnapshot),

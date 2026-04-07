@@ -1,9 +1,12 @@
 "use server";
 
+import { getSession } from "@/lib/auth";
 import { checkConnection, db } from "@/lib/db";
 import type { Employee as PrismaEmployee, Prisma } from "@prisma/client";
 import { SUFFIX } from "@/lib/validations/employees";
 import {
+  DEFAULT_PAYROLL_FREQUENCY,
+  deriveRateSnapshots,
   isMissingRateHistoryTableError,
   isSameRate,
   normalizeEmployeeRelationIds,
@@ -32,6 +35,7 @@ export async function updateEmployee(
   }
 
   try {
+    const session = await getSession();
     const data = JSON.parse(JSON.stringify(employeeData));
     const { employeeId, rateEffectiveFrom, rateReason } = data;
     delete data.employeeId;
@@ -50,6 +54,8 @@ export async function updateEmployee(
         lastName: true,
         nationality: true,
         dailyRate: true,
+        departmentId: true,
+        positionId: true,
         updatedAt: true,
       },
     });
@@ -196,6 +202,7 @@ export async function updateEmployee(
     });
 
     if (hasDailyRateUpdate && !isSameRate(previousDailyRate, nextDailyRate)) {
+      const derivedRates = deriveRateSnapshots(nextDailyRate);
       try {
         await db.employeeRateHistory.upsert({
           where: {
@@ -207,20 +214,34 @@ export async function updateEmployee(
           create: {
             employeeId,
             dailyRate: nextDailyRate,
+            hourlyRate: derivedRates.hourlyRate,
+            monthlyRate: derivedRates.monthlyRate,
+            payrollFrequency: DEFAULT_PAYROLL_FREQUENCY,
             effectiveFrom: rateHistoryEffectiveFrom,
             reason:
               normalizedRateReason ||
               (nextDailyRate == null
                 ? "Daily rate cleared"
                 : "Daily rate updated"),
+            metadata: {
+              source: "employee_update",
+            },
+            createdByUserId: session.userId ?? null,
           },
           update: {
             dailyRate: nextDailyRate,
+            hourlyRate: derivedRates.hourlyRate,
+            monthlyRate: derivedRates.monthlyRate,
+            payrollFrequency: DEFAULT_PAYROLL_FREQUENCY,
             reason:
               normalizedRateReason ||
               (nextDailyRate == null
                 ? "Daily rate cleared (corrected)"
                 : "Daily rate corrected"),
+            metadata: {
+              source: "employee_update",
+            },
+            createdByUserId: session.userId ?? null,
           },
         });
       } catch (error) {
@@ -231,6 +252,43 @@ export async function updateEmployee(
           "EmployeeRateHistory table is not available yet. Skipping rate history write.",
         );
       }
+    }
+
+    const hasDepartmentUpdate = Object.prototype.hasOwnProperty.call(
+      updateData,
+      "departmentId",
+    );
+    const hasPositionUpdate = Object.prototype.hasOwnProperty.call(
+      updateData,
+      "positionId",
+    );
+    const nextDepartmentId = hasDepartmentUpdate
+      ? (updateData.departmentId as string | null | undefined) ?? null
+      : currentData.departmentId ?? null;
+    const nextPositionId = hasPositionUpdate
+      ? (updateData.positionId as string | null | undefined) ?? null
+      : currentData.positionId ?? null;
+
+    if (
+      (hasDepartmentUpdate || hasPositionUpdate) &&
+      (nextDepartmentId !== (currentData.departmentId ?? null) ||
+        nextPositionId !== (currentData.positionId ?? null))
+    ) {
+      await db.employeePositionHistory.create({
+        data: {
+          employeeId,
+          departmentId: nextDepartmentId,
+          positionId: nextPositionId,
+          effectiveFrom: new Date(),
+          reason: "Department/position updated",
+          metadata: {
+            previousDepartmentId: currentData.departmentId ?? null,
+            previousPositionId: currentData.positionId ?? null,
+            source: "employee_update",
+          },
+          createdByUserId: session.userId ?? null,
+        },
+      });
     }
 
     revalidateEmployeePages(employeeId);

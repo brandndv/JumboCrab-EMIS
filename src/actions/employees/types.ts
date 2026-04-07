@@ -10,7 +10,12 @@ export type EmployeeRateHistoryItem = {
   id: string;
   employeeId: string;
   dailyRate: number | null;
+  hourlyRate: number | null;
+  monthlyRate: number | null;
+  payrollFrequency: "WEEKLY" | "BIMONTHLY" | "MONTHLY";
   effectiveFrom: string;
   reason: string | null;
+  metadata: Record<string, unknown> | null;
+  createdByUserId: string | null;
   createdAt: string;
 };

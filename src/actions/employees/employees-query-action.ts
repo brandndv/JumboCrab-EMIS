@@ -4,8 +4,10 @@ import { db } from "@/lib/db";
 import { generateUniqueEmployeeCode } from "@/lib/employees/employee-code";
 import {
   employeeLookupInclude,
+  DEFAULT_PAYROLL_FREQUENCY,
   getFallbackRateHistory,
   isMissingRateHistoryTableError,
+  serializeJsonObject,
   serializeEmployeeRecord,
   serializeEmployeeWithLookups,
   toRateNumber,
@@ -93,8 +95,13 @@ export async function getEmployeeRateHistory(
         id: true,
         employeeId: true,
         dailyRate: true,
+        hourlyRate: true,
+        monthlyRate: true,
+        payrollFrequency: true,
         effectiveFrom: true,
         reason: true,
+        metadata: true,
+        createdByUserId: true,
         createdAt: true,
       },
     });
@@ -112,8 +119,13 @@ export async function getEmployeeRateHistory(
         id: row.id,
         employeeId: row.employeeId,
         dailyRate: toRateNumber(row.dailyRate),
+        hourlyRate: toRateNumber(row.hourlyRate),
+        monthlyRate: toRateNumber(row.monthlyRate),
+        payrollFrequency: row.payrollFrequency ?? DEFAULT_PAYROLL_FREQUENCY,
         effectiveFrom: row.effectiveFrom.toISOString(),
         reason: row.reason ?? null,
+        metadata: serializeJsonObject(row.metadata),
+        createdByUserId: row.createdByUserId ?? null,
         createdAt: row.createdAt.toISOString(),
       })),
     };

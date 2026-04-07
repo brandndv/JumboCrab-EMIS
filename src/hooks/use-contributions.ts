@@ -9,22 +9,78 @@ export type ContributionRow = {
   employeeCode: string;
   avatarUrl?: string | null;
   department?: string;
+  payrollFrequency?: "WEEKLY" | "BIMONTHLY" | "MONTHLY";
+  currencyCode?: string;
   eeTotal: number;
   isSet?: boolean;
   updatedAt?: string;
   sssEe?: number;
   isSssActive?: boolean;
+  sssSchedule?: "PER_PAYROLL" | "MONTHLY" | "QUARTERLY" | "YEARLY" | "AD_HOC";
   philHealthEe?: number;
   isPhilHealthActive?: boolean;
+  philHealthSchedule?: "PER_PAYROLL" | "MONTHLY" | "QUARTERLY" | "YEARLY" | "AD_HOC";
   pagIbigEe?: number;
   isPagIbigActive?: boolean;
+  pagIbigSchedule?: "PER_PAYROLL" | "MONTHLY" | "QUARTERLY" | "YEARLY" | "AD_HOC";
   withholdingEe?: number;
   isWithholdingActive?: boolean;
+  withholdingSchedule?: "PER_PAYROLL" | "MONTHLY" | "QUARTERLY" | "YEARLY" | "AD_HOC";
   // Keep ER values for admin views even if hidden on the directory
   sssEr?: number;
   philHealthEr?: number;
   pagIbigEr?: number;
   withholdingEr?: number;
+};
+
+type ContributionDirectoryRow = {
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  avatarUrl?: string | null;
+  department?: string;
+  eeTotal: number;
+  isSet?: boolean;
+  updatedAt?: string;
+  contribution?: Partial<ContributionRow> | null;
+};
+
+const mapContributionRow = (row: ContributionDirectoryRow): ContributionRow => ({
+  employeeId: row.employeeId,
+  employeeName: row.employeeName,
+  employeeCode: row.employeeCode,
+  avatarUrl: row.avatarUrl,
+  eeTotal: row.eeTotal ?? 0,
+  department: typeof row.department === "string" ? row.department : "",
+  payrollFrequency: row.contribution?.payrollFrequency ?? "BIMONTHLY",
+  currencyCode: row.contribution?.currencyCode ?? "PHP",
+  isSet: row.isSet,
+  updatedAt: row.updatedAt,
+  sssEe: row.contribution?.sssEe ?? 0,
+  sssEr: row.contribution?.sssEr ?? 0,
+  philHealthEe: row.contribution?.philHealthEe ?? 0,
+  philHealthEr: row.contribution?.philHealthEr ?? 0,
+  pagIbigEe: row.contribution?.pagIbigEe ?? 0,
+  pagIbigEr: row.contribution?.pagIbigEr ?? 0,
+  withholdingEe: row.contribution?.withholdingEe ?? 0,
+  withholdingEr: row.contribution?.withholdingEr ?? 0,
+  isSssActive: row.contribution?.isSssActive ?? true,
+  sssSchedule: row.contribution?.sssSchedule ?? "PER_PAYROLL",
+  isPhilHealthActive: row.contribution?.isPhilHealthActive ?? true,
+  philHealthSchedule: row.contribution?.philHealthSchedule ?? "PER_PAYROLL",
+  isPagIbigActive: row.contribution?.isPagIbigActive ?? true,
+  pagIbigSchedule: row.contribution?.pagIbigSchedule ?? "PER_PAYROLL",
+  isWithholdingActive: row.contribution?.isWithholdingActive ?? true,
+  withholdingSchedule: row.contribution?.withholdingSchedule ?? "PER_PAYROLL",
+});
+
+const fetchContributionRows = async (): Promise<ContributionRow[]> => {
+  const result = await listContributionDirectory();
+  if (!result.success) {
+    throw new Error(result.error || "Failed to fetch contributions");
+  }
+
+  return (result.data || []).map((row) => mapContributionRow(row));
 };
 
 export function useContributionsState() {
@@ -40,8 +96,42 @@ export function useContributionsState() {
 
   // Load the directory from the API; keep it simple for now.
   useEffect(() => {
-    refreshContributions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let isActive = true;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const rows = await fetchContributionRows();
+        if (!isActive) return;
+        setContributions(rows);
+
+        const uniqueDepartments = Array.from(
+          new Set(
+            rows
+              .map((r) =>
+                typeof r.department === "string" ? r.department.trim() : ""
+              )
+              .filter((name) => name.length > 0)
+          )
+        ) as string[];
+        uniqueDepartments.sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" })
+        );
+        setDepartments(uniqueDepartments);
+      } catch (err) {
+        if (!isActive) return;
+        setError(err instanceof Error ? err.message : "Failed to load data");
+      } finally {
+        if (isActive) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+    return () => {
+      isActive = false;
+    };
   }, []);
 
   const filteredContributions = useMemo(() => {
@@ -64,32 +154,7 @@ export function useContributionsState() {
     setLoading(true);
     setError(null);
     try {
-      const result = await listContributionDirectory();
-      if (!result.success) {
-        throw new Error(result.error || "Failed to fetch contributions");
-      }
-      const rows: ContributionRow[] = (result.data || []).map((row: any) => ({
-        employeeId: row.employeeId,
-        employeeName: row.employeeName,
-        employeeCode: row.employeeCode,
-        avatarUrl: row.avatarUrl,
-        eeTotal: row.eeTotal ?? 0,
-        department: typeof row.department === "string" ? row.department : "",
-        isSet: row.isSet,
-        updatedAt: row.updatedAt,
-        sssEe: row.contribution?.sssEe ?? 0,
-        sssEr: row.contribution?.sssEr ?? 0,
-        philHealthEe: row.contribution?.philHealthEe ?? 0,
-        philHealthEr: row.contribution?.philHealthEr ?? 0,
-        pagIbigEe: row.contribution?.pagIbigEe ?? 0,
-        pagIbigEr: row.contribution?.pagIbigEr ?? 0,
-        withholdingEe: row.contribution?.withholdingEe ?? 0,
-        withholdingEr: row.contribution?.withholdingEr ?? 0,
-        isSssActive: row.contribution?.isSssActive ?? true,
-        isPhilHealthActive: row.contribution?.isPhilHealthActive ?? true,
-        isPagIbigActive: row.contribution?.isPagIbigActive ?? true,
-        isWithholdingActive: row.contribution?.isWithholdingActive ?? true,
-      }));
+      const rows = await fetchContributionRows();
       setContributions(rows);
 
       const uniqueDepartments = Array.from(

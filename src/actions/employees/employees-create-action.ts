@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 import { generateUniqueEmployeeCode } from "@/lib/employees/employee-code";
 import {
   EMPLOYEE_CODE_REGEX,
@@ -10,6 +11,8 @@ import {
 } from "@/lib/validations/employees";
 import type { Prisma } from "@prisma/client";
 import {
+  DEFAULT_PAYROLL_FREQUENCY,
+  deriveRateSnapshots,
   isMissingRateHistoryTableError,
   normalizeEmployeeRelationIds,
   revalidateEmployeePages,
@@ -26,6 +29,7 @@ export async function createEmployee(employeeData: Employee): Promise<{
 }> {
   try {
     console.log("Creating new employee with data:", employeeData);
+    const session = await getSession();
 
     const code =
       typeof employeeData.employeeCode === "string" &&
@@ -96,13 +100,21 @@ export async function createEmployee(employeeData: Employee): Promise<{
 
     const initialRate = toRateNumber(employeeCreateData.dailyRate);
     if (initialRate != null) {
+      const derivedRates = deriveRateSnapshots(initialRate);
       try {
         await db.employeeRateHistory.create({
           data: {
             employeeId: newEmployee.employeeId,
             dailyRate: initialRate,
+            hourlyRate: derivedRates.hourlyRate,
+            monthlyRate: derivedRates.monthlyRate,
+            payrollFrequency: DEFAULT_PAYROLL_FREQUENCY,
             effectiveFrom: employeeCreateData.startDate ?? new Date(),
             reason: "Initial daily rate",
+            metadata: {
+              source: "employee_create",
+            },
+            createdByUserId: session.userId ?? null,
           },
         });
       } catch (error) {
@@ -113,6 +125,22 @@ export async function createEmployee(employeeData: Employee): Promise<{
           "EmployeeRateHistory table is not available yet. Skipping initial rate history write.",
         );
       }
+    }
+
+    if (employeeCreateData.departmentId || employeeCreateData.positionId) {
+      await db.employeePositionHistory.create({
+        data: {
+          employeeId: newEmployee.employeeId,
+          departmentId: employeeCreateData.departmentId ?? null,
+          positionId: employeeCreateData.positionId ?? null,
+          effectiveFrom: employeeCreateData.startDate ?? new Date(),
+          reason: "Initial department/position assignment",
+          metadata: {
+            source: "employee_create",
+          },
+          createdByUserId: session.userId ?? null,
+        },
+      });
     }
 
     revalidateEmployeePages(newEmployee.employeeId);

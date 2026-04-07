@@ -61,6 +61,29 @@ export const isSameRate = (left: number | null, right: number | null) => {
   return Math.abs(left - right) < 0.000001;
 };
 
+export const DEFAULT_PAYROLL_FREQUENCY = "BIMONTHLY" as const;
+
+export const deriveRateSnapshots = (dailyRate: number | null) => {
+  if (dailyRate == null) {
+    return {
+      hourlyRate: null,
+      monthlyRate: null,
+    };
+  }
+
+  return {
+    hourlyRate: Number((dailyRate / 8).toFixed(2)),
+    monthlyRate: Number((dailyRate * 26).toFixed(2)),
+  };
+};
+
+export const serializeJsonObject = (
+  value: unknown,
+): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
 export const isMissingRateHistoryTableError = (error: unknown) => {
   if (!error || typeof error !== "object") return false;
   const maybeCode = (error as { code?: unknown }).code;
@@ -170,8 +193,13 @@ export const getFallbackRateHistory = async (
       id: `fallback-${employee.employeeId}`,
       employeeId: employee.employeeId,
       dailyRate: fallbackRate,
+      hourlyRate: deriveRateSnapshots(fallbackRate).hourlyRate,
+      monthlyRate: deriveRateSnapshots(fallbackRate).monthlyRate,
+      payrollFrequency: DEFAULT_PAYROLL_FREQUENCY,
       effectiveFrom: employee.startDate.toISOString(),
       reason,
+      metadata: null,
+      createdByUserId: null,
       createdAt: employee.updatedAt.toISOString(),
     },
   ];

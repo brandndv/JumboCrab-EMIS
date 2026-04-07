@@ -4,6 +4,8 @@ export type PayrollTypeValue =
   | "WEEKLY"
   | "OFF_CYCLE";
 
+export type PayrollFrequencyValue = "WEEKLY" | "BIMONTHLY" | "MONTHLY";
+
 export type PayrollStatusValue =
   | "DRAFT"
   | "REVIEWED"
@@ -97,6 +99,12 @@ export type PayrollDeductionLine = {
   deductionCodeSnapshot: string | null;
   deductionNameSnapshot: string | null;
   assignmentId: string | null;
+  payrollFrequency: PayrollFrequencyValue | null;
+  periodStartSnapshot: string | null;
+  periodEndSnapshot: string | null;
+  quantitySnapshot: number | null;
+  unitLabelSnapshot: string | null;
+  metadata: Record<string, unknown> | null;
   amount: number;
   minutes: number | null;
   rateSnapshot: number | null;

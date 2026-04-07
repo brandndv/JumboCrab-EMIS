@@ -1,7 +1,9 @@
 import {
   ATTENDANCE_STATUS,
+  ContributionSchedule,
   DeductionAmountMode,
   DeductionFrequency,
+  PayrollFrequency,
   PayrollDeductionType,
   PayrollEarningType,
   PayrollLineSource,
@@ -23,7 +25,9 @@ import {
   toPercent,
 } from "@/lib/payroll/helpers";
 import {
+  isContributionScheduleApplicable,
   OVERTIME_RATE_MULTIPLIER,
+  payrollTypeToFrequency,
   UNDERTIME_DEDUCTION_MULTIPLIER,
 } from "./payroll-shared";
 
@@ -75,6 +79,12 @@ export type PayrollDeductionDraft = {
   assignmentId?: string;
   deductionCodeSnapshot?: string;
   deductionNameSnapshot?: string;
+  payrollFrequency?: PayrollFrequency;
+  periodStartSnapshot?: Date;
+  periodEndSnapshot?: Date;
+  quantitySnapshot?: number;
+  unitLabelSnapshot?: string;
+  metadata?: Prisma.JsonObject;
   amount: number;
   minutes?: number;
   rateSnapshot?: number;
@@ -154,12 +164,19 @@ export const buildEmployeePayrollDraft = (input: {
   employee: PayrollGenerationEmployee;
   employeeRows: PayrollGenerationAttendanceRow[];
   payrollId: string;
+  payrollType: "BIMONTHLY" | "MONTHLY" | "WEEKLY" | "OFF_CYCLE";
+  payrollPeriodStart: Date;
+  payrollPeriodEnd: Date;
+  payrollPeriodStartKey: string;
+  payrollPeriodEndKey: string;
+  isScopedRun: boolean;
   applyGovernmentContributions: boolean;
   employeeAssignments: PayrollGenerationAssignment[];
   oneTimeAlreadyApplied: Set<string>;
 }): EmployeePayrollDraft => {
   const { employee, employeeRows, payrollId } = input;
   const dailyRate = toNumberOrNull(employee.dailyRate);
+  const runFrequency = payrollTypeToFrequency(input.payrollType);
 
   let daysPresent = 0;
   let daysAbsent = 0;
@@ -376,6 +393,15 @@ export const buildEmployeePayrollDraft = (input: {
   if (undertimeDeduction > 0) {
     deductions.push({
       deductionType: PayrollDeductionType.UNDERTIME_DEDUCTION,
+      payrollFrequency: runFrequency ?? undefined,
+      periodStartSnapshot: input.payrollPeriodStart,
+      periodEndSnapshot: input.payrollPeriodEnd,
+      quantitySnapshot: minutesUndertime,
+      unitLabelSnapshot: "minutes",
+      metadata: {
+        deductionCategory: "attendance",
+        multiplier: UNDERTIME_DEDUCTION_MULTIPLIER,
+      },
       amount: undertimeDeduction,
       minutes: minutesUndertime,
       rateSnapshot: ratePerMinuteSnapshot ?? undefined,
@@ -393,51 +419,83 @@ export const buildEmployeePayrollDraft = (input: {
     const philHealth = toNumber(contribution.philHealthEe, 0);
     const pagIbig = toNumber(contribution.pagIbigEe, 0);
     const withholding = toNumber(contribution.withholdingEe, 0);
+    const buildContributionDeduction = (params: {
+      isActive: boolean;
+      amount: number;
+      schedule: ContributionSchedule;
+      deductionType: PayrollDeductionType;
+      remarks: string;
+      contributionLabel: string;
+    }) => {
+      if (!params.isActive || params.amount <= 0 || !runFrequency) return;
+      if (
+        !isContributionScheduleApplicable({
+          payrollType: input.payrollType,
+          payrollPeriodStart: input.payrollPeriodStartKey,
+          payrollPeriodEnd: input.payrollPeriodEndKey,
+          isScopedRun: input.isScopedRun,
+          runFrequency,
+          contributionFrequency: contribution.payrollFrequency,
+          schedule: params.schedule,
+        })
+      ) {
+        return;
+      }
 
-    if (contribution.isSssActive && sss > 0) {
       deductions.push({
-        deductionType: PayrollDeductionType.CONTRIBUTION_SSS,
-        amount: roundCurrency(sss),
+        deductionType: params.deductionType,
+        payrollFrequency: contribution.payrollFrequency,
+        periodStartSnapshot: input.payrollPeriodStart,
+        periodEndSnapshot: input.payrollPeriodEnd,
+        quantitySnapshot: 1,
+        unitLabelSnapshot: "scheduled deduction",
+        metadata: {
+          contributionId: contribution.id,
+          schedule: params.schedule,
+          currencyCode: contribution.currencyCode,
+          contributionLabel: params.contributionLabel,
+        },
+        amount: roundCurrency(params.amount),
         source: PayrollLineSource.CONTRIBUTION_ENGINE,
         isManual: false,
         referenceType: PayrollReferenceType.CONTRIBUTION,
         referenceId: contribution.id,
-        remarks: "Employee SSS contribution",
+        remarks: params.remarks,
       });
-    }
-    if (contribution.isPhilHealthActive && philHealth > 0) {
-      deductions.push({
-        deductionType: PayrollDeductionType.CONTRIBUTION_PHILHEALTH,
-        amount: roundCurrency(philHealth),
-        source: PayrollLineSource.CONTRIBUTION_ENGINE,
-        isManual: false,
-        referenceType: PayrollReferenceType.CONTRIBUTION,
-        referenceId: contribution.id,
-        remarks: "Employee PhilHealth contribution",
-      });
-    }
-    if (contribution.isPagIbigActive && pagIbig > 0) {
-      deductions.push({
-        deductionType: PayrollDeductionType.CONTRIBUTION_PAGIBIG,
-        amount: roundCurrency(pagIbig),
-        source: PayrollLineSource.CONTRIBUTION_ENGINE,
-        isManual: false,
-        referenceType: PayrollReferenceType.CONTRIBUTION,
-        referenceId: contribution.id,
-        remarks: "Employee Pag-IBIG contribution",
-      });
-    }
-    if (contribution.isWithholdingActive && withholding > 0) {
-      deductions.push({
-        deductionType: PayrollDeductionType.WITHHOLDING_TAX,
-        amount: roundCurrency(withholding),
-        source: PayrollLineSource.CONTRIBUTION_ENGINE,
-        isManual: false,
-        referenceType: PayrollReferenceType.CONTRIBUTION,
-        referenceId: contribution.id,
-        remarks: "Employee withholding tax",
-      });
-    }
+    };
+
+    buildContributionDeduction({
+      isActive: contribution.isSssActive,
+      amount: sss,
+      schedule: contribution.sssSchedule,
+      deductionType: PayrollDeductionType.CONTRIBUTION_SSS,
+      remarks: "Employee SSS contribution",
+      contributionLabel: "SSS",
+    });
+    buildContributionDeduction({
+      isActive: contribution.isPhilHealthActive,
+      amount: philHealth,
+      schedule: contribution.philHealthSchedule,
+      deductionType: PayrollDeductionType.CONTRIBUTION_PHILHEALTH,
+      remarks: "Employee PhilHealth contribution",
+      contributionLabel: "PhilHealth",
+    });
+    buildContributionDeduction({
+      isActive: contribution.isPagIbigActive,
+      amount: pagIbig,
+      schedule: contribution.pagIbigSchedule,
+      deductionType: PayrollDeductionType.CONTRIBUTION_PAGIBIG,
+      remarks: "Employee Pag-IBIG contribution",
+      contributionLabel: "Pag-IBIG",
+    });
+    buildContributionDeduction({
+      isActive: contribution.isWithholdingActive,
+      amount: withholding,
+      schedule: contribution.withholdingSchedule,
+      deductionType: PayrollDeductionType.WITHHOLDING_TAX,
+      remarks: "Employee withholding tax",
+      contributionLabel: "Withholding Tax",
+    });
   }
 
   const earningsSubtotal = roundCurrency(
@@ -493,6 +551,15 @@ export const buildEmployeePayrollDraft = (input: {
       assignmentId: assignment.id,
       deductionCodeSnapshot: assignment.deductionType.code,
       deductionNameSnapshot: assignment.deductionType.name,
+      payrollFrequency: runFrequency ?? undefined,
+      periodStartSnapshot: input.payrollPeriodStart,
+      periodEndSnapshot: input.payrollPeriodEnd,
+      quantitySnapshot: 1,
+      unitLabelSnapshot: "assignment",
+      metadata: {
+        deductionFrequency: assignment.deductionType.frequency,
+        amountMode: assignment.deductionType.amountMode,
+      },
       amount,
       source: PayrollLineSource.SYSTEM,
       isManual: false,
