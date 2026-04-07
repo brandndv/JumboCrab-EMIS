@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { useId, useState, useEffect, useRef } from "react";
+import { useId, useState } from "react";
 import {
   SidebarGroup,
   SidebarMenu,
@@ -11,6 +11,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   ChevronRight,
@@ -51,10 +52,10 @@ type MenuItem = {
 
 const NavSidebar = ({ userRole }: NavSidebarProps) => {
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({});
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const sidebarRef = useRef<HTMLDivElement>(null);
+  const { state } = useSidebar();
   const pathname = usePathname();
   const collapsibleId = useId(); // Generate a stable ID prefix
+  const isSidebarCollapsed = state === "collapsed";
 
   const updateOpenState = (key: string, value: boolean) => {
     if (!isSidebarCollapsed) {
@@ -70,33 +71,6 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       });
     }
   };
-
-  useEffect(() => {
-    const element = sidebarRef.current;
-
-    const handleResize = () => {
-      if (element) {
-        const isCollapsed = element.offsetWidth < 80; // Adjust this value based on your collapsed width
-        setIsSidebarCollapsed(isCollapsed);
-        if (isCollapsed) {
-          setOpenStates({});
-        }
-      }
-    };
-
-    handleResize();
-
-    const resizeObserver = new ResizeObserver(handleResize);
-    if (element) {
-      resizeObserver.observe(element);
-    }
-
-    return () => {
-      if (element) {
-        resizeObserver.unobserve(element);
-      }
-    };
-  }, []);
 
   const menuItems: MenuItem[] = [
     // ========== DASHBOARD MENU ========== //
@@ -525,10 +499,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
     item.roles.includes(userRole || "admin"),
   );
   return (
-    <div
-      ref={sidebarRef}
-      className="flex flex-col items-center space-y-2 w-full"
-    >
+    <div className="flex w-full flex-col items-center space-y-2">
         <SidebarGroup className="w-full">
           <SidebarMenu className="space-y-1 w-full max-w-xs mx-auto">
           {filteredMenuItems.map((item) => {
@@ -569,9 +540,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                       - Collapsed: px-0 to keep icon perfectly centered
                     */}
                     <div
-                      className={`flex items-center w-full rounded-lg transition-colors ${
-                        isSidebarCollapsed ? "p-0" : "px-3 py-2"
-                      } ${
+                      className={`flex w-full items-center rounded-lg px-3 py-2 transition-[padding,background-color,color] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0 ${
                         pathname.startsWith(item.href) &&
                         (pathname === item.href ||
                           pathname[item.href.length] === "/")
@@ -588,20 +557,11 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                             "!bg-orange-600 !text-white border-orange-500 shadow-lg",
                           arrowClassName: "bg-orange-600 fill-orange-600",
                         }}
-                        // Collapsed: make the action square and icon slightly bigger
-                        className={`w-full hover:bg-transparent focus-visible:ring-0 text-inherit hover:text-inherit ${
-                          isSidebarCollapsed
-                            ? "flex justify-center group-data-[collapsible=icon]:size-10! [&>svg]:h-5 [&>svg]:w-5"
-                            : "text-left [&>svg]:h-4 [&>svg]:w-4"
-                        }`}
+                        className="w-full text-inherit transition-[width,height,padding,gap] duration-300 ease-out hover:bg-transparent hover:text-inherit focus-visible:ring-0"
                       >
                         <Link
                           href={item.href}
-                          className={`${
-                            isSidebarCollapsed
-                              ? "flex w-full justify-center"
-                              : "block w-full"
-                          }`}
+                          className="flex w-full items-center"
                           onClick={(e) => {
                             // Prevent navigation and toggle submenu only if user has any visible subitems
                             if (
@@ -615,44 +575,40 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                         >
                           {/* Icon + label spacing: adjust gap here */}
                           <div
-                            className={`flex items-center ${
-                              isSidebarCollapsed
-                                ? "justify-center"
-                                : "justify-start"
-                            } ${isSidebarCollapsed ? "gap-0" : "gap-3"} w-full`}
+                            className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
                           >
-                            {/* Main icon size: change h-4 w-4 here */}
-                            <item.icon className="h-4 w-4 shrink-0" />
-                            {!isSidebarCollapsed && (
-                              <span className="font-medium">{item.label}</span>
-                            )}
+                            <item.icon className="h-5 w-5 shrink-0 transition-[width,height,transform] duration-300 ease-out" />
+                            <span className="max-w-[12rem] overflow-hidden whitespace-nowrap font-medium opacity-100 transition-[max-width,opacity,transform] duration-300 ease-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
+                              {item.label}
+                            </span>
                           </div>
                         </Link>
                       </SidebarMenuButton>
-                      {!isSidebarCollapsed && visibleSubItems.length > 0 && (
-                        <>
-                          {/*
-                              Chevron inherits parent colors; keep background transparent to avoid separate hover bg
-                              Chevron touch target + size: adjust p-* and h/w here
-                            */}
-                          <button
-                            className={`p-2 rounded-md transition-colors bg-transparent hover:bg-transparent ${
-                              pathname.startsWith(item.href) &&
-                              (pathname === item.href ||
-                                pathname[item.href.length] === "/")
-                                ? "text-white hover:text-white"
-                                : "text-inherit hover:text-inherit"
+                      {visibleSubItems.length > 0 && (
+                        <button
+                          className={`overflow-hidden rounded-md bg-transparent p-2 transition-[max-width,opacity,padding,color] duration-300 ease-out hover:bg-transparent group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:opacity-0 ${
+                            pathname.startsWith(item.href) &&
+                            (pathname === item.href ||
+                              pathname[item.href.length] === "/")
+                              ? "max-w-10 text-white hover:text-white"
+                              : "max-w-10 text-inherit hover:text-inherit"
+                          }`}
+                          onClick={(
+                            e: React.MouseEvent<HTMLButtonElement>,
+                          ) => {
+                            e.stopPropagation();
+                            updateOpenState(item.id, !openStates[item.id]);
+                          }}
+                          tabIndex={isSidebarCollapsed ? -1 : 0}
+                        >
+                          <ChevronRight
+                            className={`h-4 w-4 transition-transform duration-300 ease-out ${
+                              openStates[item.id] && !isSidebarCollapsed
+                                ? "rotate-90"
+                                : "rotate-0"
                             }`}
-                            onClick={(
-                              e: React.MouseEvent<HTMLButtonElement>,
-                            ) => {
-                              e.stopPropagation();
-                              updateOpenState(item.id, !openStates[item.id]);
-                            }}
-                          >
-                            <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
-                          </button>
-                        </>
+                          />
+                        </button>
                       )}
                     </div>
                     <CollapsibleContent className="mt-1">
@@ -695,9 +651,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
               return (
                 <SidebarMenuItem key={item.id} className="group">
                   <div
-                    className={`flex items-center w-full rounded-lg transition-colors ${
-                      isSidebarCollapsed ? "p-0" : "px-3 py-2"
-                    } ${
+                    className={`flex w-full items-center rounded-lg px-3 py-2 transition-[padding,background-color,color] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0 ${
                       pathname.startsWith(item.href) &&
                       (pathname === item.href ||
                         pathname[item.href.length] === "/")
@@ -713,31 +667,16 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                           "!bg-orange-600 !text-white border-orange-500 shadow-lg",
                         arrowClassName: "bg-orange-600 fill-orange-600",
                       }}
-                      className={`w-full hover:bg-transparent focus-visible:ring-0 text-inherit hover:text-inherit ${
-                        isSidebarCollapsed
-                          ? "flex justify-center group-data-[collapsible=icon]:size-10! [&>svg]:h-5 [&>svg]:w-5"
-                          : "text-left [&>svg]:h-4 [&>svg]:w-4"
-                      }`}
+                      className="w-full text-inherit transition-[width,height,padding,gap] duration-300 ease-out hover:bg-transparent hover:text-inherit focus-visible:ring-0"
                     >
-                      <Link
-                        href={item.href}
-                        className={`${
-                          isSidebarCollapsed
-                            ? "flex w-full justify-center"
-                            : "block w-full"
-                        }`}
-                      >
+                      <Link href={item.href} className="flex w-full items-center">
                         <div
-                          className={`flex items-center ${
-                            isSidebarCollapsed
-                              ? "justify-center"
-                              : "justify-start"
-                          } ${isSidebarCollapsed ? "gap-0" : "gap-3"} w-full`}
+                          className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
                         >
-                          <item.icon className="h-4 w-4 shrink-0" />
-                          {!isSidebarCollapsed && (
-                            <span className="font-medium">{item.label}</span>
-                          )}
+                          <item.icon className="h-5 w-5 shrink-0 transition-[width,height,transform] duration-300 ease-out" />
+                          <span className="max-w-[12rem] overflow-hidden whitespace-nowrap font-medium opacity-100 transition-[max-width,opacity,transform] duration-300 ease-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
+                            {item.label}
+                          </span>
                         </div>
                       </Link>
                     </SidebarMenuButton>

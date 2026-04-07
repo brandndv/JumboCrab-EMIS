@@ -22,6 +22,17 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { TableLoadingState } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 type StructureRow = {
   employeeId: string;
@@ -60,6 +71,8 @@ export function StructureTable({
   const [bulkSupervisorId, setBulkSupervisorId] = useState<string>("");
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
   const hasReportedInitialLoadRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -134,6 +147,23 @@ export function StructureTable({
 
   const unassignedRows = useMemo(() => rows.filter((r) => !r.supervisorUserId), [rows]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, deptFilter, positionFilter, showUnassignedOnly]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = (safeCurrentPage - 1) * pageSize;
+  const paginatedRows = filtered.slice(pageStart, pageStart + pageSize);
+  const showingFrom = filtered.length === 0 ? 0 : pageStart + 1;
+  const showingTo = filtered.length === 0 ? 0 : Math.min(pageStart + pageSize, filtered.length);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) {
+      setCurrentPage(safeCurrentPage);
+    }
+  }, [currentPage, safeCurrentPage]);
+
   const openAssign = (row: StructureRow) => {
     setTarget(row);
     setSelectedSupervisor(row.supervisorUserId ?? "");
@@ -142,10 +172,25 @@ export function StructureTable({
   };
 
   const selectedCount = selectedEmployeeIds.length;
-  const filteredIds = filtered.map((row) => row.employeeId);
-  const allFilteredSelected =
-    filteredIds.length > 0 &&
-    filteredIds.every((id) => selectedEmployeeIds.includes(id));
+  const visiblePageIds = paginatedRows.map((row) => row.employeeId);
+  const allVisibleSelected =
+    visiblePageIds.length > 0 &&
+    visiblePageIds.every((id) => selectedEmployeeIds.includes(id));
+
+  const visiblePageNumbers = useMemo(() => {
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const start = Math.max(1, safeCurrentPage - 1);
+    const end = Math.min(totalPages, start + 2);
+    const adjustedStart = Math.max(1, end - 2);
+
+    return Array.from(
+      { length: end - adjustedStart + 1 },
+      (_, index) => adjustedStart + index,
+    );
+  }, [safeCurrentPage, totalPages]);
 
   const toggleSelectedEmployee = (employeeId: string, checked: boolean) => {
     setSelectedEmployeeIds((prev) =>
@@ -160,10 +205,10 @@ export function StructureTable({
   const toggleSelectAllFiltered = (checked: boolean) => {
     setSelectedEmployeeIds((prev) => {
       if (checked) {
-        const merged = new Set([...prev, ...filteredIds]);
+        const merged = new Set([...prev, ...visiblePageIds]);
         return Array.from(merged);
       }
-      const filteredIdSet = new Set(filteredIds);
+      const filteredIdSet = new Set(visiblePageIds);
       return prev.filter((id) => !filteredIdSet.has(id));
     });
   };
@@ -343,7 +388,8 @@ export function StructureTable({
                   <input
                     type="checkbox"
                     className="h-4 w-4 rounded border border-border"
-                    checked={allFilteredSelected}
+                    checked={allVisibleSelected}
+                    disabled={loading || paginatedRows.length === 0}
                     onChange={(event) =>
                       toggleSelectAllFiltered(event.currentTarget.checked)
                     }
@@ -385,7 +431,7 @@ export function StructureTable({
               )}
               {!loading &&
                 !error &&
-                filtered.map((row) => (
+                paginatedRows.map((row) => (
                   <TableRow key={row.employeeId}>
                     <TableCell>
                       <input
@@ -437,6 +483,136 @@ export function StructureTable({
             </TableBody>
           </Table>
         </div>
+        {!loading && !error && (
+          <div className="flex flex-col gap-3 border-t border-border/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {filtered.length === 0
+                ? "Showing 0 of 0 employees"
+                : `Showing ${showingFrom}-${showingTo} of ${filtered.length} employees`}
+            </p>
+
+            <div className="flex flex-col gap-3 sm:items-end">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Rows per page</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {totalPages > 1 && (
+                <Pagination className="m-0 justify-end">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (safeCurrentPage > 1) {
+                            setCurrentPage((page) => page - 1);
+                          }
+                        }}
+                        className={
+                          safeCurrentPage === 1
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+
+                    {visiblePageNumbers[0] > 1 && (
+                      <>
+                        <PaginationItem>
+                          <PaginationLink
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setCurrentPage(1);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            1
+                          </PaginationLink>
+                        </PaginationItem>
+                        {visiblePageNumbers[0] > 2 && (
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        )}
+                      </>
+                    )}
+
+                    {visiblePageNumbers.map((pageNumber) => (
+                      <PaginationItem key={pageNumber}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            setCurrentPage(pageNumber);
+                          }}
+                          isActive={safeCurrentPage === pageNumber}
+                          className="cursor-pointer"
+                        >
+                          {pageNumber}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+
+                    {visiblePageNumbers[visiblePageNumbers.length - 1] < totalPages && (
+                      <>
+                        {visiblePageNumbers[visiblePageNumbers.length - 1] <
+                          totalPages - 1 && (
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        )}
+                        <PaginationItem>
+                          <PaginationLink
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setCurrentPage(totalPages);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            {totalPages}
+                          </PaginationLink>
+                        </PaginationItem>
+                      </>
+                    )}
+
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (safeCurrentPage < totalPages) {
+                            setCurrentPage((page) => page + 1);
+                          }
+                        }}
+                        className={
+                          safeCurrentPage === totalPages
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
         <DialogContent>
