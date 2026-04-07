@@ -8,7 +8,7 @@ This file gives coding agents and contributors project-specific guidance for wor
 - Language: **TypeScript**
 - Database: **PostgreSQL** via **Prisma**
 - Auth/session: **iron-session**
-- UI: React 19, Tailwind CSS 4, Radix UI
+- UI: **shadcn/ui** with **Tailwind CSS 4** (built on **Radix UI** primitives)
 - Main domain areas reflected in the Prisma schema:
   - employee management
   - org structure (departments, positions)
@@ -111,7 +111,8 @@ Before adding a new utility, search for an existing helper first.
 
 ## UI and form guidance
 
-- This repo already uses React Hook Form, Zod, Radix UI, and Tailwind-based utilities.
+- This repo already uses React Hook Form, Zod, **shadcn/ui**, and Tailwind-based utilities.
+- **shadcn/ui** in this repo is built on Radix primitives, so follow existing component patterns instead of introducing a different UI system.
 - Prefer these existing tools over introducing new form or component libraries.
 - Keep forms aligned with domain terminology already used in Prisma and the app.
 - For employee/payroll/schedule flows, clarity matters more than flashy UI.
