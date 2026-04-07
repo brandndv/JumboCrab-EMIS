@@ -1,4 +1,4 @@
-const SW_VERSION = "v2";
+const SW_VERSION = "v3";
 const STATIC_CACHE = `static-${SW_VERSION}`;
 const OFFLINE_CACHE = `offline-${SW_VERSION}`;
 const OFFLINE_URL = "/offline";

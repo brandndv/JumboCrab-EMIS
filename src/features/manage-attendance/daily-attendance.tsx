@@ -15,7 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RefreshCcw, RotateCcw, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, RefreshCcw, RotateCcw, Pencil, Trash2 } from "lucide-react";
 import { TZ } from "@/lib/timezone";
 import {
   deletePunch,
@@ -33,6 +33,17 @@ import {
   TableLoadingState,
 } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 const todayISO = () => new Date().toLocaleDateString("en-CA", { timeZone: TZ });
 const formatPunchLabel = (type: string) => {
@@ -109,6 +120,15 @@ export function DailyAttendance() {
   const [punchEditTime, setPunchEditTime] = useState("");
   const [punchSaving, setPunchSaving] = useState(false);
   const [punchDeletingId, setPunchDeletingId] = useState<string | null>(null);
+  const [attendancePagination, setAttendancePagination] = useState<{
+    datasetKey: string;
+    page: number;
+    pageSize: number;
+  }>({
+    datasetKey: "",
+    page: 1,
+    pageSize: PAGE_SIZE_OPTIONS[0],
+  });
 
   const filtered = useMemo(() => {
     const term = filter.trim().toLowerCase();
@@ -142,6 +162,56 @@ export function DailyAttendance() {
     });
     return Array.from(set).sort();
   }, [rows]);
+
+  const attendanceDatasetKey = useMemo(
+    () =>
+      filtered
+        .map((row) => `${row.employeeId}:${row.workDate}`)
+        .join("|"),
+    [filtered],
+  );
+  const attendancePageSize = attendancePagination.pageSize;
+  const attendanceCurrentPage =
+    attendancePagination.datasetKey === attendanceDatasetKey
+      ? attendancePagination.page
+      : 1;
+  const attendanceTotalPages = Math.max(
+    1,
+    Math.ceil(filtered.length / attendancePageSize),
+  );
+  const safeAttendancePage = Math.min(
+    attendanceCurrentPage,
+    attendanceTotalPages,
+  );
+  const attendancePageStart =
+    (safeAttendancePage - 1) * attendancePageSize;
+  const paginatedAttendanceRows = filtered.slice(
+    attendancePageStart,
+    attendancePageStart + attendancePageSize,
+  );
+  const attendanceShowingFrom =
+    filtered.length === 0 ? 0 : attendancePageStart + 1;
+  const attendanceShowingTo =
+    filtered.length === 0
+      ? 0
+      : Math.min(attendancePageStart + attendancePageSize, filtered.length);
+  const visibleAttendancePageNumbers = useMemo(() => {
+    if (attendanceTotalPages <= 5) {
+      return Array.from(
+        { length: attendanceTotalPages },
+        (_, index) => index + 1,
+      );
+    }
+
+    const start = Math.max(1, safeAttendancePage - 1);
+    const end = Math.min(attendanceTotalPages, start + 2);
+    const adjustedStart = Math.max(1, end - 2);
+
+    return Array.from(
+      { length: end - adjustedStart + 1 },
+      (_, index) => adjustedStart + index,
+    );
+  }, [attendanceTotalPages, safeAttendancePage]);
 
   const filteredPunches = useMemo(() => {
     const term = punchSearch.trim().toLowerCase();
@@ -322,147 +392,309 @@ export function DailyAttendance() {
               No attendance records.
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Time in</TableHead>
-                    <TableHead>Punches</TableHead>
-                    <TableHead>Breaks</TableHead>
-                    <TableHead>Time out</TableHead>
-                    <TableHead>Late</TableHead>
-                    <TableHead>Over/Under</TableHead>
-                    <TableHead>Worked / Payable</TableHead>
-                    <TableHead>Expected</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((row) => (
-                    <TableRow key={`${row.employeeId}-${row.workDate}`}>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {row.employee?.firstName} {row.employee?.lastName}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {row.employee?.employeeCode} ·{" "}
-                            {row.employee?.department?.name || "—"} ·{" "}
-                            {row.employee?.position?.name || "—"}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <Badge
-                            variant={
-                              row.status === "PRESENT"
-                                ? "success"
-                                : row.status === "LATE"
-                                  ? "warning"
-                                  : row.status === "LEAVE"
-                                    ? "secondary"
-                                    : row.status === "INCOMPLETE"
-                                      ? "info"
-                                      : row.status === "ABSENT"
-                                      ? "destructive"
-                                      : "outline"
-                            }
-                            className="w-fit uppercase tracking-wide"
-                          >
-                            {row.status}
-                          </Badge>
-                          {row.forgotToTimeOut ? (
-                            <Badge
-                              className="w-fit uppercase tracking-wide"
-                              variant="destructive"
-                            >
-                              Forgot time out
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatTime(row.actualInAt)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {row.punchesCount != null
-                          ? `${row.punchesCount} punch${row.punchesCount === 1 ? "" : "es"}`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {row.breakMinutes != null
-                          ? `${formatMinutesToTime(row.breakMinutes, false)}${row.breakCount ? ` (${row.breakCount}x)` : ""}`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatTime(row.actualOutAt)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {row.lateMinutes != null
-                          ? formatMinutesToTime(row.lateMinutes, false)
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {!row.actualOutAt || row.scheduledEndMinutes == null
-                          ? "—"
-                          : row.overtimeMinutesRaw != null &&
-                              row.overtimeMinutesRaw > 0
-                            ? `${formatMinutesToTime(row.overtimeMinutesRaw, false)} OT`
-                            : row.undertimeMinutes != null &&
-                                row.undertimeMinutes > 0
-                              ? `${formatMinutesToTime(row.undertimeMinutes, false)} UT`
-                              : "On time"}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        <div className="flex flex-col leading-tight">
-                          <span>
-                            {row.netWorkedHoursAndMinutes ??
-                              row.workedHoursAndMinutes ??
-                              formatMinutesToTime(
-                                row.netWorkedMinutes ?? row.workedMinutes,
-                                false,
-                              )}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            Payable:{" "}
-                            {row.payableWorkedHoursAndMinutes ??
-                              formatMinutesToTime(
-                                row.payableWorkedMinutes,
-                                false,
-                              )}
-                            {(row.lateGraceCreditMinutes ?? 0) > 0
-                              ? ` (incl. ${formatMinutesToTime(row.lateGraceCreditMinutes, false)} grace)`
-                              : ""}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {row.scheduledStartMinutes != null &&
-                        row.scheduledEndMinutes != null ? (
+            <div className="space-y-3">
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Time in</TableHead>
+                      <TableHead>Punches</TableHead>
+                      <TableHead>Breaks</TableHead>
+                      <TableHead>Time out</TableHead>
+                      <TableHead>Late</TableHead>
+                      <TableHead>Over/Under</TableHead>
+                      <TableHead>Worked / Payable</TableHead>
+                      <TableHead>Expected</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedAttendanceRows.map((row) => (
+                      <TableRow key={`${row.employeeId}-${row.workDate}`}>
+                        <TableCell>
                           <div className="flex flex-col">
-                            <span>
-                              {formatMinutesToClock12(
-                                row.scheduledStartMinutes,
-                              )}{" "}
-                              -{" "}
-                              {formatMinutesToClock12(row.scheduledEndMinutes)}
+                            <span className="font-medium">
+                              {row.employee?.firstName} {row.employee?.lastName}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {row.expectedShiftName || "Expected shift"}
+                              {row.employee?.employeeCode} ·{" "}
+                              {row.employee?.department?.name || "—"} ·{" "}
+                              {row.employee?.position?.name || "—"}
                             </span>
                           </div>
-                        ) : row.expectedShiftName ? (
-                          <span>{row.expectedShiftName}</span>
-                        ) : (
-                          "—"
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge
+                              variant={
+                                row.status === "PRESENT"
+                                  ? "success"
+                                  : row.status === "LATE"
+                                    ? "warning"
+                                    : row.status === "LEAVE"
+                                      ? "secondary"
+                                      : row.status === "INCOMPLETE"
+                                        ? "info"
+                                        : row.status === "ABSENT"
+                                          ? "destructive"
+                                          : "outline"
+                              }
+                              className="w-fit uppercase tracking-wide"
+                            >
+                              {row.status}
+                            </Badge>
+                            {row.forgotToTimeOut ? (
+                              <Badge
+                                className="w-fit uppercase tracking-wide"
+                                variant="destructive"
+                              >
+                                Forgot time out
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatTime(row.actualInAt)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {row.punchesCount != null
+                            ? `${row.punchesCount} punch${row.punchesCount === 1 ? "" : "es"}`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {row.breakMinutes != null
+                            ? `${formatMinutesToTime(row.breakMinutes, false)}${row.breakCount ? ` (${row.breakCount}x)` : ""}`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatTime(row.actualOutAt)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {row.lateMinutes != null
+                            ? formatMinutesToTime(row.lateMinutes, false)
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {!row.actualOutAt || row.scheduledEndMinutes == null
+                            ? "—"
+                            : row.overtimeMinutesRaw != null &&
+                                row.overtimeMinutesRaw > 0
+                              ? `${formatMinutesToTime(row.overtimeMinutesRaw, false)} OT`
+                              : row.undertimeMinutes != null &&
+                                  row.undertimeMinutes > 0
+                                ? `${formatMinutesToTime(row.undertimeMinutes, false)} UT`
+                                : "On time"}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <div className="flex flex-col leading-tight">
+                            <span>
+                              {row.netWorkedHoursAndMinutes ??
+                                row.workedHoursAndMinutes ??
+                                formatMinutesToTime(
+                                  row.netWorkedMinutes ?? row.workedMinutes,
+                                  false,
+                                )}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Payable:{" "}
+                              {row.payableWorkedHoursAndMinutes ??
+                                formatMinutesToTime(
+                                  row.payableWorkedMinutes,
+                                  false,
+                                )}
+                              {(row.lateGraceCreditMinutes ?? 0) > 0
+                                ? ` (incl. ${formatMinutesToTime(row.lateGraceCreditMinutes, false)} grace)`
+                                : ""}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {row.scheduledStartMinutes != null &&
+                          row.scheduledEndMinutes != null ? (
+                            <div className="flex flex-col">
+                              <span>
+                                {formatMinutesToClock12(
+                                  row.scheduledStartMinutes,
+                                )}{" "}
+                                -{" "}
+                                {formatMinutesToClock12(row.scheduledEndMinutes)}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {row.expectedShiftName || "Expected shift"}
+                              </span>
+                            </div>
+                          ) : row.expectedShiftName ? (
+                            <span>{row.expectedShiftName}</span>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-border/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {filtered.length === 0
+                    ? "Showing 0 of 0 attendance rows"
+                    : `Showing ${attendanceShowingFrom}-${attendanceShowingTo} of ${filtered.length} attendance rows`}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                  <label className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <span className="whitespace-nowrap">Rows per page</span>
+                    <span className="relative">
+                      <select
+                        value={attendancePageSize}
+                        onChange={(e) => {
+                          setAttendancePagination((prev) => ({
+                            ...prev,
+                            datasetKey: attendanceDatasetKey,
+                            page: 1,
+                            pageSize: Number(e.target.value),
+                          }));
+                        }}
+                        className="h-10 min-w-[72px] appearance-none rounded-md border border-border bg-background px-3 pr-9 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      >
+                        {PAGE_SIZE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    </span>
+                  </label>
+
+                  {attendanceTotalPages > 1 && (
+                    <Pagination className="m-0 w-auto justify-end">
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              if (safeAttendancePage > 1) {
+                                setAttendancePagination((prev) => ({
+                                  ...prev,
+                                  datasetKey: attendanceDatasetKey,
+                                  page: safeAttendancePage - 1,
+                                }));
+                              }
+                            }}
+                            className={
+                              safeAttendancePage === 1
+                                ? "pointer-events-none opacity-50"
+                                : "cursor-pointer"
+                            }
+                          />
+                        </PaginationItem>
+
+                        {visibleAttendancePageNumbers[0] > 1 && (
+                          <>
+                            <PaginationItem>
+                              <PaginationLink
+                                href="#"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  setAttendancePagination((prev) => ({
+                                    ...prev,
+                                    datasetKey: attendanceDatasetKey,
+                                    page: 1,
+                                  }));
+                                }}
+                                className="cursor-pointer"
+                              >
+                                1
+                              </PaginationLink>
+                            </PaginationItem>
+                            {visibleAttendancePageNumbers[0] > 2 && (
+                              <PaginationItem>
+                                <PaginationEllipsis />
+                              </PaginationItem>
+                            )}
+                          </>
                         )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+
+                        {visibleAttendancePageNumbers.map((pageNumber) => (
+                          <PaginationItem key={pageNumber}>
+                            <PaginationLink
+                              href="#"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                setAttendancePagination((prev) => ({
+                                  ...prev,
+                                  datasetKey: attendanceDatasetKey,
+                                  page: pageNumber,
+                                }));
+                              }}
+                              isActive={safeAttendancePage === pageNumber}
+                              className="cursor-pointer"
+                            >
+                              {pageNumber}
+                            </PaginationLink>
+                          </PaginationItem>
+                        ))}
+
+                        {visibleAttendancePageNumbers[
+                          visibleAttendancePageNumbers.length - 1
+                        ] < attendanceTotalPages && (
+                          <>
+                            {visibleAttendancePageNumbers[
+                              visibleAttendancePageNumbers.length - 1
+                            ] <
+                              attendanceTotalPages - 1 && (
+                              <PaginationItem>
+                                <PaginationEllipsis />
+                              </PaginationItem>
+                            )}
+                            <PaginationItem>
+                              <PaginationLink
+                                href="#"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  setAttendancePagination((prev) => ({
+                                    ...prev,
+                                    datasetKey: attendanceDatasetKey,
+                                    page: attendanceTotalPages,
+                                  }));
+                                }}
+                                className="cursor-pointer"
+                              >
+                                {attendanceTotalPages}
+                              </PaginationLink>
+                            </PaginationItem>
+                          </>
+                        )}
+
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              if (safeAttendancePage < attendanceTotalPages) {
+                                setAttendancePagination((prev) => ({
+                                  ...prev,
+                                  datasetKey: attendanceDatasetKey,
+                                  page: safeAttendancePage + 1,
+                                }));
+                              }
+                            }}
+                            className={
+                              safeAttendancePage === attendanceTotalPages
+                                ? "pointer-events-none opacity-50"
+                                : "cursor-pointer"
+                            }
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </CardContent>

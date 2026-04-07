@@ -59,6 +59,7 @@ export type DeductionEmployeeOption = {
   employeeCode: string;
   firstName: string;
   lastName: string;
+  departmentName?: string | null;
 };
 
 export type DeductionAssignmentRow = {
@@ -66,6 +67,7 @@ export type DeductionAssignmentRow = {
   employeeId: string;
   employeeName: string;
   employeeCode: string;
+  departmentName?: string | null;
   avatarUrl?: string | null;
   deductionTypeId: string;
   deductionCode: string;

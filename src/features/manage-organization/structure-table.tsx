@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { RefreshCcw } from "lucide-react";
+import { ChevronDown, RefreshCcw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -491,27 +491,30 @@ export function StructureTable({
                 : `Showing ${showingFrom}-${showingTo} of ${filtered.length} employees`}
             </p>
 
-            <div className="flex flex-col gap-3 sm:items-end">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Rows per page</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  {PAGE_SIZE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+              <label className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span className="whitespace-nowrap">Rows per page</span>
+                <span className="relative">
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="h-10 min-w-[72px] appearance-none rounded-md border border-border bg-background px-3 pr-9 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </span>
               </label>
 
               {totalPages > 1 && (
-                <Pagination className="m-0 justify-end">
+                <Pagination className="m-0 w-auto justify-end">
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious
