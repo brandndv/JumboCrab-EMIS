@@ -40,6 +40,12 @@ export type PayrollDeductionTypeValue =
   | "PENALTY"
   | "OTHER";
 
+export type ContributionTypeValue =
+  | "SSS"
+  | "PHILHEALTH"
+  | "PAGIBIG"
+  | "WITHHOLDING";
+
 export type PayrollLineSourceValue =
   | "SYSTEM"
   | "MANUAL"
@@ -99,9 +105,17 @@ export type PayrollDeductionLine = {
   deductionCodeSnapshot: string | null;
   deductionNameSnapshot: string | null;
   assignmentId: string | null;
+  contributionType: ContributionTypeValue | null;
+  bracketIdSnapshot: string | null;
+  bracketReferenceSnapshot: string | null;
   payrollFrequency: PayrollFrequencyValue | null;
   periodStartSnapshot: string | null;
   periodEndSnapshot: string | null;
+  compensationBasisSnapshot: number | null;
+  employeeShareSnapshot: number | null;
+  employerShareSnapshot: number | null;
+  baseTaxSnapshot: number | null;
+  marginalRateSnapshot: number | null;
   quantitySnapshot: number | null;
   unitLabelSnapshot: string | null;
   metadata: Record<string, unknown> | null;
@@ -131,7 +145,12 @@ export type PayrollEmployeeDetail = {
   minutesNetWorked: number;
   minutesOvertime: number;
   minutesUndertime: number;
+  positionIdSnapshot: string | null;
+  positionNameSnapshot: string | null;
   dailyRateSnapshot: number | null;
+  hourlyRateSnapshot: number | null;
+  monthlyRateSnapshot: number | null;
+  currencyCodeSnapshot: string | null;
   ratePerMinuteSnapshot: number | null;
   grossPay: number;
   totalEarnings: number;
@@ -191,7 +210,12 @@ export type PayrollPayslipDetail = PayrollPayslipSummary & {
   minutesNetWorked: number;
   minutesOvertime: number;
   minutesUndertime: number;
+  positionIdSnapshot: string | null;
+  positionNameSnapshot: string | null;
   dailyRateSnapshot: number | null;
+  hourlyRateSnapshot: number | null;
+  monthlyRateSnapshot: number | null;
+  currencyCodeSnapshot: string | null;
   ratePerMinuteSnapshot: number | null;
   notes: string | null;
   earnings: PayrollEarningLine[];

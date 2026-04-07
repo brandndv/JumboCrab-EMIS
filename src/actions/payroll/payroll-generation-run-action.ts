@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  ContributionType,
   DeductionFrequency,
   EmployeeDeductionAssignmentStatus,
   EmployeeDeductionWorkflowStatus,
@@ -11,9 +12,15 @@ import {
 } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { loadActiveContributionBrackets } from "@/lib/payroll/contribution-brackets";
+import {
+  listMonthDateKeys,
+  resolveEmployeeCompensationSnapshots,
+} from "@/lib/payroll/compensation";
 import { shiftDateByDays, toDateKeyInTz } from "@/lib/payroll/helpers";
 import { getPayrollRunDetails } from "./payroll-runs-action";
 import {
+  buildMonthlyGovernmentDeductionKey,
   buildEmployeePayrollDraft,
   filterActiveAssignmentsForPeriod,
   groupActiveAssignmentsByEmployee,
@@ -22,8 +29,9 @@ import {
 import {
   canGeneratePayroll,
   formatEmployeeName,
-  isStandardFirstHalfBimonthlyRun,
+  listMonthStartKeysInRange,
   normalizeEmployeeIds,
+  payrollTypeToFrequency,
   resolvePayrollPeriod,
   toPeriodDateKey,
   revalidatePayrollPages,
@@ -58,12 +66,8 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
       return { success: false, error: "No valid employee IDs were provided." };
     }
 
-    const applyGovernmentContributions = isStandardFirstHalfBimonthlyRun({
-      payrollType: input.payrollType,
-      payrollPeriodStart: period.startKey,
-      payrollPeriodEnd: period.endKey,
-      isScopedRun: scopedEmployeeIds.length > 0,
-    });
+    const applyGovernmentContributions =
+      payrollTypeToFrequency(input.payrollType) !== null;
 
     const created = await db.$transaction(
       async (tx) => {
@@ -95,7 +99,7 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
               : {}),
           },
           include: {
-            contribution: true,
+            governmentId: true,
           },
           orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
         });
@@ -220,6 +224,39 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
         const assignmentByEmployee =
           groupActiveAssignmentsByEmployee(activeAssignments);
 
+        const deductionMonthStartKeys = applyGovernmentContributions
+          ? listMonthStartKeysInRange(period.startKey, period.endKey)
+          : [];
+
+        const compensationDatesByEmployee = new Map<string, Date[]>();
+        employees.forEach((employee) => {
+          const dates: Date[] = [period.endAt];
+          const employeeRows = attendanceByEmployee.get(employee.employeeId) ?? [];
+          employeeRows.forEach((row) => {
+            dates.push(row.workDate);
+          });
+          deductionMonthStartKeys.forEach((monthStartKey) => {
+            listMonthDateKeys(monthStartKey).forEach((dateKey) => {
+              const date = new Date(`${dateKey}T12:00:00.000Z`);
+              if (!Number.isNaN(date.getTime())) {
+                dates.push(date);
+              }
+            });
+          });
+          compensationDatesByEmployee.set(employee.employeeId, dates);
+        });
+
+        const [compensationSnapshots, contributionBrackets] =
+          await Promise.all([
+            resolveEmployeeCompensationSnapshots({
+              employeeDates: compensationDatesByEmployee,
+              client: tx,
+            }),
+            applyGovernmentContributions
+              ? loadActiveContributionBrackets(period.endAt, tx)
+              : Promise.resolve([]),
+          ]);
+
         const oneTimeAssignmentIds = activeAssignments
           .filter(
             (assignment) =>
@@ -243,6 +280,62 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
             .filter((value): value is string => Boolean(value)),
         );
 
+        const existingMonthlyGovernmentDeductions = new Set<string>();
+        if (applyGovernmentContributions && deductionMonthStartKeys.length > 0) {
+          const existingGovernmentDeductions = await tx.payrollDeduction.findMany({
+            where: {
+              isVoided: false,
+              contributionType: {
+                in: [
+                  ContributionType.SSS,
+                  ContributionType.PHILHEALTH,
+                  ContributionType.PAGIBIG,
+                ],
+              },
+              payrollEmployee: {
+                employeeId: { in: employeeIds },
+                payroll: {
+                  status: { not: PayrollStatus.VOIDED },
+                },
+              },
+            },
+            select: {
+              contributionType: true,
+              periodStartSnapshot: true,
+              periodEndSnapshot: true,
+              payrollEmployee: {
+                select: {
+                  employeeId: true,
+                },
+              },
+            },
+          });
+
+          existingGovernmentDeductions.forEach((row) => {
+            if (
+              !row.contributionType ||
+              !row.periodStartSnapshot ||
+              !row.periodEndSnapshot
+            ) {
+              return;
+            }
+            const contributionType = row.contributionType;
+            const rowStartKey = toDateKeyInTz(row.periodStartSnapshot);
+            const rowEndKey = toDateKeyInTz(row.periodEndSnapshot);
+            listMonthStartKeysInRange(rowStartKey, rowEndKey).forEach(
+              (monthStartKey) => {
+                existingMonthlyGovernmentDeductions.add(
+                  buildMonthlyGovernmentDeductionKey(
+                    row.payrollEmployee.employeeId,
+                    contributionType,
+                    monthStartKey,
+                  ),
+                );
+              },
+            );
+          });
+        }
+
         for (const employee of employees) {
           const employeeRows = attendanceByEmployee.get(employee.employeeId) ?? [];
           const employeeAssignments =
@@ -257,10 +350,13 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
             payrollPeriodEnd: period.endAt,
             payrollPeriodStartKey: period.startKey,
             payrollPeriodEndKey: period.endKey,
-            isScopedRun: scopedEmployeeIds.length > 0,
             applyGovernmentContributions,
             employeeAssignments,
             oneTimeAlreadyApplied,
+            compensationSnapshots,
+            contributionBrackets,
+            deductionMonthStartKeys,
+            existingMonthlyGovernmentDeductions,
           });
 
           const payrollEmployee = await tx.payrollEmployee.create({
@@ -276,7 +372,12 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
               minutesNetWorked: payrollDraft.minutesNetWorked,
               minutesOvertime: payrollDraft.minutesOvertime,
               minutesUndertime: payrollDraft.minutesUndertime,
+              positionIdSnapshot: payrollDraft.positionIdSnapshot,
+              positionNameSnapshot: payrollDraft.positionNameSnapshot,
               dailyRateSnapshot: payrollDraft.dailyRateSnapshot,
+              hourlyRateSnapshot: payrollDraft.hourlyRateSnapshot,
+              monthlyRateSnapshot: payrollDraft.monthlyRateSnapshot,
+              currencyCodeSnapshot: payrollDraft.currencyCodeSnapshot,
               ratePerMinuteSnapshot: payrollDraft.ratePerMinuteSnapshot,
               grossPay: payrollDraft.grossPay,
               totalEarnings: payrollDraft.totalEarnings,
@@ -329,12 +430,21 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
                 assignmentId: line.assignmentId ?? null,
                 deductionCodeSnapshot: line.deductionCodeSnapshot ?? null,
                 deductionNameSnapshot: line.deductionNameSnapshot ?? null,
+                contributionType: line.contributionType ?? null,
+                bracketIdSnapshot: line.bracketIdSnapshot ?? null,
+                bracketReferenceSnapshot: line.bracketReferenceSnapshot ?? null,
                 payrollFrequency: line.payrollFrequency ?? null,
                 periodStartSnapshot: line.periodStartSnapshot ?? null,
                 periodEndSnapshot: line.periodEndSnapshot ?? null,
+                compensationBasisSnapshot:
+                  line.compensationBasisSnapshot ?? null,
+                employeeShareSnapshot: line.employeeShareSnapshot ?? null,
+                employerShareSnapshot: line.employerShareSnapshot ?? null,
+                baseTaxSnapshot: line.baseTaxSnapshot ?? null,
+                marginalRateSnapshot: line.marginalRateSnapshot ?? null,
                 quantitySnapshot: line.quantitySnapshot ?? null,
                 unitLabelSnapshot: line.unitLabelSnapshot ?? null,
-                metadata: line.metadata ?? null,
+                metadata: line.metadata ?? undefined,
                 amount: line.amount,
                 minutes: line.minutes ?? null,
                 rateSnapshot: line.rateSnapshot ?? null,

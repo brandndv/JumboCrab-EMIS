@@ -7,10 +7,11 @@ import {
   type GovernmentIdRecord,
 } from "@/actions/contributions/government-ids-action";
 import {
-  getEmployeeRateHistory,
+  getEmployeeCompensationHistory,
+  getEmployeePositionHistory,
   type EmployeeActionRecord,
-  type EmployeeRateHistoryItem,
-  updateEmployee,
+  type EmployeeCompensationHistoryItem,
+  type EmployeePositionHistoryItem,
 } from "@/actions/employees/employees-action";
 import {
   getEmployeeViolationStrikeProgress,
@@ -19,7 +20,6 @@ import {
   type ViolationRow,
 } from "@/actions/violations/violations-action";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,22 +55,14 @@ import {
 
 type EmployeeProfileData = EmployeeActionRecord;
 
-type TabKey = "profile" | "dailyRate" | "violations" | "govIds";
+type TabKey = "profile" | "compensation" | "violations" | "govIds";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "profile", label: "Profile" },
-  { key: "dailyRate", label: "Daily Rate" },
+  { key: "compensation", label: "Compensation" },
   { key: "violations", label: "Employee Violations" },
   { key: "govIds", label: "Government IDs" },
 ];
-
-const getTodayDateInput = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
 
 const govIdFields: {
   key: keyof Pick<
@@ -107,51 +99,33 @@ export function EmployeeProfileTabs({
 }: {
   employee: EmployeeProfileData;
 }) {
-  const router = useRouter();
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
-  const [currentDailyRate, setCurrentDailyRate] = useState<number | null>(
-    employee.dailyRate ?? null,
-  );
-  const [dailyRateInput, setDailyRateInput] = useState<string>(
-    employee.dailyRate == null ? "" : String(employee.dailyRate),
-  );
-  const [dailyRateEffectiveFrom, setDailyRateEffectiveFrom] = useState<string>(
-    getTodayDateInput(),
-  );
-  const [dailyRateReason, setDailyRateReason] = useState<string>("");
-  const [isDailyRateEditorOpen, setIsDailyRateEditorOpen] =
-    useState<boolean>(false);
-  const [savingDailyRate, setSavingDailyRate] = useState<boolean>(false);
-  const [dailyRateSaveError, setDailyRateSaveError] = useState<string | null>(
-    null,
-  );
-  const [dailyRateSaveSuccess, setDailyRateSaveSuccess] = useState<string | null>(
-    null,
-  );
   const [governmentId, setGovernmentId] = useState<GovernmentIdRecord | null>(
     null
   );
   const [loadingGovId, setLoadingGovId] = useState<boolean>(true);
   const [govIdError, setGovIdError] = useState<string | null>(null);
-  const [contribution, setContribution] = useState<{
-    sssEe?: number;
-    sssEr?: number;
-    philHealthEe?: number;
-    philHealthEr?: number;
-    pagIbigEe?: number;
-    pagIbigEr?: number;
-    withholdingEe?: number;
-    withholdingEr?: number;
-  } | null>(null);
+  const [contributionPreview, setContributionPreview] = useState<Awaited<
+    ReturnType<typeof getEmployeeContribution>
+  >["data"] | null>(null);
   const [loadingContribution, setLoadingContribution] = useState<boolean>(true);
   const [contributionError, setContributionError] = useState<string | null>(null);
-  const [rateHistory, setRateHistory] = useState<EmployeeRateHistoryItem[]>([]);
-  const [loadingRateHistory, setLoadingRateHistory] = useState<boolean>(true);
-  const [rateHistoryError, setRateHistoryError] = useState<string | null>(null);
-  const [rateHistoryWarning, setRateHistoryWarning] = useState<string | null>(
+  const [positionHistory, setPositionHistory] = useState<
+    EmployeePositionHistoryItem[]
+  >([]);
+  const [loadingPositionHistory, setLoadingPositionHistory] =
+    useState<boolean>(true);
+  const [positionHistoryError, setPositionHistoryError] = useState<string | null>(
     null,
   );
+  const [compensationHistory, setCompensationHistory] = useState<
+    EmployeeCompensationHistoryItem[]
+  >([]);
+  const [loadingCompensationHistory, setLoadingCompensationHistory] =
+    useState<boolean>(true);
+  const [compensationHistoryError, setCompensationHistoryError] =
+    useState<string | null>(null);
   const [employeeViolations, setEmployeeViolations] = useState<ViolationRow[]>(
     [],
   );
@@ -211,50 +185,62 @@ export function EmployeeProfileTabs({
   }, [employee.employeeId]);
 
   useEffect(() => {
-    setCurrentDailyRate(employee.dailyRate ?? null);
-    setDailyRateInput(employee.dailyRate == null ? "" : String(employee.dailyRate));
-    setDailyRateEffectiveFrom(getTodayDateInput());
-    setDailyRateReason("");
-    setIsDailyRateEditorOpen(false);
-  }, [employee.employeeId, employee.dailyRate]);
-
-  useEffect(() => {
-    const fetchRateHistory = async () => {
+    const fetchPositionHistory = async () => {
       try {
-        setLoadingRateHistory(true);
-        setRateHistoryError(null);
-        setRateHistoryWarning(null);
-        const result = await getEmployeeRateHistory(employee.employeeId);
+        setLoadingPositionHistory(true);
+        setPositionHistoryError(null);
+        const result = await getEmployeePositionHistory(employee.employeeId);
         if (!result.success) {
-          throw new Error(result.error || "Failed to load rate history");
+          throw new Error(result.error || "Failed to load position history");
         }
-        setRateHistory(result.data ?? []);
-        setRateHistoryWarning(result.warning ?? null);
+        setPositionHistory(result.data ?? []);
       } catch (error) {
-        console.error("Error loading rate history:", error);
-        setRateHistoryError("Failed to load rate history");
+        console.error("Error loading position history:", error);
+        setPositionHistoryError("Failed to load position history");
       } finally {
-        setLoadingRateHistory(false);
+        setLoadingPositionHistory(false);
       }
     };
 
-    fetchRateHistory();
+    fetchPositionHistory();
   }, [employee.employeeId]);
 
   useEffect(() => {
-    // Load contribution so we can show EE/ER alongside IDs
+    const fetchCompensationHistory = async () => {
+      try {
+        setLoadingCompensationHistory(true);
+        setCompensationHistoryError(null);
+        const result = await getEmployeeCompensationHistory(employee.employeeId);
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load compensation history");
+        }
+        setCompensationHistory(result.data ?? []);
+      } catch (error) {
+        console.error("Error loading compensation history:", error);
+        setCompensationHistoryError("Failed to load compensation history");
+      } finally {
+        setLoadingCompensationHistory(false);
+      }
+    };
+
+    fetchCompensationHistory();
+  }, [employee.employeeId]);
+
+  useEffect(() => {
     const fetchContribution = async () => {
       try {
         setLoadingContribution(true);
         setContributionError(null);
-        const result = await getEmployeeContribution(employee.employeeId);
+        const result = await getEmployeeContribution({
+          employeeId: employee.employeeId,
+        });
         if (!result.success) {
-          throw new Error(result.error || "Failed to load contribution");
+          throw new Error(result.error || "Failed to load contribution preview");
         }
-        setContribution(result.data ?? null);
+        setContributionPreview(result.data ?? null);
       } catch (error) {
-        console.error("Error loading contribution:", error);
-        setContributionError("Failed to load contribution");
+        console.error("Error loading contribution preview:", error);
+        setContributionError("Failed to load contribution preview");
       } finally {
         setLoadingContribution(false);
       }
@@ -342,85 +328,6 @@ export function EmployeeProfileTabs({
     !!governmentId?.philHealthNumber ||
     !!governmentId?.pagIbigNumber;
 
-  const reloadRateHistory = async () => {
-    try {
-      setLoadingRateHistory(true);
-      setRateHistoryError(null);
-      setRateHistoryWarning(null);
-      const result = await getEmployeeRateHistory(employee.employeeId);
-      if (!result.success) {
-        throw new Error(result.error || "Failed to load rate history");
-      }
-      setRateHistory(result.data ?? []);
-      setRateHistoryWarning(result.warning ?? null);
-    } catch (error) {
-      console.error("Error loading rate history:", error);
-      setRateHistoryError("Failed to load rate history");
-    } finally {
-      setLoadingRateHistory(false);
-    }
-  };
-
-  const handleSaveDailyRate = async () => {
-    const trimmed = dailyRateInput.trim();
-    const parsed = trimmed === "" ? null : Number.parseFloat(trimmed);
-    const effectiveFrom = dailyRateEffectiveFrom.trim();
-    const normalizedReason = dailyRateReason.trim();
-
-    if (!effectiveFrom) {
-      setDailyRateSaveError("Effective date is required.");
-      setDailyRateSaveSuccess(null);
-      return;
-    }
-
-    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
-      setDailyRateSaveError("Daily rate must be a valid non-negative number.");
-      setDailyRateSaveSuccess(null);
-      return;
-    }
-
-    try {
-      setSavingDailyRate(true);
-      setDailyRateSaveError(null);
-      setDailyRateSaveSuccess(null);
-      const result = await updateEmployee({
-        employeeId: employee.employeeId,
-        dailyRate: parsed,
-        rateEffectiveFrom: effectiveFrom,
-        rateReason: normalizedReason === "" ? null : normalizedReason,
-      } as Parameters<typeof updateEmployee>[0]);
-      if (!result.success) {
-        throw new Error(result.error || "Failed to update daily rate");
-      }
-
-      const savedRate = result.data?.dailyRate ?? null;
-      setCurrentDailyRate(savedRate);
-      setDailyRateInput(savedRate == null ? "" : String(savedRate));
-      setDailyRateSaveSuccess(
-        `Daily rate updated to ${formatRate(savedRate)} (effective ${new Date(
-          `${effectiveFrom}T00:00:00`,
-        ).toLocaleDateString()}).`,
-      );
-      toast.success("Daily rate updated successfully.", {
-        description: `New rate: ${formatRate(savedRate)}.`,
-      });
-      setDailyRateReason("");
-      await reloadRateHistory();
-      router.refresh();
-    } catch (error) {
-      console.error("Failed to update daily rate:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to update daily rate";
-      setDailyRateSaveError(message);
-      toast.error("Failed to update daily rate.", {
-        description: message,
-      });
-      setDailyRateSaveSuccess(null);
-    } finally {
-      setSavingDailyRate(false);
-    }
-  };
-
   const formatRate = (value: number | null | undefined) => {
     if (value == null) return "—";
     return new Intl.NumberFormat("en-PH", {
@@ -461,161 +368,96 @@ export function EmployeeProfileTabs({
           <EmployeeForm
             employeeId={employee.employeeId}
             mode="view"
-            initialData={{
-              ...employee,
-              dailyRate: currentDailyRate,
-            }}
+            initialData={employee}
           />
         )}
 
-        {activeTab === "dailyRate" && (
+        {activeTab === "compensation" && (
           <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Current Daily Rate</CardTitle>
-                <CardDescription>
-                  This is the active rate used as default for new computations.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-2xl font-semibold tracking-tight">
-                  {formatRate(currentDailyRate)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Employee: {employee.employeeCode}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base">Edit Daily Rate</CardTitle>
-                    <CardDescription>
-                      Update the employee&apos;s base daily pay and save the reason.
-                    </CardDescription>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={isDailyRateEditorOpen ? "secondary" : "outline"}
-                    onClick={() =>
-                      setIsDailyRateEditorOpen((prevOpen) => !prevOpen)
-                    }
-                  >
-                    {isDailyRateEditorOpen ? "Hide Editor" : "Edit Rate"}
-                  </Button>
-                </div>
-              </CardHeader>
-              {isDailyRateEditorOpen && (
-                <CardContent className="space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="dailyRateTabInput">Daily Rate (PHP)</Label>
-                      <Input
-                        id="dailyRateTabInput"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputMode="decimal"
-                        value={dailyRateInput}
-                        onChange={(e) => setDailyRateInput(e.target.value)}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="dailyRateEffectiveFrom">
-                        Effective From
-                      </Label>
-                      <Input
-                        id="dailyRateEffectiveFrom"
-                        type="date"
-                        value={dailyRateEffectiveFrom}
-                        onChange={(e) =>
-                          setDailyRateEffectiveFrom(e.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="dailyRateReason">Reason (optional)</Label>
-                    <textarea
-                      id="dailyRateReason"
-                      value={dailyRateReason}
-                      onChange={(e) => setDailyRateReason(e.target.value)}
-                      placeholder="Ex: Promotion increase, correction, or policy adjustment"
-                      className="min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      onClick={handleSaveDailyRate}
-                      disabled={savingDailyRate}
-                      className="gap-2"
-                      type="button"
-                    >
-                      {savingDailyRate && (
-                        <Loader2 className="size-4 animate-spin" />
-                      )}
-                      Save Rate
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setIsDailyRateEditorOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                  {dailyRateSaveSuccess && (
-                    <p className="text-sm text-green-600">{dailyRateSaveSuccess}</p>
-                  )}
-                  {dailyRateSaveError && (
-                    <p className="text-sm text-destructive">{dailyRateSaveError}</p>
-                  )}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card className="border-dashed">
+                <CardHeader className="px-4 pt-4 pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Current Position
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-lg font-semibold">
+                    {employee.position || "Not assigned"}
+                  </p>
                 </CardContent>
-              )}
-            </Card>
+              </Card>
+              <Card className="border-dashed">
+                <CardHeader className="px-4 pt-4 pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Daily Rate
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-lg font-semibold">
+                    {formatRate(employee.dailyRate)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-dashed">
+                <CardHeader className="px-4 pt-4 pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Monthly Rate
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-lg font-semibold">
+                    {formatRate(employee.monthlyRate)}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Rate History</CardTitle>
+                <CardTitle className="text-base">Position History</CardTitle>
                 <CardDescription>
-                  Historical changes are append-only and ordered by effective date.
+                  Effective-dated position assignments for this employee.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {loadingRateHistory ? (
+                {loadingPositionHistory ? (
                   <InlineLoadingState
-                    label="Loading rate history"
+                    label="Loading position history"
                     lines={2}
                     className="border-border/60 bg-muted/10"
                   />
-                ) : rateHistoryError ? (
-                  <p className="text-sm text-destructive">{rateHistoryError}</p>
-                ) : rateHistory.length === 0 ? (
+                ) : positionHistoryError ? (
+                  <p className="text-sm text-destructive">
+                    {positionHistoryError}
+                  </p>
+                ) : positionHistory.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No rate history yet.
+                    No position history yet.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {rateHistory.map((entry) => (
+                    {positionHistory.map((entry) => (
                       <div
                         key={entry.id}
                         className="rounded-lg border bg-background/60 px-3 py-3"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="text-sm font-semibold">
-                            {formatRate(entry.dailyRate)}
+                            {entry.positionName || "Unassigned position"}
                           </p>
                           <Badge variant="outline">
                             {new Date(entry.effectiveFrom).toLocaleDateString()}
                           </Badge>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Effective:{" "}
-                          {new Date(entry.effectiveFrom).toLocaleString()}
+                          Department: {entry.departmentName || "Unassigned"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Effective to:{" "}
+                          {entry.effectiveTo
+                            ? new Date(entry.effectiveTo).toLocaleDateString()
+                            : "Current"}
                         </p>
                         {entry.reason && (
                           <p className="text-xs text-muted-foreground">
@@ -626,8 +468,64 @@ export function EmployeeProfileTabs({
                     ))}
                   </div>
                 )}
-                {rateHistoryWarning && (
-                  <p className="text-xs text-amber-600">{rateHistoryWarning}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Compensation History</CardTitle>
+                <CardDescription>
+                  Position-owned rate history linked to this employee&apos;s assignments.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {loadingCompensationHistory ? (
+                  <InlineLoadingState
+                    label="Loading compensation history"
+                    lines={2}
+                    className="border-border/60 bg-muted/10"
+                  />
+                ) : compensationHistoryError ? (
+                  <p className="text-sm text-destructive">
+                    {compensationHistoryError}
+                  </p>
+                ) : compensationHistory.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No compensation history yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {compensationHistory.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="rounded-lg border bg-background/60 px-3 py-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold">
+                            {entry.positionName}
+                          </p>
+                          <Badge variant="outline">
+                            {new Date(entry.effectiveFrom).toLocaleDateString()}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Daily {formatRate(entry.dailyRate)} • Monthly{" "}
+                          {formatRate(entry.monthlyRate)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Effective to:{" "}
+                          {entry.effectiveTo
+                            ? new Date(entry.effectiveTo).toLocaleDateString()
+                            : "Current"}
+                        </p>
+                        {entry.reason && (
+                          <p className="text-xs text-muted-foreground">
+                            Reason: {entry.reason}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -923,7 +821,9 @@ export function EmployeeProfileTabs({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">Contributions (EE/ER)</p>
+                <p className="text-sm font-semibold">
+                  Contribution Preview (EE/ER)
+                </p>
                 {loadingContribution ? <Badge variant="outline">Syncing</Badge> : null}
               </div>
               {contributionError && (
@@ -937,34 +837,48 @@ export function EmployeeProfileTabs({
                 />
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {[
-                    ["SSS", "sssEe", "sssEr"],
-                    ["PhilHealth", "philHealthEe", "philHealthEr"],
-                    ["Pag-IBIG", "pagIbigEe", "pagIbigEr"],
-                    ["Tax", "withholdingEe", "withholdingEr"],
-                  ].map(([label, eeKey, erKey]) => (
+                  {contributionPreview
+                    ? [
+                        contributionPreview.sss,
+                        contributionPreview.philHealth,
+                        contributionPreview.pagIbig,
+                        contributionPreview.withholding,
+                      ].map((line) => (
                     <div
-                      key={label}
+                      key={line.contributionType}
                       className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs"
                     >
-                      <div className="text-xs text-muted-foreground">{label}</div>
+                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>
+                          {line.contributionType === "PHILHEALTH"
+                            ? "PhilHealth"
+                            : line.contributionType === "PAGIBIG"
+                              ? "Pag-IBIG"
+                              : line.contributionType === "WITHHOLDING"
+                                ? "Tax"
+                                : "SSS"}
+                        </span>
+                        <Badge variant="outline">{line.status}</Badge>
+                      </div>
                       <div className="text-sm font-semibold">
-                        EE:{" "}
-                        {contribution &&
-                        contribution[eeKey as keyof typeof contribution] != null
-                          ? contribution[eeKey as keyof typeof contribution]
-                          : "—"}
+                        EE: {formatRate(line.employeeShare)}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        ER:{" "}
-                        {contribution &&
-                        contribution[erKey as keyof typeof contribution] != null
-                          ? contribution[erKey as keyof typeof contribution]
-                          : "—"}{" "}
-                        (admin)
+                        ER: {formatRate(line.employerShare)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        ID: {line.governmentNumber || "Not set"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Bracket: {line.bracketReference || line.bracketId || "—"}
                       </div>
                     </div>
-                  ))}
+                      ))
+                    : (
+                        <p className="text-sm text-muted-foreground">
+                          No contribution preview available.
+                        </p>
+                      )}
                 </div>
               )}
             </div>

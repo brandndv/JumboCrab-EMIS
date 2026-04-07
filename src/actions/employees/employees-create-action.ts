@@ -11,13 +11,10 @@ import {
 } from "@/lib/validations/employees";
 import type { Prisma } from "@prisma/client";
 import {
-  DEFAULT_PAYROLL_FREQUENCY,
-  deriveRateSnapshots,
-  isMissingRateHistoryTableError,
+  employeeLookupInclude,
   normalizeEmployeeRelationIds,
   revalidateEmployeePages,
-  serializeEmployeeRecord,
-  toRateNumber,
+  serializeEmployeeWithLookups,
   validateEmployeeRelationIds,
 } from "./employees-shared";
 import type { EmployeeActionRecord } from "./types";
@@ -94,40 +91,14 @@ export async function createEmployee(employeeData: Employee): Promise<{
     } satisfies Prisma.EmployeeUncheckedCreateInput;
     console.log("Final validated create data:", employeeCreateData);
 
+    const actorUserId = session.userId ?? null;
+
     const newEmployee = await db.employee.create({
       data: employeeCreateData,
+      include: employeeLookupInclude,
     });
 
-    const initialRate = toRateNumber(employeeCreateData.dailyRate);
-    if (initialRate != null) {
-      const derivedRates = deriveRateSnapshots(initialRate);
-      try {
-        await db.employeeRateHistory.create({
-          data: {
-            employeeId: newEmployee.employeeId,
-            dailyRate: initialRate,
-            hourlyRate: derivedRates.hourlyRate,
-            monthlyRate: derivedRates.monthlyRate,
-            payrollFrequency: DEFAULT_PAYROLL_FREQUENCY,
-            effectiveFrom: employeeCreateData.startDate ?? new Date(),
-            reason: "Initial daily rate",
-            metadata: {
-              source: "employee_create",
-            },
-            createdByUserId: session.userId ?? null,
-          },
-        });
-      } catch (error) {
-        if (!isMissingRateHistoryTableError(error)) {
-          throw error;
-        }
-        console.warn(
-          "EmployeeRateHistory table is not available yet. Skipping initial rate history write.",
-        );
-      }
-    }
-
-    if (employeeCreateData.departmentId || employeeCreateData.positionId) {
+    if (employeeCreateData.positionId || employeeCreateData.departmentId) {
       await db.employeePositionHistory.create({
         data: {
           employeeId: newEmployee.employeeId,
@@ -138,13 +109,13 @@ export async function createEmployee(employeeData: Employee): Promise<{
           metadata: {
             source: "employee_create",
           },
-          createdByUserId: session.userId ?? null,
+          createdByUserId: actorUserId,
         },
       });
     }
 
     revalidateEmployeePages(newEmployee.employeeId);
-    return { success: true, data: serializeEmployeeRecord(newEmployee) };
+    return { success: true, data: serializeEmployeeWithLookups(newEmployee) };
   } catch (error) {
     console.error("Error in createEmployee:", error);
     return {

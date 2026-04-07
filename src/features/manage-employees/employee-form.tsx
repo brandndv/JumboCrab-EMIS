@@ -178,8 +178,6 @@ export default function EmployeeForm({
           const data = result.data;
           setFormData({
             ...data,
-            dailyRate:
-              data.dailyRate == null ? null : Number(data.dailyRate),
             img: data.img ?? null,
             isEnded: data.isEnded ?? false,
           });
@@ -315,28 +313,6 @@ export default function EmployeeForm({
     const { name, value } = e.target;
 
     if (name === "employeeCode") {
-      return;
-    }
-
-    if (name === "dailyRate") {
-      const normalizedValue =
-        value.trim() === "" ? null : Number.parseFloat(value);
-      if (
-        normalizedValue !== null &&
-        (!Number.isFinite(normalizedValue) || normalizedValue < 0)
-      ) {
-        setErrors((prev) => ({
-          ...prev,
-          dailyRate: "Daily rate must be a valid non-negative number",
-        }));
-        return;
-      }
-
-      setFormData((prev) => ({
-        ...prev,
-        dailyRate: normalizedValue,
-      }));
-      validateField(name, normalizedValue);
       return;
     }
 

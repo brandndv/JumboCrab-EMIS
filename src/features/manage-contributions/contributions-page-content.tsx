@@ -30,7 +30,8 @@ export default function ContributionsPageContent() {
     statusFilter,
     setStatusFilter,
     departments,
-    refreshContributions,
+    previewFrequency,
+    setPreviewFrequency,
   } = useContributions();
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -92,13 +93,13 @@ export default function ContributionsPageContent() {
         <div>
           <h1 className="text-2xl font-bold">Contributions</h1>
           <p className="text-muted-foreground text-sm">
-            Manage contribution amounts, payroll cadence, and auto-apply schedules
+            Computed statutory previews from position rates and official government brackets
           </p>
         </div>
       </div>
 
       <div className="rounded-2xl border border-border/70 bg-card/70 shadow-sm p-4 sm:p-6 space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:items-center">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 sm:items-center">
           <Input
             placeholder="Search employees..."
             value={searchTerm}
@@ -126,17 +127,33 @@ export default function ContributionsPageContent() {
           <select
             value={statusFilter}
             onChange={(e) => {
-              setStatusFilter(e.target.value as "all" | "set" | "not-set");
+              setStatusFilter(
+                e.target.value as "all" | "ready" | "needs-attention",
+              );
               setCurrentPage(1);
             }}
             className="h-10 rounded-md border bg-background px-3 text-sm"
           >
-            <option value="all">All (Set/Not set)</option>
-            <option value="set">Set only</option>
-            <option value="not-set">Not set only</option>
+            <option value="all">All statuses</option>
+            <option value="ready">Ready only</option>
+            <option value="needs-attention">Needs attention</option>
+          </select>
+          <select
+            value={previewFrequency}
+            onChange={(e) => {
+              setPreviewFrequency(
+                e.target.value as "WEEKLY" | "BIMONTHLY" | "MONTHLY",
+              );
+              setCurrentPage(1);
+            }}
+            className="h-10 rounded-md border bg-background px-3 text-sm"
+          >
+            <option value="BIMONTHLY">Semi-monthly tax preview</option>
+            <option value="WEEKLY">Weekly tax preview</option>
+            <option value="MONTHLY">Monthly tax preview</option>
           </select>
           <div className="text-sm text-muted-foreground">
-            Inactive/ended employees are hidden automatically.
+            SSS, PhilHealth, and Pag-IBIG use monthly position rates. Withholding preview follows the selected payroll cadence.
           </div>
         </div>
 
@@ -149,7 +166,6 @@ export default function ContributionsPageContent() {
         <ContributionsTable
           rows={paginatedContributions}
           loading={loading}
-          onRefresh={refreshContributions}
         />
 
         {sortedContributions.length > 0 && (

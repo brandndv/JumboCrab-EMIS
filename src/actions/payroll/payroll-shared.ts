@@ -1,6 +1,5 @@
 import { revalidatePath } from "next/cache";
 import {
-  ContributionSchedule,
   PayrollFrequency,
   PayrollDeductionType,
   PayrollEarningType,
@@ -81,7 +80,7 @@ export const payrollTypeToFrequency = (
 const monthStartKey = (year: number, month: number) =>
   `${year}-${String(month).padStart(2, "0")}-01`;
 
-const listMonthStartKeysInRange = (startKey: string, endKey: string) => {
+export const listMonthStartKeysInRange = (startKey: string, endKey: string) => {
   const start = parseDateKeyParts(startKey);
   const end = parseDateKeyParts(endKey);
   if (!start || !end) return [];
@@ -103,67 +102,6 @@ const listMonthStartKeysInRange = (startKey: string, endKey: string) => {
   }
 
   return keys;
-};
-
-export const isContributionScheduleApplicable = (input: {
-  payrollType: PayrollType;
-  payrollPeriodStart: string;
-  payrollPeriodEnd: string;
-  isScopedRun: boolean;
-  runFrequency: PayrollFrequency | null;
-  contributionFrequency: PayrollFrequency;
-  schedule: ContributionSchedule;
-}) => {
-  if (!input.runFrequency) return false;
-  if (input.runFrequency !== input.contributionFrequency) return false;
-
-  if (input.schedule === ContributionSchedule.PER_PAYROLL) return true;
-  if (input.schedule === ContributionSchedule.AD_HOC) return false;
-  if (input.schedule === ContributionSchedule.WEEKLY) {
-    return input.runFrequency === PayrollFrequency.WEEKLY;
-  }
-
-  const firstHalfBimonthly = isStandardFirstHalfBimonthlyRun({
-    payrollType: input.payrollType,
-    payrollPeriodStart: input.payrollPeriodStart,
-    payrollPeriodEnd: input.payrollPeriodEnd,
-    isScopedRun: input.isScopedRun,
-  });
-
-  const monthStarts = listMonthStartKeysInRange(
-    input.payrollPeriodStart,
-    input.payrollPeriodEnd,
-  );
-  const hasMonthStart = monthStarts.length > 0;
-  const hasQuarterStart = monthStarts.some((key) => {
-    const month = Number(key.slice(5, 7));
-    return [1, 4, 7, 10].includes(month);
-  });
-  const hasYearStart = monthStarts.some((key) => key.slice(5, 10) === "01-01");
-
-  if (input.schedule === ContributionSchedule.MONTHLY) {
-    if (input.runFrequency === PayrollFrequency.MONTHLY) return true;
-    if (input.runFrequency === PayrollFrequency.BIMONTHLY) {
-      return firstHalfBimonthly;
-    }
-    return hasMonthStart;
-  }
-
-  if (input.schedule === ContributionSchedule.QUARTERLY) {
-    if (input.runFrequency === PayrollFrequency.BIMONTHLY) {
-      return firstHalfBimonthly && hasQuarterStart;
-    }
-    return hasQuarterStart;
-  }
-
-  if (input.schedule === ContributionSchedule.YEARLY) {
-    if (input.runFrequency === PayrollFrequency.BIMONTHLY) {
-      return firstHalfBimonthly && hasYearStart;
-    }
-    return hasYearStart;
-  }
-
-  return false;
 };
 
 export const normalizeEmployeeIds = (employeeIds?: string[]) =>
@@ -288,9 +226,17 @@ export const serializeDeductionLine = (line: {
   deductionCodeSnapshot: string | null;
   deductionNameSnapshot: string | null;
   assignmentId: string | null;
+  contributionType: string | null;
+  bracketIdSnapshot: string | null;
+  bracketReferenceSnapshot: string | null;
   payrollFrequency: PayrollFrequency | null;
   periodStartSnapshot: Date | null;
   periodEndSnapshot: Date | null;
+  compensationBasisSnapshot: unknown;
+  employeeShareSnapshot: unknown;
+  employerShareSnapshot: unknown;
+  baseTaxSnapshot: unknown;
+  marginalRateSnapshot: unknown;
   quantitySnapshot: unknown;
   unitLabelSnapshot: string | null;
   metadata: unknown;
@@ -310,9 +256,17 @@ export const serializeDeductionLine = (line: {
   deductionCodeSnapshot: line.deductionCodeSnapshot,
   deductionNameSnapshot: line.deductionNameSnapshot,
   assignmentId: line.assignmentId,
+  contributionType: line.contributionType as PayrollDeductionLine["contributionType"],
+  bracketIdSnapshot: line.bracketIdSnapshot,
+  bracketReferenceSnapshot: line.bracketReferenceSnapshot,
   payrollFrequency: line.payrollFrequency,
   periodStartSnapshot: toIsoString(line.periodStartSnapshot),
   periodEndSnapshot: toIsoString(line.periodEndSnapshot),
+  compensationBasisSnapshot: toNumberOrNull(line.compensationBasisSnapshot),
+  employeeShareSnapshot: toNumberOrNull(line.employeeShareSnapshot),
+  employerShareSnapshot: toNumberOrNull(line.employerShareSnapshot),
+  baseTaxSnapshot: toNumberOrNull(line.baseTaxSnapshot),
+  marginalRateSnapshot: toNumberOrNull(line.marginalRateSnapshot),
   quantitySnapshot: toNumberOrNull(line.quantitySnapshot),
   unitLabelSnapshot: line.unitLabelSnapshot,
   metadata: serializeJsonObject(line.metadata),

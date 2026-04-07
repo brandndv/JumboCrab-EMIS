@@ -2,10 +2,13 @@ import "dotenv/config";
 import crypto from "crypto";
 import {
   ATTENDANCE_STATUS,
+  ContributionCalculationMethod,
+  ContributionType,
   PUNCH_TYPE,
   PayrollDeductionType,
   PayrollEmployeeStatus,
   PayrollEarningType,
+  PayrollFrequency,
   PayrollLineSource,
   PayrollReferenceType,
   PayrollReviewDecision,
@@ -18,6 +21,7 @@ import {
   type WeeklyPattern,
 } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { seedContributionBrackets } from "./shared/contribution-brackets";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
@@ -30,7 +34,6 @@ const prisma = new PrismaClient({ adapter });
 
 const TZ = "Asia/Manila";
 const TZ_OFFSET_MINUTES = 8 * 60;
-const DAY_MS = 24 * 60 * 60 * 1000;
 const OVERTIME_RATE_MULTIPLIER = 1.25;
 
 type UserDirectory = Record<string, { userId: string; role: Roles }>;
@@ -45,6 +48,10 @@ type SeededEmployee = {
   employeeCode: string;
   departmentName: string;
   dailyRate: number;
+  monthlyRate: number;
+  positionId: string;
+  positionName: string;
+  currencyCode: string;
 };
 
 type DayShiftSnapshot = Pick<
@@ -63,6 +70,28 @@ type PayrollPeriod = {
   endDay: Date;
   startKey: string;
   endKey: string;
+};
+
+type ContributionBracketRow = {
+  id: string;
+  contributionType: ContributionType;
+  payrollFrequency: PayrollFrequency | null;
+  calculationMethod: ContributionCalculationMethod;
+  lowerBound: number;
+  upperBound: number | null;
+  employeeFixedAmount: number | null;
+  employerFixedAmount: number | null;
+  employeeRate: number | null;
+  employerRate: number | null;
+  baseTax: number | null;
+  marginalRate: number | null;
+  referenceCode: string | null;
+  metadata:
+    | {
+        appliedBaseAmount?: number;
+        monthlySalaryCredit?: number;
+      }
+    | null;
 };
 
 const toDateKeyInManila = (value: Date | string) =>
@@ -191,6 +220,74 @@ const computeScheduledPaidMinutes = (
   return Math.max(0, diffMinutes(scheduledStartMinutes, scheduledEndMinutes));
 };
 
+const deriveCompensationRates = (dailyRate: number) => ({
+  dailyRate: roundCurrency(dailyRate),
+  hourlyRate: roundCurrency(dailyRate / 8),
+  monthlyRate: roundCurrency(dailyRate * 26),
+});
+
+const findApplicableContributionBracket = (input: {
+  rows: ContributionBracketRow[];
+  contributionType: ContributionType;
+  basisAmount: number;
+  payrollFrequency?: PayrollFrequency;
+}) =>
+  input.rows.find((row) => {
+    if (row.contributionType !== input.contributionType) return false;
+    if (input.contributionType === ContributionType.WITHHOLDING) {
+      if (row.payrollFrequency !== (input.payrollFrequency ?? null)) return false;
+    } else if (row.payrollFrequency !== null) {
+      return false;
+    }
+
+    if (input.basisAmount < row.lowerBound) return false;
+    return row.upperBound == null || input.basisAmount <= row.upperBound;
+  }) ?? null;
+
+const calculateContributionFromBracket = (
+  bracket: ContributionBracketRow,
+  basisAmount: number,
+) => {
+  const appliedBasis =
+    bracket.metadata?.appliedBaseAmount ??
+    bracket.metadata?.monthlySalaryCredit ??
+    basisAmount;
+
+  if (bracket.calculationMethod === ContributionCalculationMethod.FIXED_AMOUNTS) {
+    return {
+      basisAmount: roundCurrency(appliedBasis),
+      employeeShare: roundCurrency(bracket.employeeFixedAmount ?? 0),
+      employerShare: roundCurrency(bracket.employerFixedAmount ?? 0),
+      baseTax: bracket.baseTax,
+      marginalRate: bracket.marginalRate,
+    };
+  }
+
+  if (bracket.calculationMethod === ContributionCalculationMethod.PERCENT_OF_BASE) {
+    return {
+      basisAmount: roundCurrency(appliedBasis),
+      employeeShare: roundCurrency(appliedBasis * (bracket.employeeRate ?? 0)),
+      employerShare: roundCurrency(appliedBasis * (bracket.employerRate ?? 0)),
+      baseTax: bracket.baseTax,
+      marginalRate: bracket.marginalRate,
+    };
+  }
+
+  const taxableExcess = Math.max(0, basisAmount - bracket.lowerBound);
+  return {
+    basisAmount: roundCurrency(basisAmount),
+    employeeShare: roundCurrency(
+      (bracket.baseTax ?? 0) + taxableExcess * (bracket.marginalRate ?? 0),
+    ),
+    employerShare: roundCurrency(
+      (bracket.employerFixedAmount ?? 0) +
+        taxableExcess * (bracket.employerRate ?? 0),
+    ),
+    baseTax: bracket.baseTax,
+    marginalRate: bracket.marginalRate,
+  };
+};
+
 async function hashPassword(password: string) {
   const salt = crypto.randomBytes(16).toString("hex");
   const derivedKey = await new Promise<Buffer>((resolve, reject) => {
@@ -280,25 +377,116 @@ async function ensureOrg() {
   }
 
   const positionSeeds = [
-    { name: "Software Engineer", dept: "Engineering", description: "Feature delivery." },
-    { name: "QA Analyst", dept: "Engineering", description: "Quality and testing." },
-    { name: "Ops Specialist", dept: "Operations", description: "Day-to-day operations." },
-    { name: "Facilities Lead", dept: "Operations", description: "Facilities and assets." },
-    { name: "HR Generalist", dept: "HR", description: "Employee lifecycle." },
+    {
+      name: "Software Engineer I",
+      dept: "Engineering",
+      description: "Feature delivery.",
+      dailyRate: 950,
+    },
+    {
+      name: "Software Engineer II",
+      dept: "Engineering",
+      description: "Feature delivery.",
+      dailyRate: 980,
+    },
+    {
+      name: "Software Engineer III",
+      dept: "Engineering",
+      description: "Feature delivery.",
+      dailyRate: 1000,
+    },
+    {
+      name: "Senior Software Engineer",
+      dept: "Engineering",
+      description: "Feature delivery.",
+      dailyRate: 1050,
+    },
+    {
+      name: "QA Analyst I",
+      dept: "Engineering",
+      description: "Quality and testing.",
+      dailyRate: 900,
+    },
+    {
+      name: "QA Analyst II",
+      dept: "Engineering",
+      description: "Quality and testing.",
+      dailyRate: 920,
+    },
+    {
+      name: "Ops Specialist I",
+      dept: "Operations",
+      description: "Day-to-day operations.",
+      dailyRate: 850,
+    },
+    {
+      name: "Ops Specialist II",
+      dept: "Operations",
+      description: "Day-to-day operations.",
+      dailyRate: 860,
+    },
+    {
+      name: "Facilities Lead",
+      dept: "Operations",
+      description: "Facilities and assets.",
+      dailyRate: 870,
+    },
+    {
+      name: "HR Generalist",
+      dept: "HR",
+      description: "Employee lifecycle.",
+      dailyRate: 880,
+    },
   ];
 
   const positionMap: Record<string, string> = {};
   for (const seed of positionSeeds) {
     const departmentId = deptMap[seed.dept];
     if (!departmentId) continue;
+    const rates = deriveCompensationRates(seed.dailyRate);
     const row = await prisma.position.upsert({
       where: { name_departmentId: { name: seed.name, departmentId } },
-      update: { description: seed.description, isActive: true },
+      update: {
+        description: seed.description,
+        isActive: true,
+        dailyRate: new Prisma.Decimal(rates.dailyRate.toFixed(2)),
+        hourlyRate: new Prisma.Decimal(rates.hourlyRate.toFixed(2)),
+        monthlyRate: new Prisma.Decimal(rates.monthlyRate.toFixed(2)),
+        currencyCode: "PHP",
+      },
       create: {
         name: seed.name,
         departmentId,
         description: seed.description,
         isActive: true,
+        dailyRate: new Prisma.Decimal(rates.dailyRate.toFixed(2)),
+        hourlyRate: new Prisma.Decimal(rates.hourlyRate.toFixed(2)),
+        monthlyRate: new Prisma.Decimal(rates.monthlyRate.toFixed(2)),
+        currencyCode: "PHP",
+      },
+    });
+    await prisma.positionRateHistory.upsert({
+      where: {
+        positionId_effectiveFrom: {
+          positionId: row.positionId,
+          effectiveFrom: new Date(Date.UTC(2023, 0, 1, 0, 0, 0)),
+        },
+      },
+      update: {
+        dailyRate: new Prisma.Decimal(rates.dailyRate.toFixed(2)),
+        hourlyRate: new Prisma.Decimal(rates.hourlyRate.toFixed(2)),
+        monthlyRate: new Prisma.Decimal(rates.monthlyRate.toFixed(2)),
+        currencyCode: "PHP",
+        reason: "Initial seeded position rate",
+      },
+      create: {
+        positionId: row.positionId,
+        dailyRate: new Prisma.Decimal(rates.dailyRate.toFixed(2)),
+        hourlyRate: new Prisma.Decimal(rates.hourlyRate.toFixed(2)),
+        monthlyRate: new Prisma.Decimal(rates.monthlyRate.toFixed(2)),
+        currencyCode: "PHP",
+        effectiveFrom: new Date(Date.UTC(2023, 0, 1, 0, 0, 0)),
+        reason: "Initial seeded position rate",
       },
     });
     positionMap[`${seed.dept}:${seed.name}`] = row.positionId;
@@ -316,7 +504,7 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
       first: "Brandon",
       last: "Lamagna",
       dept: "Engineering",
-      pos: "Software Engineer",
+      pos: "Software Engineer I",
       sex: "MALE" as const,
       userKey: "emp1",
       dailyRate: 950,
@@ -326,7 +514,7 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
       first: "Rosemary",
       last: "Rohan",
       dept: "Engineering",
-      pos: "QA Analyst",
+      pos: "QA Analyst I",
       sex: "FEMALE" as const,
       userKey: "emp2",
       dailyRate: 900,
@@ -336,7 +524,7 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
       first: "Alanis",
       last: "Graham",
       dept: "Operations",
-      pos: "Ops Specialist",
+      pos: "Ops Specialist I",
       sex: "FEMALE" as const,
       userKey: "emp3",
       dailyRate: 850,
@@ -346,7 +534,7 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
       first: "Maria",
       last: "Santos",
       dept: "Engineering",
-      pos: "Software Engineer",
+      pos: "Software Engineer II",
       sex: "FEMALE" as const,
       userKey: "emp4",
       dailyRate: 980,
@@ -366,7 +554,7 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
       first: "Erika",
       last: "Dela Cruz",
       dept: "Engineering",
-      pos: "QA Analyst",
+      pos: "QA Analyst II",
       sex: "FEMALE" as const,
       userKey: "emp6",
       dailyRate: 920,
@@ -376,7 +564,7 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
       first: "Carlo",
       last: "Reyes",
       dept: "Engineering",
-      pos: "Software Engineer",
+      pos: "Software Engineer III",
       sex: "MALE" as const,
       userKey: "emp7",
       dailyRate: 1000,
@@ -386,7 +574,7 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
       first: "Nina",
       last: "Flores",
       dept: "Operations",
-      pos: "Ops Specialist",
+      pos: "Ops Specialist II",
       sex: "FEMALE" as const,
       userKey: "emp8",
       dailyRate: 860,
@@ -396,7 +584,7 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
       first: "Paolo",
       last: "Mendoza",
       dept: "Engineering",
-      pos: "Software Engineer",
+      pos: "Senior Software Engineer",
       sex: "MALE" as const,
       userKey: "emp9",
       dailyRate: 1050,
@@ -449,7 +637,6 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
         emergencyContactRelationship: "Sibling",
         emergencyContactPhone: "09171234567",
         emergencyContactEmail: `ec.${seed.userKey}@demo.com`,
-        dailyRate: new Prisma.Decimal(seed.dailyRate.toFixed(2)),
         description: "Seeded for payroll demo",
         isArchived: false,
         userId: users[seed.userKey]?.userId ?? null,
@@ -483,7 +670,6 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
         emergencyContactRelationship: "Sibling",
         emergencyContactPhone: "09171234567",
         emergencyContactEmail: `ec.${seed.userKey}@demo.com`,
-        dailyRate: new Prisma.Decimal(seed.dailyRate.toFixed(2)),
         description: "Seeded for payroll demo",
         isArchived: false,
         userId: users[seed.userKey]?.userId ?? null,
@@ -510,44 +696,31 @@ async function ensureEmployees(users: UserDirectory, maps: OrgMaps) {
       },
     });
 
-    await prisma.employeeContribution.upsert({
+    await prisma.employeePositionHistory.deleteMany({
       where: { employeeId: employee.employeeId },
-      update: {
-        sssEe: 200 + i * 5,
-        sssEr: 300 + i * 5,
-        philHealthEe: 150 + i * 3,
-        philHealthEr: 150 + i * 3,
-        pagIbigEe: 100,
-        pagIbigEr: 100,
-        withholdingEe: 450 + i * 15,
-        withholdingEr: 0,
-        isSssActive: true,
-        isPhilHealthActive: true,
-        isPagIbigActive: true,
-        isWithholdingActive: true,
-      },
-      create: {
+    });
+    await prisma.employeePositionHistory.create({
+      data: {
         employeeId: employee.employeeId,
-        sssEe: 200 + i * 5,
-        sssEr: 300 + i * 5,
-        philHealthEe: 150 + i * 3,
-        philHealthEr: 150 + i * 3,
-        pagIbigEe: 100,
-        pagIbigEr: 100,
-        withholdingEe: 450 + i * 15,
-        withholdingEr: 0,
-        isSssActive: true,
-        isPhilHealthActive: true,
-        isPagIbigActive: true,
-        isWithholdingActive: true,
+        departmentId,
+        positionId,
+        effectiveFrom: startDate,
+        reason: "Initial seeded assignment",
+        createdByUserId: supervisorId,
       },
     });
+
+    const rates = deriveCompensationRates(seed.dailyRate);
 
     seededEmployees.push({
       employeeId: employee.employeeId,
       employeeCode: employee.employeeCode,
       departmentName: seed.dept,
-      dailyRate: seed.dailyRate,
+      dailyRate: rates.dailyRate,
+      monthlyRate: rates.monthlyRate,
+      positionId,
+      positionName: seed.pos,
+      currencyCode: "PHP",
     });
   }
 
@@ -1049,17 +1222,87 @@ async function seedPayroll(
 
   const managerUserId = users["manager"]?.userId ?? users["admin"]?.userId ?? null;
   const gmUserId = users["gm"]?.userId ?? users["admin"]?.userId ?? null;
+  const contributionBrackets = await prisma.contributionBracket.findMany({
+    orderBy: [
+      { contributionType: "asc" },
+      { payrollFrequency: "asc" },
+      { lowerBound: "asc" },
+    ],
+    select: {
+      id: true,
+      contributionType: true,
+      payrollFrequency: true,
+      calculationMethod: true,
+      lowerBound: true,
+      upperBound: true,
+      employeeFixedAmount: true,
+      employerFixedAmount: true,
+      employeeRate: true,
+      employerRate: true,
+      baseTax: true,
+      marginalRate: true,
+      referenceCode: true,
+      metadata: true,
+    },
+  });
+  const bracketRows: ContributionBracketRow[] = contributionBrackets.map((row) => ({
+    id: row.id,
+    contributionType: row.contributionType,
+    payrollFrequency: row.payrollFrequency,
+    calculationMethod: row.calculationMethod,
+    lowerBound: toNumber(row.lowerBound),
+    upperBound: toNumberOrNull(row.upperBound),
+    employeeFixedAmount: toNumberOrNull(row.employeeFixedAmount),
+    employerFixedAmount: toNumberOrNull(row.employerFixedAmount),
+    employeeRate: toNumberOrNull(row.employeeRate),
+    employerRate: toNumberOrNull(row.employerRate),
+    baseTax: toNumberOrNull(row.baseTax),
+    marginalRate: toNumberOrNull(row.marginalRate),
+    referenceCode: row.referenceCode ?? null,
+    metadata:
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? {
+            appliedBaseAmount: toNumberOrNull(
+              (row.metadata as { appliedBaseAmount?: unknown }).appliedBaseAmount,
+            ) ?? undefined,
+            monthlySalaryCredit: toNumberOrNull(
+              (row.metadata as { monthlySalaryCredit?: unknown }).monthlySalaryCredit,
+            ) ?? undefined,
+          }
+        : null,
+  }));
 
-  const employeesWithContribution = await prisma.employee.findMany({
+  const employeesWithProfile = await prisma.employee.findMany({
     where: { employeeId: { in: employeeIds } },
-    include: { contribution: true },
+    select: {
+      employeeId: true,
+      employeeCode: true,
+      position: {
+        select: {
+          positionId: true,
+          name: true,
+          dailyRate: true,
+          hourlyRate: true,
+          monthlyRate: true,
+          currencyCode: true,
+        },
+      },
+      governmentId: {
+        select: {
+          sssNumber: true,
+          philHealthNumber: true,
+          pagIbigNumber: true,
+          tinNumber: true,
+        },
+      },
+    },
   });
   console.log(
-    `Loaded ${employeesWithContribution.length} employee profiles for payroll computation.`,
+    `Loaded ${employeesWithProfile.length} employee profiles for payroll computation.`,
   );
 
   const employeeMap = new Map(
-    employeesWithContribution.map((employee) => [employee.employeeId, employee]),
+    employeesWithProfile.map((employee) => [employee.employeeId, employee]),
   );
 
   for (const period of periods) {
@@ -1169,9 +1412,22 @@ async function seedPayroll(
     for (const seededEmployee of employees) {
       const employee = employeeMap.get(seededEmployee.employeeId);
       if (!employee) continue;
+      if (!employee.position) {
+        throw new Error(
+          `Employee ${seededEmployee.employeeCode} is missing a position assignment.`,
+        );
+      }
 
       const rows = attendanceByEmployee.get(seededEmployee.employeeId) ?? [];
-      const dailyRate = toNumberOrNull(employee.dailyRate);
+      const dailyRate =
+        toNumberOrNull(employee.position.dailyRate) ?? seededEmployee.dailyRate;
+      const hourlyRate =
+        toNumberOrNull(employee.position.hourlyRate) ??
+        roundCurrency(dailyRate / 8);
+      const monthlyRate =
+        toNumberOrNull(employee.position.monthlyRate) ??
+        seededEmployee.monthlyRate;
+      const currencyCode = employee.position.currencyCode ?? seededEmployee.currencyCode;
 
       const minutesWorked = rows.reduce(
         (sum, row) => sum + Math.max(0, row.workedMinutes ?? 0),
@@ -1299,6 +1555,20 @@ async function seedPayroll(
         referenceType: PayrollReferenceType;
         referenceId: string;
         remarks: string;
+        contributionType?: ContributionType | null;
+        bracketIdSnapshot?: string | null;
+        bracketReferenceSnapshot?: string | null;
+        payrollFrequency?: PayrollFrequency | null;
+        periodStartSnapshot?: Date | null;
+        periodEndSnapshot?: Date | null;
+        compensationBasisSnapshot?: number | null;
+        employeeShareSnapshot?: number | null;
+        employerShareSnapshot?: number | null;
+        baseTaxSnapshot?: number | null;
+        marginalRateSnapshot?: number | null;
+        quantitySnapshot?: number | null;
+        unitLabelSnapshot?: string | null;
+        metadata?: Prisma.InputJsonValue | null;
       }> = [];
 
       if (undertimeDeduction > 0) {
@@ -1314,66 +1584,124 @@ async function seedPayroll(
           remarks: "Computed from attendance undertime minutes",
         });
       }
+      const governmentId = employee.governmentId;
+      const isFirstPayrollOfMonth = manilaDayOfMonth(period.startDay) <= 15;
 
-      if (employee.contribution) {
-        const contribution = employee.contribution;
-        const sss = toNumber(contribution.sssEe, 0);
-        const philHealth = toNumber(contribution.philHealthEe, 0);
-        const pagIbig = toNumber(contribution.pagIbigEe, 0);
-        const withholding = toNumber(contribution.withholdingEe, 0);
-
-        if (contribution.isSssActive && sss > 0) {
-          deductions.push({
+      if (isFirstPayrollOfMonth) {
+        const monthlyContributionConfigs = [
+          {
+            contributionType: ContributionType.SSS,
             deductionType: PayrollDeductionType.CONTRIBUTION_SSS,
-            amount: roundCurrency(sss),
-            minutes: null,
-            rateSnapshot: null,
-            source: PayrollLineSource.CONTRIBUTION_ENGINE,
-            isManual: false,
-            referenceType: PayrollReferenceType.CONTRIBUTION,
-            referenceId: contribution.id,
-            remarks: "Employee SSS contribution",
-          });
-        }
-        if (contribution.isPhilHealthActive && philHealth > 0) {
-          deductions.push({
+            governmentNumber: governmentId?.sssNumber?.trim() || null,
+          },
+          {
+            contributionType: ContributionType.PHILHEALTH,
             deductionType: PayrollDeductionType.CONTRIBUTION_PHILHEALTH,
-            amount: roundCurrency(philHealth),
-            minutes: null,
-            rateSnapshot: null,
-            source: PayrollLineSource.CONTRIBUTION_ENGINE,
-            isManual: false,
-            referenceType: PayrollReferenceType.CONTRIBUTION,
-            referenceId: contribution.id,
-            remarks: "Employee PhilHealth contribution",
-          });
-        }
-        if (contribution.isPagIbigActive && pagIbig > 0) {
-          deductions.push({
+            governmentNumber: governmentId?.philHealthNumber?.trim() || null,
+          },
+          {
+            contributionType: ContributionType.PAGIBIG,
             deductionType: PayrollDeductionType.CONTRIBUTION_PAGIBIG,
-            amount: roundCurrency(pagIbig),
-            minutes: null,
-            rateSnapshot: null,
-            source: PayrollLineSource.CONTRIBUTION_ENGINE,
-            isManual: false,
-            referenceType: PayrollReferenceType.CONTRIBUTION,
-            referenceId: contribution.id,
-            remarks: "Employee Pag-IBIG contribution",
+            governmentNumber: governmentId?.pagIbigNumber?.trim() || null,
+          },
+        ] as const;
+
+        for (const config of monthlyContributionConfigs) {
+          if (!config.governmentNumber) continue;
+          const bracket = findApplicableContributionBracket({
+            rows: bracketRows,
+            contributionType: config.contributionType,
+            basisAmount: monthlyRate,
           });
-        }
-        if (contribution.isWithholdingActive && withholding > 0) {
+          if (!bracket) {
+            throw new Error(
+              `Missing ${config.contributionType} bracket for basis ${monthlyRate.toFixed(2)}.`,
+            );
+          }
+
+          const calculation = calculateContributionFromBracket(bracket, monthlyRate);
+          if (calculation.employeeShare <= 0) continue;
+
           deductions.push({
-            deductionType: PayrollDeductionType.WITHHOLDING_TAX,
-            amount: roundCurrency(withholding),
+            deductionType: config.deductionType,
+            amount: calculation.employeeShare,
             minutes: null,
             rateSnapshot: null,
             source: PayrollLineSource.CONTRIBUTION_ENGINE,
             isManual: false,
             referenceType: PayrollReferenceType.CONTRIBUTION,
-            referenceId: contribution.id,
-            remarks: "Employee withholding tax",
+            referenceId: bracket.id,
+            remarks: `${config.contributionType} statutory contribution`,
+            contributionType: config.contributionType,
+            bracketIdSnapshot: bracket.id,
+            bracketReferenceSnapshot: bracket.referenceCode,
+            payrollFrequency: PayrollFrequency.BIMONTHLY,
+            periodStartSnapshot: periodStart,
+            periodEndSnapshot: periodEnd,
+            compensationBasisSnapshot: calculation.basisAmount,
+            employeeShareSnapshot: calculation.employeeShare,
+            employerShareSnapshot: calculation.employerShare,
+            baseTaxSnapshot: calculation.baseTax,
+            marginalRateSnapshot: calculation.marginalRate,
+            quantitySnapshot: 1,
+            unitLabelSnapshot: "monthly bracket",
+            metadata: {
+              governmentNumber: config.governmentNumber,
+              seededFrom: "seedPayrollBimonthly",
+              ...(bracket.metadata ?? {}),
+            },
           });
         }
+      }
+
+      const earningsSubtotal = roundCurrency(
+        earnings.reduce((sum, line) => sum + line.amount, 0),
+      );
+      const withholdingBracket = findApplicableContributionBracket({
+        rows: bracketRows,
+        contributionType: ContributionType.WITHHOLDING,
+        payrollFrequency: PayrollFrequency.BIMONTHLY,
+        basisAmount: earningsSubtotal,
+      });
+      if (!withholdingBracket) {
+        throw new Error(
+          `Missing withholding bracket for basis ${earningsSubtotal.toFixed(2)}.`,
+        );
+      }
+      const withholding = calculateContributionFromBracket(
+        withholdingBracket,
+        earningsSubtotal,
+      );
+      if (withholding.employeeShare > 0) {
+        deductions.push({
+          deductionType: PayrollDeductionType.WITHHOLDING_TAX,
+          amount: withholding.employeeShare,
+          minutes: null,
+          rateSnapshot: null,
+          source: PayrollLineSource.CONTRIBUTION_ENGINE,
+          isManual: false,
+          referenceType: PayrollReferenceType.CONTRIBUTION,
+          referenceId: withholdingBracket.id,
+          remarks: "Employee withholding tax",
+          contributionType: ContributionType.WITHHOLDING,
+          bracketIdSnapshot: withholdingBracket.id,
+          bracketReferenceSnapshot: withholdingBracket.referenceCode,
+          payrollFrequency: PayrollFrequency.BIMONTHLY,
+          periodStartSnapshot: periodStart,
+          periodEndSnapshot: periodEnd,
+          compensationBasisSnapshot: withholding.basisAmount,
+          employeeShareSnapshot: withholding.employeeShare,
+          employerShareSnapshot: withholding.employerShare,
+          baseTaxSnapshot: withholding.baseTax,
+          marginalRateSnapshot: withholding.marginalRate,
+          quantitySnapshot: 1,
+          unitLabelSnapshot: "tax bracket",
+          metadata: {
+            governmentNumber: governmentId?.tinNumber?.trim() || null,
+            seededFrom: "seedPayrollBimonthly",
+            ...(withholdingBracket.metadata ?? {}),
+          },
+        });
       }
 
       const totalEarnings = roundCurrency(
@@ -1398,7 +1726,12 @@ async function seedPayroll(
           minutesNetWorked,
           minutesOvertime,
           minutesUndertime,
+          positionIdSnapshot: employee.position.positionId,
+          positionNameSnapshot: employee.position.name,
           dailyRateSnapshot: dailyRate,
+          hourlyRateSnapshot: hourlyRate,
+          monthlyRateSnapshot: monthlyRate,
+          currencyCodeSnapshot: currencyCode,
           ratePerMinuteSnapshot,
           grossPay,
           totalEarnings,
@@ -1443,6 +1776,20 @@ async function seedPayroll(
           data: deductions.map((line) => ({
             payrollEmployeeId: payrollEmployee.id,
             deductionType: line.deductionType,
+            contributionType: line.contributionType ?? null,
+            bracketIdSnapshot: line.bracketIdSnapshot ?? null,
+            bracketReferenceSnapshot: line.bracketReferenceSnapshot ?? null,
+            payrollFrequency: line.payrollFrequency ?? null,
+            periodStartSnapshot: line.periodStartSnapshot ?? null,
+            periodEndSnapshot: line.periodEndSnapshot ?? null,
+            compensationBasisSnapshot: line.compensationBasisSnapshot ?? null,
+            employeeShareSnapshot: line.employeeShareSnapshot ?? null,
+            employerShareSnapshot: line.employerShareSnapshot ?? null,
+            baseTaxSnapshot: line.baseTaxSnapshot ?? null,
+            marginalRateSnapshot: line.marginalRateSnapshot ?? null,
+            quantitySnapshot: line.quantitySnapshot ?? null,
+            unitLabelSnapshot: line.unitLabelSnapshot ?? null,
+            metadata: line.metadata ?? undefined,
             amount: line.amount,
             minutes: line.minutes,
             rateSnapshot: line.rateSnapshot,
@@ -1464,6 +1811,12 @@ async function main() {
   const payrollOnly = process.env.SEED_PAYROLL_ONLY === "1";
 
   const users = await ensureUsers();
+  await seedContributionBrackets(prisma, {
+    sssEffectiveFrom: new Date(Date.UTC(2025, 0, 1, 12, 0, 0)),
+    philHealthEffectiveFrom: new Date(Date.UTC(2024, 0, 1, 12, 0, 0)),
+    pagIbigEffectiveFrom: new Date(Date.UTC(2024, 0, 1, 12, 0, 0)),
+    withholdingEffectiveFrom: new Date(Date.UTC(2023, 0, 1, 12, 0, 0)),
+  });
   const maps = await ensureOrg();
   const employees = await ensureEmployees(users, maps);
   const { shiftsByCode, engPattern, opsPattern } = await ensureShiftsAndPatterns();

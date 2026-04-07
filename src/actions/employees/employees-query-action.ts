@@ -4,15 +4,18 @@ import { db } from "@/lib/db";
 import { generateUniqueEmployeeCode } from "@/lib/employees/employee-code";
 import {
   employeeLookupInclude,
-  DEFAULT_PAYROLL_FREQUENCY,
-  getFallbackRateHistory,
-  isMissingRateHistoryTableError,
+  DEFAULT_CURRENCY_CODE,
+  deriveCompensationRates,
   serializeJsonObject,
   serializeEmployeeRecord,
   serializeEmployeeWithLookups,
   toRateNumber,
 } from "./employees-shared";
-import type { EmployeeActionRecord, EmployeeRateHistoryItem } from "./types";
+import type {
+  EmployeeActionRecord,
+  EmployeeCompensationHistoryItem,
+  EmployeePositionHistoryItem,
+} from "./types";
 
 export async function getEmployees(): Promise<{
   success: boolean;
@@ -75,12 +78,11 @@ export async function getEmployeeById(id: string | undefined): Promise<{
   }
 }
 
-export async function getEmployeeRateHistory(
+export async function getEmployeePositionHistory(
   employeeId: string | undefined,
 ): Promise<{
   success: boolean;
-  data?: EmployeeRateHistoryItem[];
-  warning?: string;
+  data?: EmployeePositionHistoryItem[];
   error?: string;
 }> {
   if (!employeeId) {
@@ -88,41 +90,36 @@ export async function getEmployeeRateHistory(
   }
 
   try {
-    const rows = await db.employeeRateHistory.findMany({
+    const rows = await db.employeePositionHistory.findMany({
       where: { employeeId },
       orderBy: { effectiveFrom: "desc" },
       select: {
         id: true,
         employeeId: true,
-        dailyRate: true,
-        hourlyRate: true,
-        monthlyRate: true,
-        payrollFrequency: true,
+        departmentId: true,
+        positionId: true,
         effectiveFrom: true,
+        effectiveTo: true,
         reason: true,
         metadata: true,
         createdByUserId: true,
         createdAt: true,
+        department: { select: { name: true } },
+        position: { select: { name: true } },
       },
     });
-
-    if (rows.length === 0) {
-      return {
-        success: true,
-        data: await getFallbackRateHistory(employeeId, "Current employee rate"),
-      };
-    }
 
     return {
       success: true,
       data: rows.map((row) => ({
         id: row.id,
         employeeId: row.employeeId,
-        dailyRate: toRateNumber(row.dailyRate),
-        hourlyRate: toRateNumber(row.hourlyRate),
-        monthlyRate: toRateNumber(row.monthlyRate),
-        payrollFrequency: row.payrollFrequency ?? DEFAULT_PAYROLL_FREQUENCY,
+        departmentId: row.departmentId ?? null,
+        departmentName: row.department?.name ?? null,
+        positionId: row.positionId ?? null,
+        positionName: row.position?.name ?? null,
         effectiveFrom: row.effectiveFrom.toISOString(),
+        effectiveTo: row.effectiveTo?.toISOString() ?? null,
         reason: row.reason ?? null,
         metadata: serializeJsonObject(row.metadata),
         createdByUserId: row.createdByUserId ?? null,
@@ -130,27 +127,184 @@ export async function getEmployeeRateHistory(
       })),
     };
   } catch (error) {
-    if (isMissingRateHistoryTableError(error)) {
-      console.warn(
-        "EmployeeRateHistory table is not available yet. Returning empty history.",
-      );
-      const fallback = await getFallbackRateHistory(
-        employeeId,
-        "Current employee rate (history table not yet migrated)",
-      );
-      return {
-        success: true,
-        data: fallback,
-        warning: "Rate history table not found. Run database migration.",
-      };
-    }
     console.error(
-      `Error fetching rate history for employee ${employeeId}:`,
+      `Error fetching position history for employee ${employeeId}:`,
       error,
     );
     return {
       success: false,
-      error: "An error occurred while fetching employee rate history",
+      error: "An error occurred while fetching employee position history",
+    };
+  }
+}
+
+const rangesOverlap = (
+  leftStart: Date,
+  leftEnd: Date | null,
+  rightStart: Date,
+  rightEnd: Date | null,
+) => {
+  const leftEndMs = leftEnd?.getTime() ?? Number.POSITIVE_INFINITY;
+  const rightEndMs = rightEnd?.getTime() ?? Number.POSITIVE_INFINITY;
+  return leftStart.getTime() <= rightEndMs && rightStart.getTime() <= leftEndMs;
+};
+
+export async function getEmployeeCompensationHistory(
+  employeeId: string | undefined,
+): Promise<{
+  success: boolean;
+  data?: EmployeeCompensationHistoryItem[];
+  error?: string;
+}> {
+  if (!employeeId) {
+    return { success: false, error: "Employee ID is required" };
+  }
+
+  try {
+    const employee = await db.employee.findUnique({
+      where: { employeeId },
+      select: {
+        employeeId: true,
+        startDate: true,
+        positionId: true,
+        position: {
+          select: {
+            positionId: true,
+            name: true,
+            dailyRate: true,
+            hourlyRate: true,
+            monthlyRate: true,
+            currencyCode: true,
+          },
+        },
+        positionHistory: {
+          orderBy: { effectiveFrom: "desc" },
+          select: {
+            positionId: true,
+            effectiveFrom: true,
+            effectiveTo: true,
+            position: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      return { success: false, error: "Employee not found" };
+    }
+
+    const assignments = employee.positionHistory
+      .filter((row) => Boolean(row.positionId))
+      .map((row) => ({
+        positionId: row.positionId!,
+        positionName: row.position?.name ?? "Unassigned position",
+        effectiveFrom: row.effectiveFrom,
+        effectiveTo: row.effectiveTo ?? null,
+      }));
+
+    if (assignments.length === 0 && employee.positionId && employee.position) {
+      assignments.push({
+        positionId: employee.positionId,
+        positionName: employee.position.name,
+        effectiveFrom: employee.startDate,
+        effectiveTo: null,
+      });
+    }
+
+    const positionIds = [...new Set(assignments.map((row) => row.positionId))];
+    if (positionIds.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const rows = await db.positionRateHistory.findMany({
+      where: {
+        positionId: { in: positionIds },
+      },
+      orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        positionId: true,
+        dailyRate: true,
+        hourlyRate: true,
+        monthlyRate: true,
+        currencyCode: true,
+        effectiveFrom: true,
+        effectiveTo: true,
+        reason: true,
+        metadata: true,
+        createdByUserId: true,
+        createdAt: true,
+        position: { select: { name: true } },
+      },
+    });
+
+    const filteredRows = rows.filter((row) =>
+      assignments.some(
+        (assignment) =>
+          assignment.positionId === row.positionId &&
+          rangesOverlap(
+            assignment.effectiveFrom,
+            assignment.effectiveTo,
+            row.effectiveFrom,
+            row.effectiveTo ?? null,
+          ),
+      ),
+    );
+
+    if (filteredRows.length === 0 && employee.position) {
+      const fallbackRates = deriveCompensationRates(
+        toRateNumber(employee.position.dailyRate),
+      );
+      return {
+        success: true,
+        data: [
+          {
+            id: `fallback-${employee.position.positionId}`,
+            positionId: employee.position.positionId,
+            positionName: employee.position.name,
+            dailyRate: fallbackRates.dailyRate,
+            hourlyRate:
+              toRateNumber(employee.position.hourlyRate) ?? fallbackRates.hourlyRate,
+            monthlyRate:
+              toRateNumber(employee.position.monthlyRate) ?? fallbackRates.monthlyRate,
+            currencyCode: employee.position.currencyCode ?? DEFAULT_CURRENCY_CODE,
+            effectiveFrom: employee.startDate.toISOString(),
+            effectiveTo: null,
+            reason: "Current position rate",
+            metadata: null,
+            createdByUserId: null,
+            createdAt: employee.startDate.toISOString(),
+          },
+        ],
+      };
+    }
+
+    return {
+      success: true,
+      data: filteredRows.map((row) => ({
+        id: row.id,
+        positionId: row.positionId,
+        positionName: row.position?.name ?? "Unknown position",
+        dailyRate: toRateNumber(row.dailyRate),
+        hourlyRate: toRateNumber(row.hourlyRate),
+        monthlyRate: toRateNumber(row.monthlyRate),
+        currencyCode: row.currencyCode ?? DEFAULT_CURRENCY_CODE,
+        effectiveFrom: row.effectiveFrom.toISOString(),
+        effectiveTo: row.effectiveTo?.toISOString() ?? null,
+        reason: row.reason ?? null,
+        metadata: serializeJsonObject(row.metadata),
+        createdByUserId: row.createdByUserId ?? null,
+        createdAt: row.createdAt.toISOString(),
+      })),
+    };
+  } catch (error) {
+    console.error(
+      `Error fetching compensation history for employee ${employeeId}:`,
+      error,
+    );
+    return {
+      success: false,
+      error: "An error occurred while fetching employee compensation history",
     };
   }
 }

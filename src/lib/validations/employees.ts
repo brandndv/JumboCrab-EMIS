@@ -123,10 +123,6 @@ export const employeeSchema = z.object({
     .email("Invalid emergency contact email")
     .optional()
     .nullable(),
-  dailyRate: z.preprocess(
-    (val) => (val === "" || val == null ? null : val),
-    z.coerce.number().min(0, "Daily rate cannot be negative").nullable(),
-  ),
   description: z.string().optional().nullable(),
   isArchived: z.boolean().optional(),
   createdAt: z.date().optional(),

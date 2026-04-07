@@ -1,11 +1,20 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import type { Employee as PrismaEmployee, Prisma } from "@prisma/client";
-import type { EmployeeActionRecord, EmployeeRateHistoryItem } from "./types";
+import type { EmployeeActionRecord } from "./types";
 
 export const employeeLookupInclude = {
   department: { select: { departmentId: true, name: true } },
-  position: { select: { positionId: true, name: true } },
+  position: {
+    select: {
+      positionId: true,
+      name: true,
+      dailyRate: true,
+      hourlyRate: true,
+      monthlyRate: true,
+      currencyCode: true,
+    },
+  },
 } satisfies Prisma.EmployeeInclude;
 
 type EmployeeWithLookupRelations = Prisma.EmployeeGetPayload<{
@@ -61,17 +70,19 @@ export const isSameRate = (left: number | null, right: number | null) => {
   return Math.abs(left - right) < 0.000001;
 };
 
-export const DEFAULT_PAYROLL_FREQUENCY = "BIMONTHLY" as const;
+export const DEFAULT_CURRENCY_CODE = "PHP" as const;
 
-export const deriveRateSnapshots = (dailyRate: number | null) => {
-  if (dailyRate == null) {
+export const deriveCompensationRates = (dailyRate: number | null) => {
+  if (dailyRate == null || dailyRate <= 0) {
     return {
+      dailyRate: null,
       hourlyRate: null,
       monthlyRate: null,
     };
   }
 
   return {
+    dailyRate: Number(dailyRate.toFixed(2)),
     hourlyRate: Number((dailyRate / 8).toFixed(2)),
     monthlyRate: Number((dailyRate * 26).toFixed(2)),
   };
@@ -82,12 +93,6 @@ export const serializeJsonObject = (
 ): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-};
-
-export const isMissingRateHistoryTableError = (error: unknown) => {
-  if (!error || typeof error !== "object") return false;
-  const maybeCode = (error as { code?: unknown }).code;
-  return maybeCode === "P2021";
 };
 
 export const normalizeEmployeeRelationIds = (input: EmployeeRelationIds) => ({
@@ -153,57 +158,33 @@ export const validateEmployeeRelationIds = async (
   return null;
 };
 
-export const serializeEmployeeRecord = (
-  employee: PrismaEmployee,
-): EmployeeActionRecord => ({
-  ...employee,
-  dailyRate: toRateNumber(employee.dailyRate),
-});
+type EmployeeWithCurrentRate = PrismaEmployee & {
+  department?: { name: string | null } | null;
+  position?: {
+    positionId: string;
+    name: string;
+    dailyRate: unknown;
+    hourlyRate: unknown;
+    monthlyRate: unknown;
+    currencyCode: string | null;
+  } | null;
+};
 
-export const serializeEmployeeWithLookups = (
-  employee: EmployeeWithLookupRelations,
+export const serializeEmployeeRecord = (
+  employee: EmployeeWithCurrentRate,
 ): EmployeeActionRecord => ({
   ...employee,
-  dailyRate: toRateNumber(employee.dailyRate),
+  dailyRate: toRateNumber(employee.position?.dailyRate),
+  hourlyRate: toRateNumber(employee.position?.hourlyRate),
+  monthlyRate: toRateNumber(employee.position?.monthlyRate),
+  currencyCode: employee.position?.currencyCode ?? DEFAULT_CURRENCY_CODE,
   department: employee.department?.name ?? null,
   position: employee.position?.name ?? null,
 });
 
-export const getFallbackRateHistory = async (
-  employeeId: string,
-  reason: string,
-): Promise<EmployeeRateHistoryItem[]> => {
-  const employee = await db.employee.findUnique({
-    where: { employeeId },
-    select: {
-      employeeId: true,
-      dailyRate: true,
-      startDate: true,
-      updatedAt: true,
-    },
-  });
-
-  const fallbackRate = toRateNumber(employee?.dailyRate);
-  if (!employee || fallbackRate == null) {
-    return [];
-  }
-
-  return [
-    {
-      id: `fallback-${employee.employeeId}`,
-      employeeId: employee.employeeId,
-      dailyRate: fallbackRate,
-      hourlyRate: deriveRateSnapshots(fallbackRate).hourlyRate,
-      monthlyRate: deriveRateSnapshots(fallbackRate).monthlyRate,
-      payrollFrequency: DEFAULT_PAYROLL_FREQUENCY,
-      effectiveFrom: employee.startDate.toISOString(),
-      reason,
-      metadata: null,
-      createdByUserId: null,
-      createdAt: employee.updatedAt.toISOString(),
-    },
-  ];
-};
+export const serializeEmployeeWithLookups = (
+  employee: EmployeeWithLookupRelations,
+): EmployeeActionRecord => serializeEmployeeRecord(employee);
 
 export const revalidateEmployeePages = (employeeId?: string) => {
   revalidatePath("/dashboard/employees");

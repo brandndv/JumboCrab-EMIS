@@ -18,9 +18,6 @@ model User {
   updatedAt                         DateTime                      @updatedAt
   isDisabled                        Boolean                       @default(false)
   employee                          Employee?
-  // Audit backlinks for contributions
-  createdContributions              EmployeeContribution[]        @relation("EmployeeContributionCreatedBy")
-  updatedContributions              EmployeeContribution[]        @relation("EmployeeContributionUpdatedBy")
   // Users who supervise employees
   supervisedEmployees               Employee[]                    @relation("EmployeeSupervisorUser")
   draftedViolations                 EmployeeViolation[]           @relation("EmployeeViolationDraftedBy")
@@ -35,7 +32,7 @@ model User {
   updatedPayrollEmployees           PayrollEmployee[]             @relation("PayrollEmployeeUpdatedBy")
   createdPayrollEarnings            PayrollEarning[]              @relation("PayrollEarningCreatedBy")
   createdPayrollDeductions          PayrollDeduction[]            @relation("PayrollDeductionCreatedBy")
-  createdEmployeeRateHistories      EmployeeRateHistory[]         @relation("EmployeeRateHistoryCreatedBy")
+  createdPositionRateHistories      PositionRateHistory[]         @relation("PositionRateHistoryCreatedBy")
   createdEmployeePositionHistories  EmployeePositionHistory[]     @relation("EmployeePositionHistoryCreatedBy")
   createdDeductionTypes             DeductionType[]               @relation("DeductionTypeCreatedBy")
   updatedDeductionTypes             DeductionType[]               @relation("DeductionTypeUpdatedBy")
@@ -82,8 +79,6 @@ model Employee {
   emergencyContactRelationship String?
   emergencyContactPhone        String?
   emergencyContactEmail        String?
-  // Daily base pay used for pro-rated attendance pay (e.g., 450.00 per paid day).
-  dailyRate                    Decimal?                  @db.Decimal(10, 2)
   description                  String?
   isArchived                   Boolean                   @default(false)
   createdAt                    DateTime                  @default(now())
@@ -97,8 +92,6 @@ model Employee {
   position                     Position?                 @relation(fields: [positionId], references: [positionId])
   supervisorUser               User?                     @relation("EmployeeSupervisorUser", fields: [supervisorUserId], references: [userId])
   governmentId                 GovernmentId?             @relation("EmployeeGovernmentId")
-  contribution                 EmployeeContribution?
-  rateHistory                  EmployeeRateHistory[]
   positionHistory              EmployeePositionHistory[]
 
   // Scheduling links
@@ -145,6 +138,10 @@ model Position {
   positionId   String   @id @default(cuid())
   name         String
   description  String?
+  dailyRate    Decimal? @db.Decimal(10, 2)
+  hourlyRate   Decimal? @db.Decimal(10, 2)
+  monthlyRate  Decimal? @db.Decimal(12, 2)
+  currencyCode String   @default("PHP")
   isActive     Boolean  @default(true)
   departmentId String
   createdAt    DateTime @default(now())
@@ -153,6 +150,7 @@ model Position {
   department      Department                @relation(fields: [departmentId], references: [departmentId])
   employees       Employee[]
   positionHistory EmployeePositionHistory[]
+  rateHistory     PositionRateHistory[]
 
   @@unique([name, departmentId])
   @@index([isActive, departmentId, name])
@@ -171,54 +169,52 @@ model GovernmentId {
   employee         Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
 }
 
-model EmployeeContribution {
-  id                  String               @id @default(cuid())
-  employeeId          String               @unique
-  employee            Employee             @relation(fields: [employeeId], references: [employeeId])
-  payrollFrequency    PayrollFrequency     @default(BIMONTHLY)
-  currencyCode        String               @default("PHP")
-  sssEe               Decimal              @default(0)
-  sssEr               Decimal              @default(0)
-  isSssActive         Boolean              @default(true)
-  sssSchedule         ContributionSchedule @default(PER_PAYROLL)
-  philHealthEe        Decimal              @default(0)
-  philHealthEr        Decimal              @default(0)
-  isPhilHealthActive  Boolean              @default(true)
-  philHealthSchedule  ContributionSchedule @default(PER_PAYROLL)
-  pagIbigEe           Decimal              @default(0)
-  pagIbigEr           Decimal              @default(0)
-  isPagIbigActive     Boolean              @default(true)
-  pagIbigSchedule     ContributionSchedule @default(PER_PAYROLL)
-  withholdingEe       Decimal              @default(0)
-  withholdingEr       Decimal              @default(0)
-  isWithholdingActive Boolean              @default(true)
-  withholdingSchedule ContributionSchedule @default(PER_PAYROLL)
-  effectiveDate       DateTime             @default(now())
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  createdById         String?
-  updatedById         String?
-  createdBy           User?                @relation("EmployeeContributionCreatedBy", fields: [createdById], references: [userId])
-  updatedBy           User?                @relation("EmployeeContributionUpdatedBy", fields: [updatedById], references: [userId])
+model ContributionBracket {
+  id                  String                        @id @default(cuid())
+  contributionType    ContributionType
+  calculationMethod   ContributionCalculationMethod
+  baseKind            ContributionBaseKind
+  payrollFrequency    PayrollFrequency?
+  lowerBound          Decimal                       @db.Decimal(12, 2)
+  upperBound          Decimal?                      @db.Decimal(12, 2)
+  employeeFixedAmount Decimal?                      @db.Decimal(12, 2)
+  employerFixedAmount Decimal?                      @db.Decimal(12, 2)
+  employeeRate        Decimal?                      @db.Decimal(8, 6)
+  employerRate        Decimal?                      @db.Decimal(8, 6)
+  baseTax             Decimal?                      @db.Decimal(12, 2)
+  marginalRate        Decimal?                      @db.Decimal(8, 6)
+  effectiveFrom       DateTime
+  effectiveTo         DateTime?
+  referenceCode       String?
+  metadata            Json?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+
+  @@index([contributionType, payrollFrequency, effectiveFrom])
+  @@index([contributionType, effectiveFrom, lowerBound])
+  @@index([effectiveFrom, effectiveTo])
 }
 
-model EmployeeRateHistory {
-  id               String           @id @default(cuid())
-  employeeId       String
-  dailyRate        Decimal?         @db.Decimal(10, 2)
-  hourlyRate       Decimal?         @db.Decimal(10, 2)
-  monthlyRate      Decimal?         @db.Decimal(10, 2)
-  payrollFrequency PayrollFrequency @default(BIMONTHLY)
-  effectiveFrom    DateTime         @default(now())
-  reason           String?
-  metadata         Json?
-  createdByUserId  String?
-  createdAt        DateTime         @default(now())
-  employee         Employee         @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
-  createdBy        User?            @relation("EmployeeRateHistoryCreatedBy", fields: [createdByUserId], references: [userId], onDelete: SetNull)
+model PositionRateHistory {
+  id              String    @id @default(cuid())
+  positionId      String
+  dailyRate       Decimal?  @db.Decimal(10, 2)
+  hourlyRate      Decimal?  @db.Decimal(10, 2)
+  monthlyRate     Decimal?  @db.Decimal(12, 2)
+  currencyCode    String    @default("PHP")
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  reason          String?
+  metadata        Json?
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
 
-  @@unique([employeeId, effectiveFrom])
-  @@index([effectiveFrom])
+  position  Position @relation(fields: [positionId], references: [positionId], onDelete: Cascade)
+  createdBy User?    @relation("PositionRateHistoryCreatedBy", fields: [createdByUserId], references: [userId], onDelete: SetNull)
+
+  @@unique([positionId, effectiveFrom])
+  @@index([positionId, effectiveFrom])
+  @@index([createdByUserId])
 }
 
 model EmployeePositionHistory {
@@ -242,9 +238,6 @@ model EmployeePositionHistory {
   @@index([positionId])
 }
 
-// ======== SCHEDULE AND SHIFTS ========= //
-
-/// A reusable shift template. Keep it small and only add more fields once needed.
 model Shift {
   id                 Int      @id @default(autoincrement())
   code               String   @unique
@@ -814,7 +807,12 @@ model PayrollEmployee {
   minutesNetWorked      Int                   @default(0)
   minutesOvertime       Int                   @default(0)
   minutesUndertime      Int                   @default(0)
+  positionIdSnapshot    String?
+  positionNameSnapshot  String?
   dailyRateSnapshot     Decimal?              @db.Decimal(10, 2)
+  hourlyRateSnapshot    Decimal?              @db.Decimal(10, 2)
+  monthlyRateSnapshot   Decimal?              @db.Decimal(12, 2)
+  currencyCodeSnapshot  String?
   ratePerMinuteSnapshot Decimal?              @db.Decimal(12, 6)
   grossPay              Decimal               @default(0) @db.Decimal(12, 2)
   totalEarnings         Decimal               @default(0) @db.Decimal(12, 2)
@@ -868,37 +866,45 @@ model PayrollEarning {
 }
 
 model PayrollDeduction {
-  id                    String                @id @default(cuid())
-  payrollEmployeeId     String
+  id                        String                @id @default(cuid())
+  payrollEmployeeId         String
   // Keep enum for core/system deductions; use OTHER for custom catalog-driven types.
-  deductionType         PayrollDeductionType  @default(OTHER)
+  deductionType             PayrollDeductionType  @default(OTHER)
   // Optional link to dynamic DeductionType created by GM.
-  deductionTypeId       String?
+  deductionTypeId           String?
   // Optional link back to employee assignment that produced this line.
-  assignmentId          String?
+  assignmentId              String?
   // Snapshot label shown in payslip even if master type changes later.
-  deductionCodeSnapshot String?
-  deductionNameSnapshot String?
-  payrollFrequency      PayrollFrequency?
-  periodStartSnapshot   DateTime?
-  periodEndSnapshot     DateTime?
-  quantitySnapshot      Decimal?              @db.Decimal(12, 2)
-  unitLabelSnapshot     String?
-  metadata              Json?
-  amount                Decimal               @db.Decimal(12, 2)
-  minutes               Int?
-  rateSnapshot          Decimal?              @db.Decimal(12, 6)
-  source                PayrollLineSource     @default(SYSTEM)
-  isManual              Boolean               @default(false)
-  referenceType         PayrollReferenceType?
-  referenceId           String?
-  remarks               String?
-  isVoided              Boolean               @default(false)
-  voidedAt              DateTime?
-  voidReason            String?
-  createdByUserId       String?
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  deductionCodeSnapshot     String?
+  deductionNameSnapshot     String?
+  contributionType          ContributionType?
+  bracketIdSnapshot         String?
+  bracketReferenceSnapshot  String?
+  payrollFrequency          PayrollFrequency?
+  periodStartSnapshot       DateTime?
+  periodEndSnapshot         DateTime?
+  compensationBasisSnapshot Decimal?              @db.Decimal(12, 2)
+  employeeShareSnapshot     Decimal?              @db.Decimal(12, 2)
+  employerShareSnapshot     Decimal?              @db.Decimal(12, 2)
+  baseTaxSnapshot           Decimal?              @db.Decimal(12, 2)
+  marginalRateSnapshot      Decimal?              @db.Decimal(8, 6)
+  quantitySnapshot          Decimal?              @db.Decimal(12, 4)
+  unitLabelSnapshot         String?
+  metadata                  Json?
+  amount                    Decimal               @db.Decimal(12, 2)
+  minutes                   Int?
+  rateSnapshot              Decimal?              @db.Decimal(12, 6)
+  source                    PayrollLineSource     @default(SYSTEM)
+  isManual                  Boolean               @default(false)
+  referenceType             PayrollReferenceType?
+  referenceId               String?
+  remarks                   String?
+  isVoided                  Boolean               @default(false)
+  voidedAt                  DateTime?
+  voidReason                String?
+  createdByUserId           String?
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
 
   payrollEmployee  PayrollEmployee              @relation(fields: [payrollEmployeeId], references: [id], onDelete: Cascade)
   deductionTypeDef DeductionType?               @relation(fields: [deductionTypeId], references: [id], onDelete: SetNull)
@@ -925,12 +931,22 @@ enum PayrollFrequency {
   MONTHLY
 }
 
-enum ContributionSchedule {
-  PER_PAYROLL
-  MONTHLY
-  QUARTERLY
-  YEARLY
-  AD_HOC
+enum ContributionType {
+  SSS
+  PHILHEALTH
+  PAGIBIG
+  WITHHOLDING
+}
+
+enum ContributionCalculationMethod {
+  FIXED_AMOUNTS
+  PERCENT_OF_BASE
+  BASE_PLUS_PERCENT_OF_EXCESS
+}
+
+enum ContributionBaseKind {
+  MONTHLY_BASIC
+  PAYROLL_TAXABLE
 }
 
 enum PayrollStatus {

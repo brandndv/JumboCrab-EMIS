@@ -45,8 +45,6 @@ function EmployeeEditPageContent({
         // Normalize nullable fields from Prisma to match the Employee form type
         setEmployee({
           ...data,
-          dailyRate:
-            data.dailyRate == null ? null : Number(data.dailyRate),
           isEnded: data.isEnded ?? false,
           img: data.img ?? null,
           emergencyContactName: data.emergencyContactName ?? null,
