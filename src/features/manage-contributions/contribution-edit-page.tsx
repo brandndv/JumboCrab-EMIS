@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast-provider";
-import type { PayrollFrequency } from "@prisma/client";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -34,8 +33,6 @@ export function ContributionEditPage({
   returnPath,
 }: ContributionEditPageProps) {
   const toast = useToast();
-  const [previewFrequency, setPreviewFrequency] =
-    useState<PayrollFrequency>("BIMONTHLY");
   const [record, setRecord] = useState<Awaited<
     ReturnType<typeof getEmployeeContribution>
   >["data"] | null>(null);
@@ -47,10 +44,7 @@ export function ContributionEditPage({
       try {
         setLoading(true);
         setError(null);
-        const result = await getEmployeeContribution({
-          employeeId,
-          previewFrequency,
-        });
+        const result = await getEmployeeContribution({ employeeId });
         if (!result.success) {
           throw new Error(result.error || "Failed to load contribution preview");
         }
@@ -68,7 +62,7 @@ export function ContributionEditPage({
     };
 
     void load();
-  }, [employeeId, previewFrequency, toast]);
+  }, [employeeId, toast]);
 
   const previewLines = useMemo(
     () =>
@@ -93,21 +87,11 @@ export function ContributionEditPage({
         <div>
           <h1 className="text-2xl font-bold">Contribution Preview</h1>
           <p className="text-sm text-muted-foreground">
-            Read-only statutory contribution preview based on position-owned rates and seeded official brackets
+            Read-only monthly statutory contribution preview based on
+            position-owned rates and seeded official brackets
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={previewFrequency}
-            onChange={(event) =>
-              setPreviewFrequency(event.target.value as PayrollFrequency)
-            }
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-          >
-            <option value="BIMONTHLY">Semi-monthly tax preview</option>
-            <option value="WEEKLY">Weekly tax preview</option>
-            <option value="MONTHLY">Monthly tax preview</option>
-          </select>
           <Button asChild variant="outline">
             <Link href={returnPath}>Back</Link>
           </Button>
@@ -201,6 +185,17 @@ export function ContributionEditPage({
                     </CardTitle>
                     <Badge variant="outline">{statusLabel(line.status)}</Badge>
                   </div>
+                  <div className="pt-2">
+                    <Badge
+                      variant={
+                        line.isIncludedInPayroll ? "success" : "secondary"
+                      }
+                    >
+                      {line.isIncludedInPayroll
+                        ? "Included in payroll"
+                        : "Excluded from payroll"}
+                    </Badge>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p>
@@ -217,6 +212,9 @@ export function ContributionEditPage({
                   </p>
                   <p className="text-muted-foreground">
                     ID: {line.governmentNumber || "Not set"}
+                  </p>
+                  <p className="text-muted-foreground">
+                    Range: {line.bracketRangeLabel || "—"}
                   </p>
                   <p className="text-muted-foreground">
                     Bracket: {line.bracketReference || line.bracketId || "—"}

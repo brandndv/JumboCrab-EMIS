@@ -23,13 +23,35 @@ export type ContributionPreviewStatus =
 export type ContributionPreviewLine = {
   contributionType: ContributionType;
   status: ContributionPreviewStatus;
+  isIncludedInPayroll: boolean;
   governmentNumber: string | null;
   basisAmount: number | null;
   employeeShare: number;
   employerShare: number;
   bracketId: string | null;
   bracketReference: string | null;
+  bracketRangeLabel: string | null;
   remarks: string | null;
+};
+
+export type ContributionBracketViewRow = {
+  id: string;
+  lowerBound: number;
+  upperBound: number | null;
+  employeeFixedAmount: number | null;
+  employerFixedAmount: number | null;
+  employeeRate: number | null;
+  employerRate: number | null;
+  baseTax: number | null;
+  marginalRate: number | null;
+  referenceCode: string | null;
+};
+
+export type ContributionBracketViewSection = {
+  contributionType: ContributionType;
+  title: string;
+  description: string;
+  rows: ContributionBracketViewRow[];
 };
 
 export type ContributionPreviewRecord = {
@@ -66,14 +88,18 @@ type ContributionPreviewEmployee = {
   position: { name: string; updatedAt: Date } | null;
   governmentId: {
     sssNumber: string | null;
+    isSssIncludedInPayroll: boolean;
     philHealthNumber: string | null;
+    isPhilHealthIncludedInPayroll: boolean;
     pagIbigNumber: string | null;
+    isPagIbigIncludedInPayroll: boolean;
     tinNumber: string | null;
+    isWithholdingIncludedInPayroll: boolean;
     updatedAt: Date;
   } | null;
 };
 
-const DEFAULT_PREVIEW_FREQUENCY = PayrollFrequency.BIMONTHLY;
+const DEFAULT_PREVIEW_FREQUENCY = PayrollFrequency.MONTHLY;
 
 const payrollFrequencyPreviewDivisor = (frequency: PayrollFrequency) => {
   if (frequency === PayrollFrequency.WEEKLY) return 4;
@@ -86,17 +112,38 @@ const buildEmptyLine = (
   status: ContributionPreviewStatus,
   remarks: string,
   governmentNumber: string | null,
+  isIncludedInPayroll: boolean,
 ): ContributionPreviewLine => ({
   contributionType,
   status,
+  isIncludedInPayroll,
   governmentNumber,
   basisAmount: null,
   employeeShare: 0,
   employerShare: 0,
   bracketId: null,
   bracketReference: null,
+  bracketRangeLabel: null,
   remarks,
 });
+
+const formatBracketRangeLabel = (input: {
+  lowerBound: number;
+  upperBound: number | null;
+}) => {
+  const formatValue = (value: number) =>
+    new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      maximumFractionDigits: 2,
+    }).format(value);
+
+  if (input.upperBound == null) {
+    return `${formatValue(input.lowerBound)} and above`;
+  }
+
+  return `${formatValue(input.lowerBound)} to ${formatValue(input.upperBound)}`;
+};
 
 const resolveGovernmentNumber = (
   employee: {
@@ -105,6 +152,10 @@ const resolveGovernmentNumber = (
       philHealthNumber?: string | null;
       pagIbigNumber?: string | null;
       tinNumber?: string | null;
+      isSssIncludedInPayroll?: boolean;
+      isPhilHealthIncludedInPayroll?: boolean;
+      isPagIbigIncludedInPayroll?: boolean;
+      isWithholdingIncludedInPayroll?: boolean;
     } | null;
   },
   contributionType: ContributionType,
@@ -119,6 +170,29 @@ const resolveGovernmentNumber = (
     return employee.governmentId?.pagIbigNumber?.trim() || null;
   }
   return employee.governmentId?.tinNumber?.trim() || null;
+};
+
+const resolvePayrollInclusion = (
+  employee: {
+    governmentId?: {
+      isSssIncludedInPayroll?: boolean;
+      isPhilHealthIncludedInPayroll?: boolean;
+      isPagIbigIncludedInPayroll?: boolean;
+      isWithholdingIncludedInPayroll?: boolean;
+    } | null;
+  },
+  contributionType: ContributionType,
+) => {
+  if (contributionType === ContributionType.SSS) {
+    return employee.governmentId?.isSssIncludedInPayroll ?? true;
+  }
+  if (contributionType === ContributionType.PHILHEALTH) {
+    return employee.governmentId?.isPhilHealthIncludedInPayroll ?? true;
+  }
+  if (contributionType === ContributionType.PAGIBIG) {
+    return employee.governmentId?.isPagIbigIncludedInPayroll ?? true;
+  }
+  return employee.governmentId?.isWithholdingIncludedInPayroll ?? true;
 };
 
 const latestTimestamp = (...values: Array<Date | null | undefined>) =>
@@ -136,6 +210,7 @@ const buildComputedLine = (input: {
   governmentNumber: string | null;
   previewFrequency?: PayrollFrequency;
   brackets: Awaited<ReturnType<typeof loadActiveContributionBrackets>>;
+  isIncludedInPayroll: boolean;
 }) => {
   const bracket = findApplicableContributionBracket({
     brackets: input.brackets,
@@ -153,6 +228,7 @@ const buildComputedLine = (input: {
       "NO_BRACKET",
       "No active official bracket matched the current rate basis.",
       input.governmentNumber,
+      input.isIncludedInPayroll,
     );
   }
 
@@ -164,12 +240,17 @@ const buildComputedLine = (input: {
   return {
     contributionType: input.contributionType,
     status: "READY",
+    isIncludedInPayroll: input.isIncludedInPayroll,
     governmentNumber: input.governmentNumber,
     basisAmount: calculation.basisAmount,
     employeeShare: calculation.employeeShare,
     employerShare: calculation.employerShare,
     bracketId: bracket.id,
     bracketReference: bracket.referenceCode ?? null,
+    bracketRangeLabel: formatBracketRangeLabel({
+      lowerBound: bracket.lowerBound,
+      upperBound: bracket.upperBound,
+    }),
     remarks: null,
   } satisfies ContributionPreviewLine;
 };
@@ -201,9 +282,26 @@ const buildContributionRecord = (input: {
       "MISSING_POSITION_RATE",
       "Assign an active position with a saved rate first.",
       resolveGovernmentNumber(input.employee, contributionType),
+      resolvePayrollInclusion(input.employee, contributionType),
     );
 
   const currentMonthlyRate = compensationSnapshot?.monthlyRate ?? null;
+  const sssIncludedInPayroll = resolvePayrollInclusion(
+    input.employee,
+    ContributionType.SSS,
+  );
+  const philHealthIncludedInPayroll = resolvePayrollInclusion(
+    input.employee,
+    ContributionType.PHILHEALTH,
+  );
+  const pagIbigIncludedInPayroll = resolvePayrollInclusion(
+    input.employee,
+    ContributionType.PAGIBIG,
+  );
+  const withholdingIncludedInPayroll = resolvePayrollInclusion(
+    input.employee,
+    ContributionType.WITHHOLDING,
+  );
   const sssNumber = resolveGovernmentNumber(input.employee, ContributionType.SSS);
   const philHealthNumber = resolveGovernmentNumber(
     input.employee,
@@ -227,12 +325,14 @@ const buildContributionRecord = (input: {
             "MISSING_GOV_ID",
             "SSS number is missing.",
             null,
+            sssIncludedInPayroll,
           )
         : buildComputedLine({
             contributionType: ContributionType.SSS,
             basisAmount: currentMonthlyRate,
             governmentNumber: sssNumber,
             brackets: input.brackets,
+            isIncludedInPayroll: sssIncludedInPayroll,
           });
 
   const philHealth =
@@ -244,12 +344,14 @@ const buildContributionRecord = (input: {
             "MISSING_GOV_ID",
             "PhilHealth number is missing.",
             null,
+            philHealthIncludedInPayroll,
           )
         : buildComputedLine({
             contributionType: ContributionType.PHILHEALTH,
             basisAmount: currentMonthlyRate,
             governmentNumber: philHealthNumber,
             brackets: input.brackets,
+            isIncludedInPayroll: philHealthIncludedInPayroll,
           });
 
   const pagIbig =
@@ -261,12 +363,14 @@ const buildContributionRecord = (input: {
             "MISSING_GOV_ID",
             "Pag-IBIG number is missing.",
             null,
+            pagIbigIncludedInPayroll,
           )
         : buildComputedLine({
             contributionType: ContributionType.PAGIBIG,
             basisAmount: currentMonthlyRate,
             governmentNumber: pagIbigNumber,
             brackets: input.brackets,
+            isIncludedInPayroll: pagIbigIncludedInPayroll,
           });
 
   const withholdingBasis =
@@ -285,7 +389,12 @@ const buildContributionRecord = (input: {
           governmentNumber: tinNumber,
           previewFrequency: input.previewFrequency,
           brackets: input.brackets,
+          isIncludedInPayroll: withholdingIncludedInPayroll,
         });
+
+  const includedLines = [sss, philHealth, pagIbig, withholding].filter(
+    (line) => line.isIncludedInPayroll,
+  );
 
   const updatedAt = latestTimestamp(
     input.employee.updatedAt,
@@ -306,18 +415,16 @@ const buildContributionRecord = (input: {
     currencyCode,
     previewFrequency: input.previewFrequency,
     eeTotal: roundCurrency(
-      sss.employeeShare +
-        philHealth.employeeShare +
-        pagIbig.employeeShare +
-        withholding.employeeShare,
+      includedLines.reduce((sum, line) => sum + line.employeeShare, 0),
     ),
     isReady:
       Boolean(compensationSnapshot?.dailyRate) &&
-      [sss, philHealth, pagIbig, withholding].every(
-        (line) => line.status === "READY" || line.contributionType === ContributionType.WITHHOLDING,
+      [sss, philHealth, pagIbig].every(
+        (line) => !line.isIncludedInPayroll || line.status === "READY",
       ),
     hasMissingGovernmentIds: [sss, philHealth, pagIbig].some(
-      (line) => line.status === "MISSING_GOV_ID",
+      (line) =>
+        line.isIncludedInPayroll && line.status === "MISSING_GOV_ID",
     ),
     updatedAt: (updatedAt ?? input.employee.updatedAt).toISOString(),
     sss,
@@ -327,11 +434,8 @@ const buildContributionRecord = (input: {
   } satisfies ContributionPreviewRecord;
 };
 
-async function loadContributionPreviewDirectory(input?: {
-  previewFrequency?: PayrollFrequency;
-  employeeId?: string;
-}) {
-  const previewFrequency = input?.previewFrequency ?? DEFAULT_PREVIEW_FREQUENCY;
+async function loadContributionPreviewDirectory(input?: { employeeId?: string }) {
+  const previewFrequency = DEFAULT_PREVIEW_FREQUENCY;
   const today = new Date();
   const todayKey = today.toLocaleDateString("en-CA", {
     timeZone: "Asia/Manila",
@@ -365,9 +469,13 @@ async function loadContributionPreviewDirectory(input?: {
         governmentId: {
           select: {
             sssNumber: true,
+            isSssIncludedInPayroll: true,
             philHealthNumber: true,
+            isPhilHealthIncludedInPayroll: true,
             pagIbigNumber: true,
+            isPagIbigIncludedInPayroll: true,
             tinNumber: true,
+            isWithholdingIncludedInPayroll: true,
             updatedAt: true,
           },
         },
@@ -397,7 +505,6 @@ async function loadContributionPreviewDirectory(input?: {
 
 export async function getEmployeeContribution(input: {
   employeeId: string | undefined;
-  previewFrequency?: PayrollFrequency;
 }) {
   try {
     if (!input.employeeId) {
@@ -406,7 +513,6 @@ export async function getEmployeeContribution(input: {
 
     const rows = await loadContributionPreviewDirectory({
       employeeId: input.employeeId,
-      previewFrequency: input.previewFrequency,
     });
 
     return { success: true, data: rows[0] ?? null };
@@ -416,14 +522,85 @@ export async function getEmployeeContribution(input: {
   }
 }
 
-export async function listContributionDirectory(input?: {
-  previewFrequency?: PayrollFrequency;
-}) {
+export async function listContributionDirectory() {
   try {
-    const rows = await loadContributionPreviewDirectory(input);
+    const rows = await loadContributionPreviewDirectory();
     return { success: true, data: rows };
   } catch (error) {
     console.error("Error listing computed contributions:", error);
     return { success: false, error: "Failed to load contribution previews" };
+  }
+}
+
+export async function listContributionBracketDirectory() {
+  try {
+    const previewFrequency = DEFAULT_PREVIEW_FREQUENCY;
+    const brackets = await loadActiveContributionBrackets(new Date());
+
+    const buildSection = (
+      contributionType: ContributionType,
+      title: string,
+      description: string,
+      rows: ContributionBracketViewRow[],
+    ) => ({
+      contributionType,
+      title,
+      description,
+      rows,
+    });
+
+    const mapRows = (contributionType: ContributionType, payrollFrequency?: PayrollFrequency) =>
+      brackets
+        .filter((row) => {
+          if (row.contributionType !== contributionType) return false;
+          if (contributionType === ContributionType.WITHHOLDING) {
+            return row.payrollFrequency === payrollFrequency;
+          }
+          return row.payrollFrequency == null;
+        })
+        .map((row) => ({
+          id: row.id,
+          lowerBound: row.lowerBound,
+          upperBound: row.upperBound,
+          employeeFixedAmount: row.employeeFixedAmount,
+          employerFixedAmount: row.employerFixedAmount,
+          employeeRate: row.employeeRate,
+          employerRate: row.employerRate,
+          baseTax: row.baseTax,
+          marginalRate: row.marginalRate,
+          referenceCode: row.referenceCode,
+        }));
+
+    const sections: ContributionBracketViewSection[] = [
+      buildSection(
+        ContributionType.SSS,
+        "SSS Monthly Brackets",
+        "Applied against the employee's monthly position rate.",
+        mapRows(ContributionType.SSS),
+      ),
+      buildSection(
+        ContributionType.PHILHEALTH,
+        "PhilHealth Monthly Brackets",
+        "Applied against the employee's monthly position rate.",
+        mapRows(ContributionType.PHILHEALTH),
+      ),
+      buildSection(
+        ContributionType.PAGIBIG,
+        "Pag-IBIG Monthly Brackets",
+        "Applied against the employee's monthly position rate.",
+        mapRows(ContributionType.PAGIBIG),
+      ),
+      buildSection(
+        ContributionType.WITHHOLDING,
+        "Monthly Withholding Brackets",
+        "Applied against the taxable monthly payroll amount for preview purposes.",
+        mapRows(ContributionType.WITHHOLDING, previewFrequency),
+      ),
+    ];
+
+    return { success: true, data: sections };
+  } catch (error) {
+    console.error("Error loading contribution brackets:", error);
+    return { success: false, error: "Failed to load contribution brackets" };
   }
 }

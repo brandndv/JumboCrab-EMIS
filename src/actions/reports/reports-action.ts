@@ -1110,10 +1110,17 @@ async function fetchContributionsDeductionsReport(
           pagIbigEe,
           withholdingEe,
           employeeShareTotal: sssEe + philHealthEe + pagIbigEe + withholdingEe,
-          isSssActive: record.sss.status === "READY",
-          isPhilHealthActive: record.philHealth.status === "READY",
-          isPagIbigActive: record.pagIbig.status === "READY",
-          isWithholdingActive: record.withholding.status === "READY",
+          isSssActive:
+            record.sss.isIncludedInPayroll && record.sss.status === "READY",
+          isPhilHealthActive:
+            record.philHealth.isIncludedInPayroll &&
+            record.philHealth.status === "READY",
+          isPagIbigActive:
+            record.pagIbig.isIncludedInPayroll &&
+            record.pagIbig.status === "READY",
+          isWithholdingActive:
+            record.withholding.isIncludedInPayroll &&
+            record.withholding.status === "READY",
         };
       },
     );

@@ -256,6 +256,22 @@ const resolveGovernmentNumber = (
   return employee.governmentId?.tinNumber?.trim() || null;
 };
 
+const isContributionIncludedInPayroll = (
+  employee: PayrollGenerationEmployee,
+  contributionType: ContributionType,
+) => {
+  if (contributionType === ContributionType.SSS) {
+    return employee.governmentId?.isSssIncludedInPayroll ?? true;
+  }
+  if (contributionType === ContributionType.PHILHEALTH) {
+    return employee.governmentId?.isPhilHealthIncludedInPayroll ?? true;
+  }
+  if (contributionType === ContributionType.PAGIBIG) {
+    return employee.governmentId?.isPagIbigIncludedInPayroll ?? true;
+  }
+  return employee.governmentId?.isWithholdingIncludedInPayroll ?? true;
+};
+
 const deductionTypeForContribution = (contributionType: ContributionType) => {
   if (contributionType === ContributionType.SSS) {
     return PayrollDeductionType.CONTRIBUTION_SSS;
@@ -568,6 +584,10 @@ export const buildEmployeePayrollDraft = (input: {
         ContributionType.PHILHEALTH,
         ContributionType.PAGIBIG,
       ] as const) {
+        if (!isContributionIncludedInPayroll(employee, contributionType)) {
+          continue;
+        }
+
         const deductionKey = buildMonthlyGovernmentDeductionKey(
           employee.employeeId,
           contributionType,
@@ -635,54 +655,59 @@ export const buildEmployeePayrollDraft = (input: {
       }
     }
 
-    const withholdingBracket = findApplicableContributionBracket({
-      brackets: input.contributionBrackets,
-      contributionType: ContributionType.WITHHOLDING,
-      payrollFrequency: runFrequency,
-      basisAmount: earningsSubtotal,
-    });
-
-    if (!withholdingBracket) {
-      throw new Error(
-        `Cannot generate payroll. No active withholding bracket matched ${earningsSubtotal.toFixed(2)} for ${getEmployeeLabel(employee)} (${runFrequency}).`,
-      );
-    }
-
-    const withholding = calculateContributionFromBracket({
-      bracket: withholdingBracket,
-      basisAmount: earningsSubtotal,
-    });
-
-    if (withholding.employeeShare > 0) {
-      deductions.push({
-        deductionType: PayrollDeductionType.WITHHOLDING_TAX,
+    if (isContributionIncludedInPayroll(employee, ContributionType.WITHHOLDING)) {
+      const withholdingBracket = findApplicableContributionBracket({
+        brackets: input.contributionBrackets,
         contributionType: ContributionType.WITHHOLDING,
-        bracketIdSnapshot: withholding.bracket.id,
-        bracketReferenceSnapshot:
-          withholding.bracket.referenceCode ?? undefined,
         payrollFrequency: runFrequency,
-        periodStartSnapshot: input.payrollPeriodStart,
-        periodEndSnapshot: input.payrollPeriodEnd,
-        compensationBasisSnapshot: withholding.basisAmount,
-        employeeShareSnapshot: withholding.employeeShare,
-        employerShareSnapshot: withholding.employerShare,
-        baseTaxSnapshot: withholding.baseTax ?? undefined,
-        marginalRateSnapshot: withholding.marginalRate ?? undefined,
-        quantitySnapshot: 1,
-        unitLabelSnapshot: "tax bracket",
-        metadata: {
-          currencyCode: periodEndSnapshot.currencyCode,
-          taxableCompensation: earningsSubtotal,
-          tinNumber: resolveGovernmentNumber(employee, ContributionType.WITHHOLDING),
-          ...(withholding.bracket.metadata ?? {}),
-        },
-        amount: roundCurrency(withholding.employeeShare),
-        source: PayrollLineSource.CONTRIBUTION_ENGINE,
-        isManual: false,
-        referenceType: PayrollReferenceType.CONTRIBUTION,
-        referenceId: withholding.bracket.id,
-        remarks: "Withholding tax",
+        basisAmount: earningsSubtotal,
       });
+
+      if (!withholdingBracket) {
+        throw new Error(
+          `Cannot generate payroll. No active withholding bracket matched ${earningsSubtotal.toFixed(2)} for ${getEmployeeLabel(employee)} (${runFrequency}).`,
+        );
+      }
+
+      const withholding = calculateContributionFromBracket({
+        bracket: withholdingBracket,
+        basisAmount: earningsSubtotal,
+      });
+
+      if (withholding.employeeShare > 0) {
+        deductions.push({
+          deductionType: PayrollDeductionType.WITHHOLDING_TAX,
+          contributionType: ContributionType.WITHHOLDING,
+          bracketIdSnapshot: withholding.bracket.id,
+          bracketReferenceSnapshot:
+            withholding.bracket.referenceCode ?? undefined,
+          payrollFrequency: runFrequency,
+          periodStartSnapshot: input.payrollPeriodStart,
+          periodEndSnapshot: input.payrollPeriodEnd,
+          compensationBasisSnapshot: withholding.basisAmount,
+          employeeShareSnapshot: withholding.employeeShare,
+          employerShareSnapshot: withholding.employerShare,
+          baseTaxSnapshot: withholding.baseTax ?? undefined,
+          marginalRateSnapshot: withholding.marginalRate ?? undefined,
+          quantitySnapshot: 1,
+          unitLabelSnapshot: "tax bracket",
+          metadata: {
+            currencyCode: periodEndSnapshot.currencyCode,
+            taxableCompensation: earningsSubtotal,
+            tinNumber: resolveGovernmentNumber(
+              employee,
+              ContributionType.WITHHOLDING,
+            ),
+            ...(withholding.bracket.metadata ?? {}),
+          },
+          amount: roundCurrency(withholding.employeeShare),
+          source: PayrollLineSource.CONTRIBUTION_ENGINE,
+          isManual: false,
+          referenceType: PayrollReferenceType.CONTRIBUTION,
+          referenceId: withholding.bracket.id,
+          remarks: "Withholding tax",
+        });
+      }
     }
   }
 

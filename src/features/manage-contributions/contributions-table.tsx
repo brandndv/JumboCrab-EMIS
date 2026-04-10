@@ -1,22 +1,30 @@
 "use client";
 
 import { type ContributionPreviewLine } from "@/actions/contributions/contributions-action";
+import { updateContributionPayrollInclusion } from "@/actions/contributions/government-ids-action";
 import { InlineLoadingState } from "@/components/loading/loading-states";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useToast } from "@/components/ui/toast-provider";
 import { type ContributionRow } from "@/hooks/use-contributions";
-import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronUp, IdCard } from "lucide-react";
+import { ChevronDown, ChevronUp, IdCard, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 type ContributionsTableProps = {
   rows: ContributionRow[];
   loading?: boolean;
+  onUpdateContributionInclusion?: (input: {
+    employeeId: string;
+    contributionType: ContributionPreviewLine["contributionType"];
+    includeInPayroll: boolean;
+    updatedAt?: string;
+  }) => void;
 };
 
 const formatCurrency = (value: number, currencyCode: string) =>
@@ -28,12 +36,6 @@ const formatCurrency = (value: number, currencyCode: string) =>
 
 const formatOptionalCurrency = (value: number | null, currencyCode: string) =>
   value == null ? "—" : formatCurrency(value, currencyCode);
-
-const humanizeFrequency = (value: ContributionRow["previewFrequency"]) => {
-  if (value === "WEEKLY") return "Weekly";
-  if (value === "MONTHLY") return "Monthly";
-  return "Semi-monthly";
-};
 
 const humanizeType = (value: ContributionPreviewLine["contributionType"]) => {
   if (value === "PHILHEALTH") return "PhilHealth";
@@ -59,10 +61,54 @@ const statusLabel = (status: ContributionPreviewLine["status"]) => {
 export function ContributionsTable({
   rows,
   loading,
+  onUpdateContributionInclusion,
 }: ContributionsTableProps) {
+  const toast = useToast();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  if (loading) {
+  const handleTogglePayrollInclusion = async (
+    row: ContributionRow,
+    line: ContributionPreviewLine,
+  ) => {
+    const key = `${row.employeeId}:${line.contributionType}`;
+    try {
+      setPendingKey(key);
+      const result = await updateContributionPayrollInclusion({
+        employeeId: row.employeeId,
+        contributionType: line.contributionType,
+        includeInPayroll: !line.isIncludedInPayroll,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update payroll inclusion");
+      }
+
+      onUpdateContributionInclusion?.({
+        employeeId: row.employeeId,
+        contributionType: line.contributionType,
+        includeInPayroll: !line.isIncludedInPayroll,
+        updatedAt: result.data?.updatedAt,
+      });
+      toast.success(
+        line.isIncludedInPayroll
+          ? `${humanizeType(line.contributionType)} excluded from payroll.`
+          : `${humanizeType(line.contributionType)} included in payroll.`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update payroll inclusion";
+      toast.error("Failed to update payroll inclusion.", {
+        description: message,
+      });
+    } finally {
+      setPendingKey(null);
+    }
+  };
+
+  if (loading && rows.length === 0) {
     return <InlineLoadingState label="Loading contributions" lines={3} />;
   }
 
@@ -90,6 +136,14 @@ export function ContributionsTable({
             row.pagIbig,
             row.withholding,
           ];
+          const includedLines = previewLines.filter(
+            (line) => line.isIncludedInPayroll,
+          );
+          const excludedCount = previewLines.length - includedLines.length;
+          const includedSummary =
+            includedLines.length > 0
+              ? includedLines.map((line) => humanizeType(line.contributionType)).join(", ")
+              : "No statutory items included in payroll";
 
           return (
             <Collapsible
@@ -131,26 +185,23 @@ export function ContributionsTable({
                   </div>
 
                   <div className="md:col-span-4">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <Badge variant={row.isReady ? "default" : "outline"}>
-                        {row.isReady ? "Ready" : "Needs attention"}
-                      </Badge>
-                      <Badge variant="secondary">
-                        {humanizeFrequency(row.previewFrequency)} preview
-                      </Badge>
-                      <Badge variant="outline">
-                        {formatCurrency(row.eeTotal, row.currencyCode)}
-                      </Badge>
-                      {previewLines.map((line) => (
-                        <Badge
-                          key={line.contributionType}
-                          variant="outline"
-                          className={cn(statusBadgeClass(line.status))}
-                        >
-                          {humanizeType(line.contributionType)}{" "}
-                          {formatCurrency(line.employeeShare, row.currencyCode)}
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Badge variant={row.isReady ? "success" : "warning"}>
+                          {row.isReady ? "Ready" : "Needs attention"}
                         </Badge>
-                      ))}
+                        <Badge variant="outline">
+                          Included total {formatCurrency(row.eeTotal, row.currencyCode)}
+                        </Badge>
+                        {excludedCount > 0 ? (
+                          <Badge variant="secondary">
+                            {excludedCount} excluded from payroll
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {includedSummary}
+                      </p>
                     </div>
                   </div>
 
@@ -212,6 +263,40 @@ export function ContributionsTable({
                           </Badge>
                         </div>
 
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant={
+                              line.isIncludedInPayroll ? "success" : "secondary"
+                            }
+                          >
+                            {line.isIncludedInPayroll
+                              ? "Included in payroll"
+                              : "Excluded from payroll"}
+                          </Badge>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={
+                              line.isIncludedInPayroll ? "outline" : "default"
+                            }
+                            disabled={
+                              pendingKey ===
+                              `${row.employeeId}:${line.contributionType}`
+                            }
+                            onClick={() =>
+                              void handleTogglePayrollInclusion(row, line)
+                            }
+                          >
+                            {pendingKey ===
+                            `${row.employeeId}:${line.contributionType}` ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : null}
+                            {line.isIncludedInPayroll
+                              ? "Exclude from payroll"
+                              : "Include in payroll"}
+                          </Button>
+                        </div>
+
                         <div className="mt-3 space-y-1">
                           <p className="text-xs text-muted-foreground">
                             Employee share
@@ -226,6 +311,12 @@ export function ContributionsTable({
                         </div>
 
                         <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                          {!line.isIncludedInPayroll ? (
+                            <p className="rounded-md border border-dashed border-border/70 bg-muted/20 px-2 py-1.5">
+                              Excluded items stay visible here for reference but will
+                              not be deducted when payroll is generated.
+                            </p>
+                          ) : null}
                           <div className="flex items-start gap-2">
                             <IdCard className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                             <span>{line.governmentNumber || "Not set"}</span>
@@ -235,6 +326,9 @@ export function ContributionsTable({
                             {line.basisAmount == null
                               ? "—"
                               : formatCurrency(line.basisAmount, row.currencyCode)}
+                          </p>
+                          <p>
+                            Range: {line.bracketRangeLabel || "—"}
                           </p>
                           <p>
                             Bracket: {line.bracketReference || line.bracketId || "—"}

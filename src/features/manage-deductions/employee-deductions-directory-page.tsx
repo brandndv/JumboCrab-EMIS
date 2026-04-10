@@ -420,6 +420,21 @@ function EmployeeDeductionsDirectoryPageContent({
     setEmployeeDropdownOpen(false);
   };
 
+  const selectSummaryEmployee = (row: EmployeeDeductionSummaryRow) => {
+    const employee = employees.find(
+      (candidate) => candidate.employeeId === row.employeeId,
+    );
+
+    if (employee) {
+      selectEmployee(employee);
+      return;
+    }
+
+    setSelectedEmployeeId(row.employeeId);
+    setEmployeeQuery(`${row.employeeName} • ${row.employeeCode}`);
+    setEmployeeDropdownOpen(false);
+  };
+
   const replaceRow = (nextRow: DeductionAssignmentRow) => {
     setRows((current) =>
       current.map((row) => (row.id === nextRow.id ? nextRow : row)),
@@ -642,7 +657,20 @@ function EmployeeDeductionsDirectoryPageContent({
                   ) : null}
                   {!loadingRows &&
                     paginatedSummaryRows.map((row) => (
-                      <TableRow key={row.employeeId}>
+                      <TableRow
+                        key={row.employeeId}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`View deduction assignments for ${row.employeeName}`}
+                        className="cursor-pointer transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+                        onClick={() => selectSummaryEmployee(row)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            selectSummaryEmployee(row);
+                          }
+                        }}
+                      >
                         <TableCell className="min-w-56">
                           <div className="font-medium">{row.employeeName}</div>
                           <p className="text-xs text-muted-foreground">

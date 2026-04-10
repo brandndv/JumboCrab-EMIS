@@ -858,7 +858,16 @@ export function EmployeeProfileTabs({
                                 ? "Tax"
                                 : "SSS"}
                         </span>
-                        <Badge variant="outline">{line.status}</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">{line.status}</Badge>
+                          <Badge
+                            variant={
+                              line.isIncludedInPayroll ? "success" : "secondary"
+                            }
+                          >
+                            {line.isIncludedInPayroll ? "In payroll" : "Excluded"}
+                          </Badge>
+                        </div>
                       </div>
                       <div className="text-sm font-semibold">
                         EE: {formatRate(line.employeeShare)}
@@ -868,6 +877,9 @@ export function EmployeeProfileTabs({
                       </div>
                       <div className="text-xs text-muted-foreground">
                         ID: {line.governmentNumber || "Not set"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Range: {line.bracketRangeLabel || "—"}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         Bracket: {line.bracketReference || line.bracketId || "—"}

@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  listContributionBracketDirectory,
+  type ContributionPreviewLine,
+  type ContributionBracketViewSection,
   listContributionDirectory,
   type ContributionPreviewRecord,
 } from "@/actions/contributions/contributions-action";
-import type { PayrollFrequency } from "@prisma/client";
 import {
   createContext,
   useCallback,
@@ -16,10 +18,39 @@ import {
 
 export type ContributionRow = ContributionPreviewRecord;
 
-const fetchContributionRows = async (
-  previewFrequency: PayrollFrequency,
-): Promise<ContributionRow[]> => {
-  const result = await listContributionDirectory({ previewFrequency });
+type ContributionLineKey = "sss" | "philHealth" | "pagIbig" | "withholding";
+
+const resolveContributionLineKey = (
+  contributionType: ContributionPreviewLine["contributionType"],
+): ContributionLineKey => {
+  if (contributionType === "PHILHEALTH") return "philHealth";
+  if (contributionType === "PAGIBIG") return "pagIbig";
+  if (contributionType === "WITHHOLDING") return "withholding";
+  return "sss";
+};
+
+const recalculateContributionRow = (row: ContributionRow): ContributionRow => {
+  const statutoryLines = [row.sss, row.philHealth, row.pagIbig];
+  const previewLines = [...statutoryLines, row.withholding];
+  const includedLines = previewLines.filter((line) => line.isIncludedInPayroll);
+
+  return {
+    ...row,
+    eeTotal: includedLines.reduce((sum, line) => sum + line.employeeShare, 0),
+    isReady:
+      Boolean(row.dailyRate) &&
+      statutoryLines.every(
+        (line) => !line.isIncludedInPayroll || line.status === "READY",
+      ),
+    hasMissingGovernmentIds: statutoryLines.some(
+      (line) =>
+        line.isIncludedInPayroll && line.status === "MISSING_GOV_ID",
+    ),
+  };
+};
+
+const fetchContributionRows = async (): Promise<ContributionRow[]> => {
+  const result = await listContributionDirectory();
   if (!result.success) {
     throw new Error(result.error || "Failed to fetch contributions");
   }
@@ -31,21 +62,29 @@ export function useContributionsState() {
   const [contributions, setContributions] = useState<ContributionRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [bracketSections, setBracketSections] = useState<
+    ContributionBracketViewSection[]
+  >([]);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<
     "all" | "ready" | "needs-attention"
   >("all");
-  const [previewFrequency, setPreviewFrequency] =
-    useState<PayrollFrequency>("BIMONTHLY");
   const [departments, setDepartments] = useState<string[]>([]);
 
   const refreshContributions = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const rows = await fetchContributionRows(previewFrequency);
+      const [rows, bracketsResult] = await Promise.all([
+        fetchContributionRows(),
+        listContributionBracketDirectory(),
+      ]);
       setContributions(rows);
+      if (!bracketsResult.success) {
+        throw new Error(bracketsResult.error || "Failed to fetch brackets");
+      }
+      setBracketSections(bracketsResult.data || []);
 
       const uniqueDepartments = Array.from(
         new Set(
@@ -63,7 +102,36 @@ export function useContributionsState() {
     } finally {
       setLoading(false);
     }
-  }, [previewFrequency]);
+  }, []);
+
+  const updateContributionInclusion = useCallback(
+    (input: {
+      employeeId: string;
+      contributionType: ContributionPreviewLine["contributionType"];
+      includeInPayroll: boolean;
+      updatedAt?: string;
+    }) => {
+      const lineKey = resolveContributionLineKey(input.contributionType);
+
+      setContributions((current) =>
+        current.map((row) => {
+          if (row.employeeId !== input.employeeId) return row;
+
+          const updatedRow = {
+            ...row,
+            [lineKey]: {
+              ...row[lineKey],
+              isIncludedInPayroll: input.includeInPayroll,
+            },
+            updatedAt: input.updatedAt ?? row.updatedAt,
+          } satisfies ContributionRow;
+
+          return recalculateContributionRow(updatedRow);
+        }),
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     void refreshContributions();
@@ -97,9 +165,9 @@ export function useContributionsState() {
     statusFilter,
     setStatusFilter,
     departments,
-    previewFrequency,
-    setPreviewFrequency,
+    bracketSections,
     refreshContributions,
+    updateContributionInclusion,
   };
 }
 

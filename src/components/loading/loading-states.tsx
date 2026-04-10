@@ -110,7 +110,7 @@ export function ModuleLoadingState(props: {
   const { title, description } = props;
 
   return (
-    <div className="bg-white px-4 py-8 dark:bg-background sm:px-8 lg:px-12">
+    <div className="px-4 py-8 sm:px-8 lg:px-12">
       <div className="flex min-h-[60vh] items-center justify-center">
         <CrabLoader title={title} description={description} imageSize={96} />
       </div>

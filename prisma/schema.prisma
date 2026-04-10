@@ -158,15 +158,19 @@ model Position {
 
 // ======== EMPLOYEE CONTRIBUTION ========= //
 model GovernmentId {
-  governmentId     String   @id @default(cuid())
-  sssNumber        String?
-  philHealthNumber String?
-  tinNumber        String?
-  pagIbigNumber    String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  employeeId       String   @unique
-  employee         Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
+  governmentId                  String   @id @default(cuid())
+  sssNumber                     String?
+  isSssIncludedInPayroll        Boolean  @default(true)
+  philHealthNumber              String?
+  isPhilHealthIncludedInPayroll Boolean  @default(true)
+  tinNumber                     String?
+  isWithholdingIncludedInPayroll Boolean @default(true)
+  pagIbigNumber                 String?
+  isPagIbigIncludedInPayroll    Boolean  @default(true)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  employeeId                    String   @unique
+  employee                      Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
 }
 
 model ContributionBracket {
