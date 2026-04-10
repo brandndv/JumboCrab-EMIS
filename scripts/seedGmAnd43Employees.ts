@@ -98,16 +98,51 @@ async function main() {
     update: {
       isActive: true,
       description: "Seeded staff role",
+      dailyRate: new Prisma.Decimal("900.00"),
+      hourlyRate: new Prisma.Decimal("112.50"),
+      monthlyRate: new Prisma.Decimal("23400.00"),
+      currencyCode: "PHP",
     },
     create: {
       name: "Staff",
       description: "Seeded staff role",
       isActive: true,
       departmentId: engineeringDepartment.departmentId,
+      dailyRate: new Prisma.Decimal("900.00"),
+      hourlyRate: new Prisma.Decimal("112.50"),
+      monthlyRate: new Prisma.Decimal("23400.00"),
+      currencyCode: "PHP",
     },
   });
 
   const baseStartDate = new Date(Date.UTC(2024, 0, 1, 0, 0, 0));
+
+  await prisma.positionRateHistory.upsert({
+    where: {
+      positionId_effectiveFrom: {
+        positionId: staffPosition.positionId,
+        effectiveFrom: baseStartDate,
+      },
+    },
+    update: {
+      dailyRate: new Prisma.Decimal("900.00"),
+      hourlyRate: new Prisma.Decimal("112.50"),
+      monthlyRate: new Prisma.Decimal("23400.00"),
+      currencyCode: "PHP",
+      reason: "Initial seeded position rate",
+      createdByUserId: gmUser.userId,
+    },
+    create: {
+      positionId: staffPosition.positionId,
+      dailyRate: new Prisma.Decimal("900.00"),
+      hourlyRate: new Prisma.Decimal("112.50"),
+      monthlyRate: new Prisma.Decimal("23400.00"),
+      currencyCode: "PHP",
+      effectiveFrom: baseStartDate,
+      reason: "Initial seeded position rate",
+      createdByUserId: gmUser.userId,
+    },
+  });
 
   for (let index = 1; index <= EMPLOYEE_COUNT; index += 1) {
     const code = `EMP-${index.toString().padStart(3, "0")}`;
@@ -138,7 +173,6 @@ async function main() {
         currentStatus: "ACTIVE",
         email,
         phone: `0917${(1000000 + index * 1234).toString().slice(0, 7)}`,
-        dailyRate: new Prisma.Decimal((700 + index * 12).toFixed(2)),
         isArchived: false,
         userId: user.userId,
         departmentId: engineeringDepartment.departmentId,
@@ -156,11 +190,29 @@ async function main() {
         currentStatus: "ACTIVE",
         email,
         phone: `0917${(1000000 + index * 1234).toString().slice(0, 7)}`,
-        dailyRate: new Prisma.Decimal((700 + index * 12).toFixed(2)),
         isArchived: false,
         userId: user.userId,
         departmentId: engineeringDepartment.departmentId,
         positionId: staffPosition.positionId,
+      },
+    });
+
+    const employee = await prisma.employee.findUniqueOrThrow({
+      where: { employeeCode: code },
+      select: { employeeId: true },
+    });
+
+    await prisma.employeePositionHistory.deleteMany({
+      where: { employeeId: employee.employeeId },
+    });
+    await prisma.employeePositionHistory.create({
+      data: {
+        employeeId: employee.employeeId,
+        departmentId: engineeringDepartment.departmentId,
+        positionId: staffPosition.positionId,
+        effectiveFrom: employeeStartDate,
+        reason: "Initial seeded assignment",
+        createdByUserId: gmUser.userId,
       },
     });
   }

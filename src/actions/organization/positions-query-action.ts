@@ -1,5 +1,6 @@
 "use server";
 
+import { toRateNumber } from "@/actions/employees/employees-shared";
 import { db } from "@/lib/db";
 import {
   type PositionDetail,
@@ -23,6 +24,10 @@ export async function listPositions(input?: {
         name: true,
         isActive: true,
         description: true,
+        dailyRate: true,
+        hourlyRate: true,
+        monthlyRate: true,
+        currencyCode: true,
         departmentId: true,
         department: { select: { departmentId: true, name: true } },
         employees: {
@@ -39,6 +44,10 @@ export async function listPositions(input?: {
     const positions: PositionDetail[] = rows.map((row) => ({
       ...row,
       name: row.isActive ? row.name : toDisplayName(row.name),
+      dailyRate: toRateNumber(row.dailyRate),
+      hourlyRate: toRateNumber(row.hourlyRate),
+      monthlyRate: toRateNumber(row.monthlyRate),
+      currencyCode: row.currencyCode ?? "PHP",
     }));
     return { success: true, data: positions };
   } catch (error) {

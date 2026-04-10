@@ -32,6 +32,10 @@ type PositionRow = {
   name: string;
   isActive: boolean;
   description?: string | null;
+  dailyRate: number | null;
+  hourlyRate: number | null;
+  monthlyRate: number | null;
+  currencyCode: string;
   departmentId: string;
   department?: { departmentId: string; name: string } | null;
 };
@@ -52,6 +56,7 @@ export function PositionTable({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  const [dailyRate, setDailyRate] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
@@ -102,6 +107,15 @@ export function PositionTable({
     });
   }, [positions, filter]);
 
+  const formatCurrency = useCallback((value: number | null, currencyCode = "PHP") => {
+    if (value == null) return "—";
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: currencyCode || "PHP",
+      maximumFractionDigits: 2,
+    }).format(value);
+  }, []);
+
   const handleSave = async () => {
     if (!name.trim()) {
       setFormError("Name is required");
@@ -109,6 +123,15 @@ export function PositionTable({
     }
     if (!departmentId) {
       setFormError("Department is required");
+      return;
+    }
+    const parsedDailyRate =
+      dailyRate.trim() === "" ? null : Number.parseFloat(dailyRate);
+    if (
+      parsedDailyRate !== null &&
+      (!Number.isFinite(parsedDailyRate) || parsedDailyRate < 0)
+    ) {
+      setFormError("Daily rate must be a valid non-negative number");
       return;
     }
     try {
@@ -120,11 +143,13 @@ export function PositionTable({
             name: name.trim(),
             description: description.trim() || null,
             departmentId,
+            dailyRate: parsedDailyRate,
           })
         : await createPosition({
             name: name.trim(),
             description: description.trim() || null,
             departmentId,
+            dailyRate: parsedDailyRate,
           });
       if (!result.success) {
         throw new Error(result.error || "Failed to save position");
@@ -135,6 +160,7 @@ export function PositionTable({
       setName("");
       setDescription("");
       setDepartmentId("");
+      setDailyRate("");
       toast.success(
         editingId ? "Position updated successfully." : "Position created successfully.",
       );
@@ -155,6 +181,7 @@ export function PositionTable({
     setName(pos.name);
     setDescription(pos.description || "");
     setDepartmentId(pos.departmentId);
+    setDailyRate(pos.dailyRate == null ? "" : String(pos.dailyRate));
     setFormError(null);
     setOpen(true);
   };
@@ -165,6 +192,7 @@ export function PositionTable({
       setName("");
       setDescription("");
       setDepartmentId("");
+      setDailyRate("");
       setFormError(null);
     }
     setOpen(val);
@@ -228,7 +256,7 @@ export function PositionTable({
         <div>
           <CardTitle className="text-lg">Positions</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Titles linked to departments. Assign these to employees.
+            Titles linked to departments. Live pay rates now belong to positions and are historized automatically.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -311,6 +339,22 @@ export function PositionTable({
                       placeholder="Optional"
                     />
                   </div>
+                  <div>
+                    <Label htmlFor="pos-daily-rate">Daily Rate (PHP)</Label>
+                    <Input
+                      id="pos-daily-rate"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={dailyRate}
+                      onChange={(e) => setDailyRate(e.target.value)}
+                      placeholder="0.00"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Hourly and monthly rates are derived automatically and stored in position history.
+                    </p>
+                  </div>
                   {formError && <p className="text-sm text-destructive">{formError}</p>}
                 </div>
                 <DialogFooter>
@@ -330,6 +374,7 @@ export function PositionTable({
               <TableRow>
                 <TableHead>Position</TableHead>
                 <TableHead>Department</TableHead>
+                <TableHead>Current Rate</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -338,10 +383,10 @@ export function PositionTable({
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={5} className="p-3">
+                  <TableCell colSpan={6} className="p-3">
                     <TableLoadingState
                       label="Loading positions"
-                      columns={5}
+                      columns={6}
                       rows={3}
                     />
                   </TableCell>
@@ -349,14 +394,14 @@ export function PositionTable({
               )}
               {error && !loading && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-sm text-destructive">
+                  <TableCell colSpan={6} className="text-sm text-destructive">
                     {error}
                   </TableCell>
                 </TableRow>
               )}
               {!loading && !error && filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-sm text-muted-foreground">
                     No positions found. Click Add Position to create one.
                   </TableCell>
                 </TableRow>
@@ -368,6 +413,12 @@ export function PositionTable({
                     <TableCell className="font-medium">{pos.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {pos.department?.name || "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      <div>{formatCurrency(pos.dailyRate, pos.currencyCode)}</div>
+                      <div className="text-xs">
+                        Monthly {formatCurrency(pos.monthlyRate, pos.currencyCode)}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={pos.isActive ? "secondary" : "outline"}>

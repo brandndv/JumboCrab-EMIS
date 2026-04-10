@@ -5,6 +5,10 @@ export type PositionDetail = {
   name: string;
   isActive: boolean;
   description?: string | null;
+  dailyRate: number | null;
+  hourlyRate: number | null;
+  monthlyRate: number | null;
+  currencyCode: string;
   departmentId: string;
   department?: { departmentId: string; name: string } | null;
   employees: {

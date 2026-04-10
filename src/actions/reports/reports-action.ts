@@ -14,6 +14,7 @@ import {
   Roles,
   type Prisma,
 } from "@prisma/client";
+import { listContributionDirectory } from "@/actions/contributions/contributions-action";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { endOfZonedDay, startOfZonedDay } from "@/lib/timezone";
@@ -501,36 +502,41 @@ const buildFileRangeSuffix = (filters: ReportFilterInput | undefined) => {
   return "all_dates";
 };
 
-const getContributionRowsWhere = (
+const filterContributionPreviewRows = (
+  rows: Awaited<ReturnType<typeof listContributionDirectory>> extends {
+    data?: infer T;
+  }
+    ? NonNullable<T>
+    : never,
   filters: NormalizedReportFilters,
-): Prisma.EmployeeContributionWhereInput => {
-  const and: Prisma.EmployeeContributionWhereInput[] = [];
-
-  if (filters.employeeId) {
-    and.push({ employeeId: filters.employeeId });
-  }
-  if (filters.departmentId) {
-    and.push({ employee: { departmentId: filters.departmentId } });
-  }
-  if (filters.dateFrom || filters.dateToExclusive) {
-    and.push({
-      effectiveDate: {
-        ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-        ...(filters.dateToExclusive ? { lt: filters.dateToExclusive } : {}),
-      },
-    });
-  }
-  if (filters.search) {
-    and.push({
-      OR: [
-        { employee: { employeeCode: containsCI(filters.search) } },
-        { employee: { firstName: containsCI(filters.search) } },
-        { employee: { lastName: containsCI(filters.search) } },
-      ],
-    });
-  }
-
-  return and.length > 0 ? { AND: and } : {};
+) => {
+  return rows.filter((row) => {
+    if (filters.employeeId && row.employeeId !== filters.employeeId) {
+      return false;
+    }
+    if (filters.departmentId && row.departmentId !== filters.departmentId) {
+      return false;
+    }
+    if (filters.search) {
+      const haystack = `${row.employeeCode} ${row.employeeName} ${row.department}`.toLowerCase();
+      if (!haystack.includes(filters.search.toLowerCase())) {
+        return false;
+      }
+    }
+    if (filters.dateFrom) {
+      const updatedAt = new Date(row.updatedAt);
+      if (updatedAt < filters.dateFrom) {
+        return false;
+      }
+    }
+    if (filters.dateToExclusive) {
+      const updatedAt = new Date(row.updatedAt);
+      if (updatedAt >= filters.dateToExclusive) {
+        return false;
+      }
+    }
+    return true;
+  });
 };
 
 const getDeductionRowsWhere = (
@@ -1015,14 +1021,10 @@ async function fetchContributionsDeductionsReport(
   await requireReportsAccess();
   const filters = normalizeFilters(input);
   const view = input?.view ?? REPORT_VIEW.CONTRIBUTIONS;
-  const contributionWhere = getContributionRowsWhere(filters);
   const deductionWhere = getDeductionRowsWhere(filters);
 
-  const [contributionKeys, deductionSummaryRows] = await Promise.all([
-    db.employeeContribution.findMany({
-      where: contributionWhere,
-      select: { employeeId: true },
-    }),
+  const [contributionRows, deductionSummaryRows] = await Promise.all([
+    listContributionDirectory(),
     db.employeeDeductionAssignment.findMany({
       where: deductionWhere,
       select: {
@@ -1036,8 +1038,11 @@ async function fetchContributionsDeductionsReport(
     }),
   ]);
 
+  const filteredContributionRows = contributionRows.success
+    ? filterContributionPreviewRows(contributionRows.data ?? [], filters)
+    : [];
   const contributionEmployeeIds = new Set(
-    contributionKeys.map((row) => row.employeeId),
+    filteredContributionRows.map((row) => row.employeeId),
   );
 
   const activeDeductionEmployeeIds = new Set<string>();
@@ -1086,59 +1091,39 @@ async function fetchContributionsDeductionsReport(
   };
 
   if (view === REPORT_VIEW.CONTRIBUTIONS) {
-    const records = await db.employeeContribution.findMany({
-      where: contributionWhere,
-      orderBy: [{ effectiveDate: "desc" }, { employee: { employeeCode: "asc" } }],
-      select: {
-        id: true,
-        effectiveDate: true,
-        sssEe: true,
-        philHealthEe: true,
-        pagIbigEe: true,
-        withholdingEe: true,
-        isSssActive: true,
-        isPhilHealthActive: true,
-        isPagIbigActive: true,
-        isWithholdingActive: true,
-        employee: {
-          select: {
-            employeeId: true,
-            employeeCode: true,
-            firstName: true,
-            lastName: true,
-            department: { select: { name: true } },
-          },
-        },
+    const rows: ContributionSetupReportRow[] = filteredContributionRows.map(
+      (record) => {
+        const sssEe = record.sss.employeeShare;
+        const philHealthEe = record.philHealth.employeeShare;
+        const pagIbigEe = record.pagIbig.employeeShare;
+        const withholdingEe = record.withholding.employeeShare;
+        return {
+          rowType: "CONTRIBUTION",
+          id: record.employeeId,
+          employeeId: record.employeeId,
+          employeeCode: record.employeeCode,
+          employeeName: record.employeeName,
+          department: record.department || "Unassigned",
+          effectiveDate: record.updatedAt,
+          sssEe,
+          philHealthEe,
+          pagIbigEe,
+          withholdingEe,
+          employeeShareTotal: sssEe + philHealthEe + pagIbigEe + withholdingEe,
+          isSssActive:
+            record.sss.isIncludedInPayroll && record.sss.status === "READY",
+          isPhilHealthActive:
+            record.philHealth.isIncludedInPayroll &&
+            record.philHealth.status === "READY",
+          isPagIbigActive:
+            record.pagIbig.isIncludedInPayroll &&
+            record.pagIbig.status === "READY",
+          isWithholdingActive:
+            record.withholding.isIncludedInPayroll &&
+            record.withholding.status === "READY",
+        };
       },
-    });
-
-    const rows: ContributionSetupReportRow[] = records.map((record) => {
-      const sssEe = toNumber(record.sssEe);
-      const philHealthEe = toNumber(record.philHealthEe);
-      const pagIbigEe = toNumber(record.pagIbigEe);
-      const withholdingEe = toNumber(record.withholdingEe);
-      return {
-        rowType: "CONTRIBUTION",
-        id: record.id,
-        employeeId: record.employee.employeeId,
-        employeeCode: record.employee.employeeCode,
-        employeeName: formatEmployeeName(
-          record.employee.firstName,
-          record.employee.lastName,
-        ),
-        department: record.employee.department?.name ?? "Unassigned",
-        effectiveDate: record.effectiveDate.toISOString(),
-        sssEe,
-        philHealthEe,
-        pagIbigEe,
-        withholdingEe,
-        employeeShareTotal: sssEe + philHealthEe + pagIbigEe + withholdingEe,
-        isSssActive: record.isSssActive,
-        isPhilHealthActive: record.isPhilHealthActive,
-        isPagIbigActive: record.isPagIbigActive,
-        isWithholdingActive: record.isWithholdingActive,
-      };
-    });
+    );
 
     return { summary: summaryBase, rows, total: rows.length, view };
   }

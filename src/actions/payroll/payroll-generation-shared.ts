@@ -1,11 +1,13 @@
 import {
   ATTENDANCE_STATUS,
+  ContributionType,
   DeductionAmountMode,
   DeductionFrequency,
   PayrollDeductionType,
   PayrollEarningType,
   PayrollLineSource,
   PayrollReferenceType,
+  type PayrollFrequency,
   type Prisma,
 } from "@prisma/client";
 import {
@@ -14,22 +16,31 @@ import {
   computeScheduledPaidMinutes,
 } from "@/lib/attendance";
 import {
-  isDateKeyInRange,
+  calculateContributionFromBracket,
+  findApplicableContributionBracket,
+  type ContributionBracketRecord,
+} from "@/lib/payroll/contribution-brackets";
+import {
+  buildCompensationLookupKey,
+  listMonthDateKeys,
+  type CompensationSnapshot,
+} from "@/lib/payroll/compensation";
+import {
   roundCurrency,
   roundSixDecimals,
   toDateKeyInTz,
   toNumber,
-  toNumberOrNull,
   toPercent,
 } from "@/lib/payroll/helpers";
 import {
   OVERTIME_RATE_MULTIPLIER,
+  payrollTypeToFrequency,
   UNDERTIME_DEDUCTION_MULTIPLIER,
 } from "./payroll-shared";
 
 export type PayrollGenerationEmployee = Prisma.EmployeeGetPayload<{
   include: {
-    contribution: true;
+    governmentId: true;
   };
 }>;
 
@@ -75,6 +86,20 @@ export type PayrollDeductionDraft = {
   assignmentId?: string;
   deductionCodeSnapshot?: string;
   deductionNameSnapshot?: string;
+  contributionType?: ContributionType;
+  bracketIdSnapshot?: string;
+  bracketReferenceSnapshot?: string;
+  payrollFrequency?: PayrollFrequency;
+  periodStartSnapshot?: Date;
+  periodEndSnapshot?: Date;
+  compensationBasisSnapshot?: number;
+  employeeShareSnapshot?: number;
+  employerShareSnapshot?: number;
+  baseTaxSnapshot?: number;
+  marginalRateSnapshot?: number;
+  quantitySnapshot?: number;
+  unitLabelSnapshot?: string;
+  metadata?: Prisma.InputJsonValue;
   amount: number;
   minutes?: number;
   rateSnapshot?: number;
@@ -93,7 +118,12 @@ export type EmployeePayrollDraft = {
   minutesNetWorked: number;
   minutesOvertime: number;
   minutesUndertime: number;
+  positionIdSnapshot: string | null;
+  positionNameSnapshot: string | null;
   dailyRateSnapshot: number | null;
+  hourlyRateSnapshot: number | null;
+  monthlyRateSnapshot: number | null;
+  currencyCodeSnapshot: string | null;
   ratePerMinuteSnapshot: number | null;
   grossPay: number;
   totalEarnings: number;
@@ -112,7 +142,7 @@ export const groupAttendanceRowsByEmployee = (
 
   rows.forEach((row) => {
     const key = toDateKeyInTz(row.workDate);
-    if (!isDateKeyInRange(key, periodStartKey, periodEndKey)) return;
+    if (key < periodStartKey || key > periodEndKey) return;
     if (!attendanceByEmployee.has(row.employeeId)) {
       attendanceByEmployee.set(row.employeeId, []);
     }
@@ -150,16 +180,135 @@ export const groupActiveAssignmentsByEmployee = (
   return assignmentByEmployee;
 };
 
+export const buildMonthlyGovernmentDeductionKey = (
+  employeeId: string,
+  contributionType: ContributionType,
+  monthStartKey: string,
+) => `${employeeId}:${contributionType}:${monthStartKey}`;
+
+const getEmployeeLabel = (employee: {
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+}) => [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim() || employee.employeeCode;
+
+const getRequiredCompensationSnapshot = (input: {
+  employee: PayrollGenerationEmployee;
+  compensationSnapshots: Map<string, CompensationSnapshot | null>;
+  dateKey: string;
+}) => {
+  const snapshot = input.compensationSnapshots.get(
+    buildCompensationLookupKey(input.employee.employeeId, input.dateKey),
+  );
+
+  if (!snapshot) {
+    throw new Error(
+      `Cannot generate payroll. ${getEmployeeLabel(input.employee)} has no active position assignment on ${input.dateKey}.`,
+    );
+  }
+
+  if (snapshot.dailyRate == null || snapshot.monthlyRate == null) {
+    throw new Error(
+      `Cannot generate payroll. ${getEmployeeLabel(input.employee)} has no active position rate on ${input.dateKey}.`,
+    );
+  }
+
+  return snapshot;
+};
+
+const calculateMonthlyContributionBase = (input: {
+  employee: PayrollGenerationEmployee;
+  monthStartKey: string;
+  compensationSnapshots: Map<string, CompensationSnapshot | null>;
+}) => {
+  const monthDateKeys = listMonthDateKeys(input.monthStartKey);
+  if (monthDateKeys.length === 0) {
+    throw new Error(`Invalid contribution month ${input.monthStartKey}`);
+  }
+
+  const monthlyRates = monthDateKeys.map((dateKey) => {
+    const snapshot = getRequiredCompensationSnapshot({
+      employee: input.employee,
+      compensationSnapshots: input.compensationSnapshots,
+      dateKey,
+    });
+    return snapshot.monthlyRate ?? 0;
+  });
+
+  return roundCurrency(
+    monthlyRates.reduce((sum, value) => sum + value, 0) / monthDateKeys.length,
+  );
+};
+
+const resolveGovernmentNumber = (
+  employee: PayrollGenerationEmployee,
+  contributionType: ContributionType,
+) => {
+  if (contributionType === ContributionType.SSS) {
+    return employee.governmentId?.sssNumber?.trim() || null;
+  }
+  if (contributionType === ContributionType.PHILHEALTH) {
+    return employee.governmentId?.philHealthNumber?.trim() || null;
+  }
+  if (contributionType === ContributionType.PAGIBIG) {
+    return employee.governmentId?.pagIbigNumber?.trim() || null;
+  }
+  return employee.governmentId?.tinNumber?.trim() || null;
+};
+
+const isContributionIncludedInPayroll = (
+  employee: PayrollGenerationEmployee,
+  contributionType: ContributionType,
+) => {
+  if (contributionType === ContributionType.SSS) {
+    return employee.governmentId?.isSssIncludedInPayroll ?? true;
+  }
+  if (contributionType === ContributionType.PHILHEALTH) {
+    return employee.governmentId?.isPhilHealthIncludedInPayroll ?? true;
+  }
+  if (contributionType === ContributionType.PAGIBIG) {
+    return employee.governmentId?.isPagIbigIncludedInPayroll ?? true;
+  }
+  return employee.governmentId?.isWithholdingIncludedInPayroll ?? true;
+};
+
+const deductionTypeForContribution = (contributionType: ContributionType) => {
+  if (contributionType === ContributionType.SSS) {
+    return PayrollDeductionType.CONTRIBUTION_SSS;
+  }
+  if (contributionType === ContributionType.PHILHEALTH) {
+    return PayrollDeductionType.CONTRIBUTION_PHILHEALTH;
+  }
+  if (contributionType === ContributionType.PAGIBIG) {
+    return PayrollDeductionType.CONTRIBUTION_PAGIBIG;
+  }
+  return PayrollDeductionType.WITHHOLDING_TAX;
+};
+
 export const buildEmployeePayrollDraft = (input: {
   employee: PayrollGenerationEmployee;
   employeeRows: PayrollGenerationAttendanceRow[];
   payrollId: string;
+  payrollType: "BIMONTHLY" | "MONTHLY" | "WEEKLY" | "OFF_CYCLE";
+  payrollPeriodStart: Date;
+  payrollPeriodEnd: Date;
+  payrollPeriodStartKey: string;
+  payrollPeriodEndKey: string;
   applyGovernmentContributions: boolean;
   employeeAssignments: PayrollGenerationAssignment[];
   oneTimeAlreadyApplied: Set<string>;
+  compensationSnapshots: Map<string, CompensationSnapshot | null>;
+  contributionBrackets: ContributionBracketRecord[];
+  deductionMonthStartKeys: string[];
+  existingMonthlyGovernmentDeductions: Set<string>;
 }): EmployeePayrollDraft => {
   const { employee, employeeRows, payrollId } = input;
-  const dailyRate = toNumberOrNull(employee.dailyRate);
+  const runFrequency = payrollTypeToFrequency(input.payrollType);
+  const periodEndSnapshot = getRequiredCompensationSnapshot({
+    employee,
+    compensationSnapshots: input.compensationSnapshots,
+    dateKey: input.payrollPeriodEndKey,
+  });
 
   let daysPresent = 0;
   let daysAbsent = 0;
@@ -180,10 +329,7 @@ export const buildEmployeePayrollDraft = (input: {
     ) {
       daysPresent += 1;
     }
-    if (
-      row.status === ATTENDANCE_STATUS.LATE ||
-      (row.lateMinutes ?? 0) > 0
-    ) {
+    if (row.status === ATTENDANCE_STATUS.LATE || (row.lateMinutes ?? 0) > 0) {
       daysLate += 1;
     }
   }
@@ -203,12 +349,15 @@ export const buildEmployeePayrollDraft = (input: {
           typeof minutes === "number" && minutes > 0,
       ) ?? 8 * 60;
 
-  const ratePerMinuteSnapshot =
-    dailyRate == null
-      ? null
-      : roundSixDecimals(dailyRate / Math.max(1, baselinePaidMinutes));
-
   const rowPayrollMetrics = employeeRows.map((row) => {
+    const rowDateKey = toDateKeyInTz(row.workDate);
+    const compensationSnapshot = getRequiredCompensationSnapshot({
+      employee,
+      compensationSnapshots: input.compensationSnapshots,
+      dateKey: rowDateKey,
+    });
+    const dailyRate = compensationSnapshot.dailyRate;
+
     const scheduledPaidMinutesRaw = computeScheduledPaidMinutes({
       paidHoursPerDay: row.paidHoursPerDay,
       scheduledStartMinutes: row.scheduledStartMinutes,
@@ -296,6 +445,7 @@ export const buildEmployeePayrollDraft = (input: {
         : overtimeMinutes * ratePerMinute * OVERTIME_RATE_MULTIPLIER;
 
     return {
+      compensationSnapshot,
       baseEarningMinutes,
       basePayAmount,
       netWorkedMinutes,
@@ -303,6 +453,7 @@ export const buildEmployeePayrollDraft = (input: {
       overtimePayAmount,
       undertimeMinutes,
       undertimeDeductionAmount,
+      ratePerMinute,
     };
   });
 
@@ -340,6 +491,18 @@ export const buildEmployeePayrollDraft = (input: {
     ),
   );
 
+  const distinctRateSnapshots = [
+    ...new Set(
+      rowPayrollMetrics
+        .map((row) => row.ratePerMinute)
+        .filter((value): value is number => value != null)
+        .map((value) => roundSixDecimals(value)),
+    ),
+  ];
+  const distinctPositionIds = [
+    ...new Set(rowPayrollMetrics.map((row) => row.compensationSnapshot.positionId)),
+  ];
+
   const earnings: PayrollEarningDraft[] = [];
 
   if (basePay > 0) {
@@ -347,13 +510,16 @@ export const buildEmployeePayrollDraft = (input: {
       earningType: PayrollEarningType.BASE_PAY,
       amount: basePay,
       minutes: minutesBasePay,
-      rateSnapshot: ratePerMinuteSnapshot ?? undefined,
+      rateSnapshot:
+        distinctRateSnapshots.length === 1 ? distinctRateSnapshots[0] : undefined,
       source: PayrollLineSource.SYSTEM,
       isManual: false,
       referenceType: PayrollReferenceType.ATTENDANCE,
       referenceId: payrollId,
       remarks:
-        "Computed from payable base minutes (grace-aware, capped by schedule)",
+        distinctPositionIds.length > 1 || distinctRateSnapshots.length > 1
+          ? "Computed from payable base minutes across multiple position/rate segments"
+          : "Computed from payable base minutes (grace-aware, capped by schedule)",
     });
   }
 
@@ -362,12 +528,16 @@ export const buildEmployeePayrollDraft = (input: {
       earningType: PayrollEarningType.OVERTIME_PAY,
       amount: overtimePay,
       minutes: minutesOvertime,
-      rateSnapshot: ratePerMinuteSnapshot ?? undefined,
+      rateSnapshot:
+        distinctRateSnapshots.length === 1 ? distinctRateSnapshots[0] : undefined,
       source: PayrollLineSource.SYSTEM,
       isManual: false,
       referenceType: PayrollReferenceType.ATTENDANCE,
       referenceId: payrollId,
-      remarks: `Overtime multiplier applied (${OVERTIME_RATE_MULTIPLIER}x)`,
+      remarks:
+        distinctPositionIds.length > 1 || distinctRateSnapshots.length > 1
+          ? `Overtime multiplier applied (${OVERTIME_RATE_MULTIPLIER}x) across multiple rate segments`
+          : `Overtime multiplier applied (${OVERTIME_RATE_MULTIPLIER}x)`,
     });
   }
 
@@ -376,9 +546,19 @@ export const buildEmployeePayrollDraft = (input: {
   if (undertimeDeduction > 0) {
     deductions.push({
       deductionType: PayrollDeductionType.UNDERTIME_DEDUCTION,
+      payrollFrequency: runFrequency ?? undefined,
+      periodStartSnapshot: input.payrollPeriodStart,
+      periodEndSnapshot: input.payrollPeriodEnd,
+      quantitySnapshot: minutesUndertime,
+      unitLabelSnapshot: "minutes",
+      metadata: {
+        deductionCategory: "attendance",
+        multiplier: UNDERTIME_DEDUCTION_MULTIPLIER,
+      },
       amount: undertimeDeduction,
       minutes: minutesUndertime,
-      rateSnapshot: ratePerMinuteSnapshot ?? undefined,
+      rateSnapshot:
+        distinctRateSnapshots.length === 1 ? distinctRateSnapshots[0] : undefined,
       source: PayrollLineSource.SYSTEM,
       isManual: false,
       referenceType: PayrollReferenceType.ATTENDANCE,
@@ -387,62 +567,149 @@ export const buildEmployeePayrollDraft = (input: {
     });
   }
 
-  const contribution = employee.contribution;
-  if (input.applyGovernmentContributions && contribution) {
-    const sss = toNumber(contribution.sssEe, 0);
-    const philHealth = toNumber(contribution.philHealthEe, 0);
-    const pagIbig = toNumber(contribution.pagIbigEe, 0);
-    const withholding = toNumber(contribution.withholdingEe, 0);
-
-    if (contribution.isSssActive && sss > 0) {
-      deductions.push({
-        deductionType: PayrollDeductionType.CONTRIBUTION_SSS,
-        amount: roundCurrency(sss),
-        source: PayrollLineSource.CONTRIBUTION_ENGINE,
-        isManual: false,
-        referenceType: PayrollReferenceType.CONTRIBUTION,
-        referenceId: contribution.id,
-        remarks: "Employee SSS contribution",
-      });
-    }
-    if (contribution.isPhilHealthActive && philHealth > 0) {
-      deductions.push({
-        deductionType: PayrollDeductionType.CONTRIBUTION_PHILHEALTH,
-        amount: roundCurrency(philHealth),
-        source: PayrollLineSource.CONTRIBUTION_ENGINE,
-        isManual: false,
-        referenceType: PayrollReferenceType.CONTRIBUTION,
-        referenceId: contribution.id,
-        remarks: "Employee PhilHealth contribution",
-      });
-    }
-    if (contribution.isPagIbigActive && pagIbig > 0) {
-      deductions.push({
-        deductionType: PayrollDeductionType.CONTRIBUTION_PAGIBIG,
-        amount: roundCurrency(pagIbig),
-        source: PayrollLineSource.CONTRIBUTION_ENGINE,
-        isManual: false,
-        referenceType: PayrollReferenceType.CONTRIBUTION,
-        referenceId: contribution.id,
-        remarks: "Employee Pag-IBIG contribution",
-      });
-    }
-    if (contribution.isWithholdingActive && withholding > 0) {
-      deductions.push({
-        deductionType: PayrollDeductionType.WITHHOLDING_TAX,
-        amount: roundCurrency(withholding),
-        source: PayrollLineSource.CONTRIBUTION_ENGINE,
-        isManual: false,
-        referenceType: PayrollReferenceType.CONTRIBUTION,
-        referenceId: contribution.id,
-        remarks: "Employee withholding tax",
-      });
-    }
-  }
-
   const earningsSubtotal = roundCurrency(
     earnings.reduce((sum, line) => sum + line.amount, 0),
   );
+
+  if (input.applyGovernmentContributions && runFrequency) {
+    for (const monthStartKey of input.deductionMonthStartKeys) {
+      const monthlyBase = calculateMonthlyContributionBase({
+        employee,
+        monthStartKey,
+        compensationSnapshots: input.compensationSnapshots,
+      });
+
+      for (const contributionType of [
+        ContributionType.SSS,
+        ContributionType.PHILHEALTH,
+        ContributionType.PAGIBIG,
+      ] as const) {
+        if (!isContributionIncludedInPayroll(employee, contributionType)) {
+          continue;
+        }
+
+        const deductionKey = buildMonthlyGovernmentDeductionKey(
+          employee.employeeId,
+          contributionType,
+          monthStartKey,
+        );
+        if (input.existingMonthlyGovernmentDeductions.has(deductionKey)) {
+          continue;
+        }
+
+        const governmentNumber = resolveGovernmentNumber(employee, contributionType);
+        if (!governmentNumber) {
+          continue;
+        }
+
+        const bracket = findApplicableContributionBracket({
+          brackets: input.contributionBrackets,
+          contributionType,
+          basisAmount: monthlyBase,
+        });
+
+        if (!bracket) {
+          throw new Error(
+            `Cannot generate payroll. No active ${contributionType} bracket matched ${monthlyBase.toFixed(2)} for ${getEmployeeLabel(employee)}.`,
+          );
+        }
+
+        const calculation = calculateContributionFromBracket({
+          bracket,
+          basisAmount: monthlyBase,
+        });
+
+        if (calculation.employeeShare <= 0 && calculation.employerShare <= 0) {
+          continue;
+        }
+
+        deductions.push({
+          deductionType: deductionTypeForContribution(contributionType),
+          contributionType,
+          bracketIdSnapshot: calculation.bracket.id,
+          bracketReferenceSnapshot: calculation.bracket.referenceCode ?? undefined,
+          payrollFrequency: runFrequency,
+          periodStartSnapshot: input.payrollPeriodStart,
+          periodEndSnapshot: input.payrollPeriodEnd,
+          compensationBasisSnapshot: calculation.basisAmount,
+          employeeShareSnapshot: calculation.employeeShare,
+          employerShareSnapshot: calculation.employerShare,
+          baseTaxSnapshot: calculation.baseTax ?? undefined,
+          marginalRateSnapshot: calculation.marginalRate ?? undefined,
+          quantitySnapshot: 1,
+          unitLabelSnapshot: "monthly bracket",
+          metadata: {
+            deductionMonthKey: monthStartKey,
+            currencyCode: periodEndSnapshot.currencyCode,
+            rawMonthlyBase: monthlyBase,
+            governmentNumber,
+            ...(calculation.bracket.metadata ?? {}),
+          },
+          amount: roundCurrency(calculation.employeeShare),
+          source: PayrollLineSource.CONTRIBUTION_ENGINE,
+          isManual: false,
+          referenceType: PayrollReferenceType.CONTRIBUTION,
+          referenceId: calculation.bracket.id,
+          remarks: `${contributionType} statutory contribution`,
+        });
+      }
+    }
+
+    if (isContributionIncludedInPayroll(employee, ContributionType.WITHHOLDING)) {
+      const withholdingBracket = findApplicableContributionBracket({
+        brackets: input.contributionBrackets,
+        contributionType: ContributionType.WITHHOLDING,
+        payrollFrequency: runFrequency,
+        basisAmount: earningsSubtotal,
+      });
+
+      if (!withholdingBracket) {
+        throw new Error(
+          `Cannot generate payroll. No active withholding bracket matched ${earningsSubtotal.toFixed(2)} for ${getEmployeeLabel(employee)} (${runFrequency}).`,
+        );
+      }
+
+      const withholding = calculateContributionFromBracket({
+        bracket: withholdingBracket,
+        basisAmount: earningsSubtotal,
+      });
+
+      if (withholding.employeeShare > 0) {
+        deductions.push({
+          deductionType: PayrollDeductionType.WITHHOLDING_TAX,
+          contributionType: ContributionType.WITHHOLDING,
+          bracketIdSnapshot: withholding.bracket.id,
+          bracketReferenceSnapshot:
+            withholding.bracket.referenceCode ?? undefined,
+          payrollFrequency: runFrequency,
+          periodStartSnapshot: input.payrollPeriodStart,
+          periodEndSnapshot: input.payrollPeriodEnd,
+          compensationBasisSnapshot: withholding.basisAmount,
+          employeeShareSnapshot: withholding.employeeShare,
+          employerShareSnapshot: withholding.employerShare,
+          baseTaxSnapshot: withholding.baseTax ?? undefined,
+          marginalRateSnapshot: withholding.marginalRate ?? undefined,
+          quantitySnapshot: 1,
+          unitLabelSnapshot: "tax bracket",
+          metadata: {
+            currencyCode: periodEndSnapshot.currencyCode,
+            taxableCompensation: earningsSubtotal,
+            tinNumber: resolveGovernmentNumber(
+              employee,
+              ContributionType.WITHHOLDING,
+            ),
+            ...(withholding.bracket.metadata ?? {}),
+          },
+          amount: roundCurrency(withholding.employeeShare),
+          source: PayrollLineSource.CONTRIBUTION_ENGINE,
+          isManual: false,
+          referenceType: PayrollReferenceType.CONTRIBUTION,
+          referenceId: withholding.bracket.id,
+          remarks: "Withholding tax",
+        });
+      }
+    }
+  }
 
   for (const assignment of input.employeeAssignments) {
     if (assignment.deductionType.frequency === DeductionFrequency.ONE_TIME) {
@@ -493,6 +760,15 @@ export const buildEmployeePayrollDraft = (input: {
       assignmentId: assignment.id,
       deductionCodeSnapshot: assignment.deductionType.code,
       deductionNameSnapshot: assignment.deductionType.name,
+      payrollFrequency: runFrequency ?? undefined,
+      periodStartSnapshot: input.payrollPeriodStart,
+      periodEndSnapshot: input.payrollPeriodEnd,
+      quantitySnapshot: 1,
+      unitLabelSnapshot: "assignment",
+      metadata: {
+        deductionFrequency: assignment.deductionType.frequency,
+        amountMode: assignment.deductionType.amountMode,
+      },
       amount,
       source: PayrollLineSource.SYSTEM,
       isManual: false,
@@ -523,8 +799,18 @@ export const buildEmployeePayrollDraft = (input: {
     minutesNetWorked,
     minutesOvertime,
     minutesUndertime,
-    dailyRateSnapshot: dailyRate,
-    ratePerMinuteSnapshot,
+    positionIdSnapshot: periodEndSnapshot.positionId,
+    positionNameSnapshot: periodEndSnapshot.positionName,
+    dailyRateSnapshot: periodEndSnapshot.dailyRate,
+    hourlyRateSnapshot: periodEndSnapshot.hourlyRate,
+    monthlyRateSnapshot: periodEndSnapshot.monthlyRate,
+    currencyCodeSnapshot: periodEndSnapshot.currencyCode,
+    ratePerMinuteSnapshot:
+      periodEndSnapshot.dailyRate == null
+        ? null
+        : roundSixDecimals(
+            periodEndSnapshot.dailyRate / Math.max(1, baselinePaidMinutes),
+          ),
     grossPay: totalEarnings,
     totalEarnings,
     totalDeductions,

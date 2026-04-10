@@ -5,7 +5,8 @@ import {
   getEmployeeByCode as getEmployeeByCodeImpl,
   getEmployeeById as getEmployeeByIdImpl,
   getEmployeeByUserId as getEmployeeByUserIdImpl,
-  getEmployeeRateHistory as getEmployeeRateHistoryImpl,
+  getEmployeeCompensationHistory as getEmployeeCompensationHistoryImpl,
+  getEmployeePositionHistory as getEmployeePositionHistoryImpl,
   getEmployees as getEmployeesImpl,
   getEmployeesWithoutUser as getEmployeesWithoutUserImpl,
   getGeneratedEmployeeCode as getGeneratedEmployeeCodeImpl,
@@ -27,10 +28,16 @@ export async function getEmployeeById(
   return getEmployeeByIdImpl(...args);
 }
 
-export async function getEmployeeRateHistory(
-  ...args: Parameters<typeof getEmployeeRateHistoryImpl>
+export async function getEmployeePositionHistory(
+  ...args: Parameters<typeof getEmployeePositionHistoryImpl>
 ) {
-  return getEmployeeRateHistoryImpl(...args);
+  return getEmployeePositionHistoryImpl(...args);
+}
+
+export async function getEmployeeCompensationHistory(
+  ...args: Parameters<typeof getEmployeeCompensationHistoryImpl>
+) {
+  return getEmployeeCompensationHistoryImpl(...args);
 }
 
 export async function getGeneratedEmployeeCode(
@@ -87,4 +94,8 @@ export async function getDepartments(
   return getDepartmentsImpl(...args);
 }
 
-export type { EmployeeActionRecord, EmployeeRateHistoryItem } from "./types";
+export type {
+  EmployeeActionRecord,
+  EmployeeCompensationHistoryItem,
+  EmployeePositionHistoryItem,
+} from "./types";

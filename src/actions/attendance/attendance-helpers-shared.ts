@@ -1,4 +1,8 @@
 import { db } from "@/lib/db";
+import {
+  buildCompensationLookupKey,
+  resolveEmployeeCompensationSnapshots,
+} from "@/lib/payroll/compensation";
 import { endOfZonedDay, startOfZonedDay, TZ } from "@/lib/timezone";
 
 export const toNumberOrNull = (value: unknown) => {
@@ -19,14 +23,7 @@ export const toNumberOrNull = (value: unknown) => {
   return null;
 };
 
-const isMissingRateHistoryTableError = (error: unknown) => {
-  if (!error || typeof error !== "object") return false;
-  const maybeCode = (error as { code?: unknown }).code;
-  return maybeCode === "P2021";
-};
-
-export const buildRateLookupKey = (employeeId: string, workDate: Date | string) =>
-  `${employeeId}::${typeof workDate === "string" ? workDate : workDate.toISOString()}`;
+export const buildRateLookupKey = buildCompensationLookupKey;
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -38,90 +35,15 @@ export const buildEmployeeDayKey = (employeeId: string, date: Date) =>
 
 export const resolveEffectiveDailyRates = async ({
   employeeDates,
-  fallbackDailyRates,
 }: {
   employeeDates: Map<string, Date[]>;
-  fallbackDailyRates?: Map<string, unknown>;
 }) => {
-  const employeeIds = [...employeeDates.keys()];
-  if (employeeIds.length === 0) return new Map<string, number | null>();
-
-  const allDates = [...employeeDates.values()].flat();
-  if (allDates.length === 0) return new Map<string, number | null>();
-
-  const maxWorkDate = allDates.reduce(
-    (latest, current) =>
-      current.getTime() > latest.getTime() ? current : latest,
-    allDates[0],
-  );
-
-  let historyRows: Array<{
-    employeeId: string;
-    dailyRate: unknown;
-    effectiveFrom: Date;
-  }> = [];
-  try {
-    historyRows = await db.employeeRateHistory.findMany({
-      where: {
-        employeeId: { in: employeeIds },
-        effectiveFrom: { lte: maxWorkDate },
-      },
-      orderBy: [{ employeeId: "asc" }, { effectiveFrom: "asc" }],
-      select: {
-        employeeId: true,
-        dailyRate: true,
-        effectiveFrom: true,
-      },
-    });
-  } catch (error) {
-    if (!isMissingRateHistoryTableError(error)) {
-      throw error;
-    }
-    console.warn(
-      "EmployeeRateHistory table is not available yet. Falling back to Employee.dailyRate.",
-    );
-  }
-
-  const historyByEmployee = new Map<
-    string,
-    { effectiveFrom: Date; dailyRate: unknown }[]
-  >();
-  historyRows.forEach((row) => {
-    if (!historyByEmployee.has(row.employeeId)) {
-      historyByEmployee.set(row.employeeId, []);
-    }
-    historyByEmployee.get(row.employeeId)!.push({
-      effectiveFrom: row.effectiveFrom,
-      dailyRate: row.dailyRate,
-    });
+  const compensationSnapshots = await resolveEmployeeCompensationSnapshots({
+    employeeDates,
   });
-
   const resolved = new Map<string, number | null>();
-
-  employeeDates.forEach((dates, id) => {
-    const uniqueDateIsos = [
-      ...new Set(dates.map((date) => date.toISOString())),
-    ].sort();
-    const history = historyByEmployee.get(id) ?? [];
-    const fallbackRate = toNumberOrNull(fallbackDailyRates?.get(id));
-
-    let historyIndex = 0;
-    let currentRate: number | null = history.length === 0 ? fallbackRate : null;
-
-    uniqueDateIsos.forEach((iso) => {
-      const dateMs = new Date(iso).getTime();
-      while (
-        historyIndex < history.length &&
-        history[historyIndex].effectiveFrom.getTime() <= dateMs
-      ) {
-        currentRate = toNumberOrNull(history[historyIndex].dailyRate);
-        historyIndex += 1;
-      }
-
-      const rate = currentRate ?? (history.length === 0 ? fallbackRate : null);
-
-      resolved.set(buildRateLookupKey(id, iso), rate);
-    });
+  compensationSnapshots.forEach((snapshot, key) => {
+    resolved.set(key, snapshot?.dailyRate ?? null);
   });
 
   return resolved;

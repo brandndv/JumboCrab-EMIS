@@ -12,7 +12,9 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import ContributionBracketSidebar from "@/features/manage-contributions/contribution-bracket-sidebar";
 import { ContributionsTable } from "@/features/manage-contributions/contributions-table";
+import { Button } from "@/components/ui/button";
 import { useContributions } from "@/hooks/use-contributions";
 import { useMemo, useState } from "react";
 
@@ -30,8 +32,12 @@ export default function ContributionsPageContent() {
     statusFilter,
     setStatusFilter,
     departments,
-    refreshContributions,
+    bracketSections,
+    updateContributionInclusion,
   } = useContributions();
+  const [activeView, setActiveView] = useState<"employees" | "brackets">(
+    "employees",
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -92,51 +98,79 @@ export default function ContributionsPageContent() {
         <div>
           <h1 className="text-2xl font-bold">Contributions</h1>
           <p className="text-muted-foreground text-sm">
-            Manage contribution records
+            Computed statutory previews from position rates and official government brackets
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={activeView === "employees" ? "default" : "outline"}
+            onClick={() => setActiveView("employees")}
+          >
+            Employee Preview
+          </Button>
+          <Button
+            variant={activeView === "brackets" ? "default" : "outline"}
+            onClick={() => setActiveView("brackets")}
+          >
+            Bracket Tables
+          </Button>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border/70 bg-card/70 shadow-sm p-4 sm:p-6 space-y-4">
+      <div className="rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm sm:p-6 space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:items-center">
-          <Input
-            placeholder="Search employees..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full"
-          />
-          <select
-            value={departmentFilter}
-            onChange={(e) => {
-              setDepartmentFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-          >
-            <option value="all">All departments</option>
-            {departments.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value as "all" | "set" | "not-set");
-              setCurrentPage(1);
-            }}
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-          >
-            <option value="all">All (Set/Not set)</option>
-            <option value="set">Set only</option>
-            <option value="not-set">Not set only</option>
-          </select>
+          {activeView === "employees" ? (
+            <>
+              <Input
+                placeholder="Search employees..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full"
+              />
+              <select
+                value={departmentFilter}
+                onChange={(e) => {
+                  setDepartmentFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+              >
+                <option value="all">All departments</option>
+                {departments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(
+                    e.target.value as "all" | "ready" | "needs-attention",
+                  );
+                  setCurrentPage(1);
+                }}
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+              >
+                <option value="all">All statuses</option>
+                <option value="ready">Ready only</option>
+                <option value="needs-attention">Needs attention</option>
+              </select>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground sm:col-span-3">
+              Full read-only table view of the active statutory brackets using
+              monthly contribution and tax preview rules.
+            </div>
+          )}
+
           <div className="text-sm text-muted-foreground">
-            Inactive/ended employees are hidden automatically.
+            {activeView === "employees"
+              ? "Expand a row to review bracket details and choose which items will be included in payroll."
+              : "SSS, PhilHealth, Pag-IBIG, and withholding previews use the active monthly bracket tables."}
           </div>
         </div>
 
@@ -146,143 +180,155 @@ export default function ContributionsPageContent() {
           </div>
         )}
 
-        <ContributionsTable
-          rows={paginatedContributions}
-          loading={loading}
-          onRefresh={refreshContributions}
-        />
+        {activeView === "employees" ? (
+          <>
+            <ContributionsTable
+              rows={paginatedContributions}
+              loading={loading}
+              onUpdateContributionInclusion={updateContributionInclusion}
+            />
 
-        {sortedContributions.length > 0 && (
-          <div className="flex flex-col gap-4 border-t border-border/70 pt-4">
-            <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <p>
-                Showing {showingFrom}-{showingTo} of {sortedContributions.length} employees
-              </p>
-              <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                <label className="flex items-center gap-3">
-                  <span className="whitespace-nowrap">Rows per page</span>
-                  <span className="relative">
-                    <select
-                      value={itemsPerPage}
-                      onChange={(e) => {
-                        setItemsPerPage(Number(e.target.value));
-                        setCurrentPage(1);
-                      }}
-                      className="h-10 min-w-[72px] appearance-none rounded-md border bg-background px-3 pr-9 text-sm text-foreground"
-                    >
-                      {PAGE_SIZE_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  </span>
-                </label>
-
-            {totalPages > 1 && (
-              <Pagination className="m-0 w-auto justify-end">
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        if (safeCurrentPage > 1) {
-                          setCurrentPage((page) => page - 1);
-                        }
-                      }}
-                      className={
-                        safeCurrentPage === 1
-                          ? "pointer-events-none opacity-50"
-                          : "cursor-pointer"
-                      }
-                    />
-                  </PaginationItem>
-
-                  {visiblePageNumbers[0] > 1 && (
-                    <>
-                      <PaginationItem>
-                        <PaginationLink
-                          href="#"
-                          onClick={(event) => {
-                            event.preventDefault();
+            {sortedContributions.length > 0 && (
+              <div className="flex flex-col gap-4 border-t border-border/70 pt-4">
+                <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                  <p>
+                    Showing {showingFrom}-{showingTo} of {sortedContributions.length} employees
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                    <label className="flex items-center gap-3">
+                      <span className="whitespace-nowrap">Rows per page</span>
+                      <span className="relative">
+                        <select
+                          value={itemsPerPage}
+                          onChange={(e) => {
+                            setItemsPerPage(Number(e.target.value));
                             setCurrentPage(1);
                           }}
-                          className="cursor-pointer"
+                          className="h-10 min-w-[72px] appearance-none rounded-md border bg-background px-3 pr-9 text-sm text-foreground"
                         >
-                          1
-                        </PaginationLink>
-                      </PaginationItem>
-                      {visiblePageNumbers[0] > 2 && (
-                        <PaginationItem>
-                          <PaginationEllipsis />
-                        </PaginationItem>
-                      )}
-                    </>
-                  )}
+                          {PAGE_SIZE_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      </span>
+                    </label>
 
-                  {visiblePageNumbers.map((pageNumber) => (
-                    <PaginationItem key={pageNumber}>
-                      <PaginationLink
-                        href="#"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          setCurrentPage(pageNumber);
-                        }}
-                        isActive={safeCurrentPage === pageNumber}
-                        className="cursor-pointer"
-                      >
-                        {pageNumber}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ))}
+                    {totalPages > 1 && (
+                      <Pagination className="m-0 w-auto justify-end">
+                        <PaginationContent>
+                          <PaginationItem>
+                            <PaginationPrevious
+                              href="#"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                if (safeCurrentPage > 1) {
+                                  setCurrentPage((page) => page - 1);
+                                }
+                              }}
+                              className={
+                                safeCurrentPage === 1
+                                  ? "pointer-events-none opacity-50"
+                                  : "cursor-pointer"
+                              }
+                            />
+                          </PaginationItem>
 
-                  {visiblePageNumbers[visiblePageNumbers.length - 1] < totalPages && (
-                    <>
-                      {visiblePageNumbers[visiblePageNumbers.length - 1] <
-                        totalPages - 1 && (
-                        <PaginationItem>
-                          <PaginationEllipsis />
-                        </PaginationItem>
-                      )}
-                      <PaginationItem>
-                        <PaginationLink
-                          href="#"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            setCurrentPage(totalPages);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          {totalPages}
-                        </PaginationLink>
-                      </PaginationItem>
-                    </>
-                  )}
+                          {visiblePageNumbers[0] > 1 && (
+                            <>
+                              <PaginationItem>
+                                <PaginationLink
+                                  href="#"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    setCurrentPage(1);
+                                  }}
+                                  className="cursor-pointer"
+                                >
+                                  1
+                                </PaginationLink>
+                              </PaginationItem>
+                              {visiblePageNumbers[0] > 2 && (
+                                <PaginationItem>
+                                  <PaginationEllipsis />
+                                </PaginationItem>
+                              )}
+                            </>
+                          )}
 
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        if (safeCurrentPage < totalPages) {
-                          setCurrentPage((page) => page + 1);
-                        }
-                      }}
-                      className={
-                        safeCurrentPage === totalPages
-                          ? "pointer-events-none opacity-50"
-                          : "cursor-pointer"
-                      }
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            )}
+                          {visiblePageNumbers.map((pageNumber) => (
+                            <PaginationItem key={pageNumber}>
+                              <PaginationLink
+                                href="#"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  setCurrentPage(pageNumber);
+                                }}
+                                isActive={safeCurrentPage === pageNumber}
+                                className="cursor-pointer"
+                              >
+                                {pageNumber}
+                              </PaginationLink>
+                            </PaginationItem>
+                          ))}
+
+                          {visiblePageNumbers[visiblePageNumbers.length - 1] <
+                            totalPages && (
+                            <>
+                              {visiblePageNumbers[
+                                visiblePageNumbers.length - 1
+                              ] <
+                                totalPages - 1 && (
+                                <PaginationItem>
+                                  <PaginationEllipsis />
+                                </PaginationItem>
+                              )}
+                              <PaginationItem>
+                                <PaginationLink
+                                  href="#"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    setCurrentPage(totalPages);
+                                  }}
+                                  className="cursor-pointer"
+                                >
+                                  {totalPages}
+                                </PaginationLink>
+                              </PaginationItem>
+                            </>
+                          )}
+
+                          <PaginationItem>
+                            <PaginationNext
+                              href="#"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                if (safeCurrentPage < totalPages) {
+                                  setCurrentPage((page) => page + 1);
+                                }
+                              }}
+                              className={
+                                safeCurrentPage === totalPages
+                                  ? "pointer-events-none opacity-50"
+                                  : "cursor-pointer"
+                              }
+                            />
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            )}
+          </>
+        ) : (
+          <ContributionBracketSidebar
+            sections={bracketSections}
+            loading={loading && bracketSections.length === 0}
+          />
         )}
       </div>
     </div>

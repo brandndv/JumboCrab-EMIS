@@ -146,9 +146,9 @@ export const REPORT_DEFINITIONS: Record<
   },
   contributions: {
     title: "Contributions",
-    description: "Review statutory contribution setup across employees and the active government contribution settings on record.",
+    description: "Review computed statutory contribution previews across employees using position-owned rates and official bracket tables.",
     path: "/contributions",
-    blurb: "Current contribution setup, employee share values, and active contribution flags.",
+    blurb: "Current bracket-based employee shares, government-ID readiness, and previewed withholding values.",
   },
   deductions: {
     title: "Deductions",

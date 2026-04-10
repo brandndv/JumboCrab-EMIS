@@ -1,3 +1,4 @@
+import { ContributionType } from "@prisma/client";
 import { z } from "zod";
 
 // Treat empty strings as null and trim whitespace for ID numbers
@@ -18,6 +19,20 @@ export const governmentIdSchema = z.object({
   sssNumber: idField,
   philHealthNumber: idField,
   pagIbigNumber: idField,
+  isSssIncludedInPayroll: z.boolean().optional(),
+  isPhilHealthIncludedInPayroll: z.boolean().optional(),
+  isWithholdingIncludedInPayroll: z.boolean().optional(),
+  isPagIbigIncludedInPayroll: z.boolean().optional(),
 });
 
 export type GovernmentIdInput = z.infer<typeof governmentIdSchema>;
+
+export const contributionPayrollInclusionSchema = z.object({
+  employeeId: z.string().min(1, "Employee ID is required"),
+  contributionType: z.nativeEnum(ContributionType),
+  includeInPayroll: z.boolean(),
+});
+
+export type ContributionPayrollInclusionInput = z.infer<
+  typeof contributionPayrollInclusionSchema
+>;

@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import {
+  PayrollFrequency,
   PayrollDeductionType,
   PayrollEarningType,
   PayrollLineSource,
@@ -65,6 +66,42 @@ export const isStandardFirstHalfBimonthlyRun = (input: {
     start.day === 1 &&
     end.day === 15
   );
+};
+
+export const payrollTypeToFrequency = (
+  payrollType: PayrollType,
+): PayrollFrequency | null => {
+  if (payrollType === PayrollType.WEEKLY) return PayrollFrequency.WEEKLY;
+  if (payrollType === PayrollType.BIMONTHLY) return PayrollFrequency.BIMONTHLY;
+  if (payrollType === PayrollType.MONTHLY) return PayrollFrequency.MONTHLY;
+  return null;
+};
+
+const monthStartKey = (year: number, month: number) =>
+  `${year}-${String(month).padStart(2, "0")}-01`;
+
+export const listMonthStartKeysInRange = (startKey: string, endKey: string) => {
+  const start = parseDateKeyParts(startKey);
+  const end = parseDateKeyParts(endKey);
+  if (!start || !end) return [];
+
+  const keys: string[] = [];
+  let year = start.year;
+  let month = start.month;
+
+  while (year < end.year || (year === end.year && month <= end.month)) {
+    const key = monthStartKey(year, month);
+    if (key >= startKey && key <= endKey) {
+      keys.push(key);
+    }
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+
+  return keys;
 };
 
 export const normalizeEmployeeIds = (employeeIds?: string[]) =>
@@ -151,6 +188,11 @@ const sumCurrencyFromValues = (values: Array<unknown>) =>
     values.reduce<number>((acc, value) => acc + toNumber(value, 0), 0),
   );
 
+const serializeJsonObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
 export const serializeEarningLine = (line: {
   id: string;
   earningType: PayrollEarningType;
@@ -184,6 +226,20 @@ export const serializeDeductionLine = (line: {
   deductionCodeSnapshot: string | null;
   deductionNameSnapshot: string | null;
   assignmentId: string | null;
+  contributionType: string | null;
+  bracketIdSnapshot: string | null;
+  bracketReferenceSnapshot: string | null;
+  payrollFrequency: PayrollFrequency | null;
+  periodStartSnapshot: Date | null;
+  periodEndSnapshot: Date | null;
+  compensationBasisSnapshot: unknown;
+  employeeShareSnapshot: unknown;
+  employerShareSnapshot: unknown;
+  baseTaxSnapshot: unknown;
+  marginalRateSnapshot: unknown;
+  quantitySnapshot: unknown;
+  unitLabelSnapshot: string | null;
+  metadata: unknown;
   amount: unknown;
   minutes: number | null;
   rateSnapshot: unknown;
@@ -200,6 +256,20 @@ export const serializeDeductionLine = (line: {
   deductionCodeSnapshot: line.deductionCodeSnapshot,
   deductionNameSnapshot: line.deductionNameSnapshot,
   assignmentId: line.assignmentId,
+  contributionType: line.contributionType as PayrollDeductionLine["contributionType"],
+  bracketIdSnapshot: line.bracketIdSnapshot,
+  bracketReferenceSnapshot: line.bracketReferenceSnapshot,
+  payrollFrequency: line.payrollFrequency,
+  periodStartSnapshot: toIsoString(line.periodStartSnapshot),
+  periodEndSnapshot: toIsoString(line.periodEndSnapshot),
+  compensationBasisSnapshot: toNumberOrNull(line.compensationBasisSnapshot),
+  employeeShareSnapshot: toNumberOrNull(line.employeeShareSnapshot),
+  employerShareSnapshot: toNumberOrNull(line.employerShareSnapshot),
+  baseTaxSnapshot: toNumberOrNull(line.baseTaxSnapshot),
+  marginalRateSnapshot: toNumberOrNull(line.marginalRateSnapshot),
+  quantitySnapshot: toNumberOrNull(line.quantitySnapshot),
+  unitLabelSnapshot: line.unitLabelSnapshot,
+  metadata: serializeJsonObject(line.metadata),
   amount: toNumber(line.amount, 0),
   minutes: line.minutes ?? null,
   rateSnapshot: toNumberOrNull(line.rateSnapshot),

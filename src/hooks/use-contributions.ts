@@ -1,48 +1,141 @@
 "use client";
 
-import { listContributionDirectory } from "@/actions/contributions/contributions-action";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  listContributionBracketDirectory,
+  type ContributionPreviewLine,
+  type ContributionBracketViewSection,
+  listContributionDirectory,
+  type ContributionPreviewRecord,
+} from "@/actions/contributions/contributions-action";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-export type ContributionRow = {
-  employeeId: string;
-  employeeName: string;
-  employeeCode: string;
-  avatarUrl?: string | null;
-  department?: string;
-  eeTotal: number;
-  isSet?: boolean;
-  updatedAt?: string;
-  sssEe?: number;
-  isSssActive?: boolean;
-  philHealthEe?: number;
-  isPhilHealthActive?: boolean;
-  pagIbigEe?: number;
-  isPagIbigActive?: boolean;
-  withholdingEe?: number;
-  isWithholdingActive?: boolean;
-  // Keep ER values for admin views even if hidden on the directory
-  sssEr?: number;
-  philHealthEr?: number;
-  pagIbigEr?: number;
-  withholdingEr?: number;
+export type ContributionRow = ContributionPreviewRecord;
+
+type ContributionLineKey = "sss" | "philHealth" | "pagIbig" | "withholding";
+
+const resolveContributionLineKey = (
+  contributionType: ContributionPreviewLine["contributionType"],
+): ContributionLineKey => {
+  if (contributionType === "PHILHEALTH") return "philHealth";
+  if (contributionType === "PAGIBIG") return "pagIbig";
+  if (contributionType === "WITHHOLDING") return "withholding";
+  return "sss";
+};
+
+const recalculateContributionRow = (row: ContributionRow): ContributionRow => {
+  const statutoryLines = [row.sss, row.philHealth, row.pagIbig];
+  const previewLines = [...statutoryLines, row.withholding];
+  const includedLines = previewLines.filter((line) => line.isIncludedInPayroll);
+
+  return {
+    ...row,
+    eeTotal: includedLines.reduce((sum, line) => sum + line.employeeShare, 0),
+    isReady:
+      Boolean(row.dailyRate) &&
+      statutoryLines.every(
+        (line) => !line.isIncludedInPayroll || line.status === "READY",
+      ),
+    hasMissingGovernmentIds: statutoryLines.some(
+      (line) =>
+        line.isIncludedInPayroll && line.status === "MISSING_GOV_ID",
+    ),
+  };
+};
+
+const fetchContributionRows = async (): Promise<ContributionRow[]> => {
+  const result = await listContributionDirectory();
+  if (!result.success) {
+    throw new Error(result.error || "Failed to fetch contributions");
+  }
+
+  return result.data || [];
 };
 
 export function useContributionsState() {
   const [contributions, setContributions] = useState<ContributionRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [bracketSections, setBracketSections] = useState<
+    ContributionBracketViewSection[]
+  >([]);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "set" | "not-set">(
-    "all"
-  );
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "ready" | "needs-attention"
+  >("all");
   const [departments, setDepartments] = useState<string[]>([]);
 
-  // Load the directory from the API; keep it simple for now.
-  useEffect(() => {
-    refreshContributions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const refreshContributions = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [rows, bracketsResult] = await Promise.all([
+        fetchContributionRows(),
+        listContributionBracketDirectory(),
+      ]);
+      setContributions(rows);
+      if (!bracketsResult.success) {
+        throw new Error(bracketsResult.error || "Failed to fetch brackets");
+      }
+      setBracketSections(bracketsResult.data || []);
+
+      const uniqueDepartments = Array.from(
+        new Set(
+          rows
+            .map((row) => row.department.trim())
+            .filter((name) => name.length > 0),
+        ),
+      );
+      uniqueDepartments.sort((left, right) =>
+        left.localeCompare(right, undefined, { sensitivity: "base" }),
+      );
+      setDepartments(uniqueDepartments);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  const updateContributionInclusion = useCallback(
+    (input: {
+      employeeId: string;
+      contributionType: ContributionPreviewLine["contributionType"];
+      includeInPayroll: boolean;
+      updatedAt?: string;
+    }) => {
+      const lineKey = resolveContributionLineKey(input.contributionType);
+
+      setContributions((current) =>
+        current.map((row) => {
+          if (row.employeeId !== input.employeeId) return row;
+
+          const updatedRow = {
+            ...row,
+            [lineKey]: {
+              ...row[lineKey],
+              isIncludedInPayroll: input.includeInPayroll,
+            },
+            updatedAt: input.updatedAt ?? row.updatedAt,
+          } satisfies ContributionRow;
+
+          return recalculateContributionRow(updatedRow);
+        }),
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    void refreshContributions();
+  }, [refreshContributions]);
 
   const filteredContributions = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -52,65 +145,13 @@ export function useContributionsState() {
         : true;
       const matchesDept =
         departmentFilter === "all" ||
-        (row.department || "").toLowerCase() === departmentFilter.toLowerCase();
+        row.department.toLowerCase() === departmentFilter.toLowerCase();
       const matchesStatus =
         statusFilter === "all" ||
-        (statusFilter === "set" ? row.isSet : !row.isSet);
+        (statusFilter === "ready" ? row.isReady : !row.isReady);
       return matchesSearch && matchesDept && matchesStatus;
     });
   }, [contributions, departmentFilter, searchTerm, statusFilter]);
-
-  const refreshContributions = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await listContributionDirectory();
-      if (!result.success) {
-        throw new Error(result.error || "Failed to fetch contributions");
-      }
-      const rows: ContributionRow[] = (result.data || []).map((row: any) => ({
-        employeeId: row.employeeId,
-        employeeName: row.employeeName,
-        employeeCode: row.employeeCode,
-        avatarUrl: row.avatarUrl,
-        eeTotal: row.eeTotal ?? 0,
-        department: typeof row.department === "string" ? row.department : "",
-        isSet: row.isSet,
-        updatedAt: row.updatedAt,
-        sssEe: row.contribution?.sssEe ?? 0,
-        sssEr: row.contribution?.sssEr ?? 0,
-        philHealthEe: row.contribution?.philHealthEe ?? 0,
-        philHealthEr: row.contribution?.philHealthEr ?? 0,
-        pagIbigEe: row.contribution?.pagIbigEe ?? 0,
-        pagIbigEr: row.contribution?.pagIbigEr ?? 0,
-        withholdingEe: row.contribution?.withholdingEe ?? 0,
-        withholdingEr: row.contribution?.withholdingEr ?? 0,
-        isSssActive: row.contribution?.isSssActive ?? true,
-        isPhilHealthActive: row.contribution?.isPhilHealthActive ?? true,
-        isPagIbigActive: row.contribution?.isPagIbigActive ?? true,
-        isWithholdingActive: row.contribution?.isWithholdingActive ?? true,
-      }));
-      setContributions(rows);
-
-      const uniqueDepartments = Array.from(
-        new Set(
-          rows
-            .map((r) =>
-              typeof r.department === "string" ? r.department.trim() : ""
-            )
-            .filter((name) => name.length > 0)
-        )
-      ) as string[];
-      uniqueDepartments.sort((a, b) =>
-        a.localeCompare(b, undefined, { sensitivity: "base" })
-      );
-      setDepartments(uniqueDepartments);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return {
     contributions,
@@ -124,18 +165,21 @@ export function useContributionsState() {
     statusFilter,
     setStatusFilter,
     departments,
+    bracketSections,
     refreshContributions,
+    updateContributionInclusion,
   };
 }
 
 export const ContributionsContext = createContext<
   ReturnType<typeof useContributionsState> | undefined
 >(undefined);
+
 export function useContributions() {
   const context = useContext(ContributionsContext);
   if (!context) {
     throw new Error(
-      "useContributions must be used within a ContributionsProvider"
+      "useContributions must be used within a ContributionsProvider",
     );
   }
   return context;

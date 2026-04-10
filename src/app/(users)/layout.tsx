@@ -3,6 +3,7 @@ import NavHeader from "@/features/header-provider/header";
 import AppSidebar from "@/features/sidebar-provider/app-sidebar";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { getCurrentPlainSession } from "@/lib/current-session";
+import { redirect } from "next/navigation";
 
 export default async function Layout({
   children,
@@ -10,6 +11,10 @@ export default async function Layout({
   children: React.ReactNode;
 }) {
   const initialSession = await getCurrentPlainSession();
+
+  if (!initialSession?.isLoggedIn) {
+    redirect("/sign-in");
+  }
 
   return (
     <div className="flex h-svh w-full overflow-hidden">

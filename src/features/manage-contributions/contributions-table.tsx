@@ -1,9 +1,8 @@
 "use client";
 
-import { upsertEmployeeContribution } from "@/actions/contributions/contributions-action";
-import { getGovernmentIdByEmployee } from "@/actions/contributions/government-ids-action";
-import type { GovernmentIdRecord } from "@/actions/contributions/government-ids-action";
-import { useState } from "react";
+import { type ContributionPreviewLine } from "@/actions/contributions/contributions-action";
+import { updateContributionPayrollInclusion } from "@/actions/contributions/government-ids-action";
+import { InlineLoadingState } from "@/components/loading/loading-states";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,206 +11,152 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { InlineLoadingState } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
-import { ContributionRow } from "@/hooks/use-contributions";
-import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronUp, IdCard, Pencil } from "lucide-react";
+import { type ContributionRow } from "@/hooks/use-contributions";
+import { ChevronDown, ChevronUp, IdCard, Loader2 } from "lucide-react";
+import { useState } from "react";
 
 type ContributionsTableProps = {
   rows: ContributionRow[];
   loading?: boolean;
-  onRefresh?: () => void;
+  onUpdateContributionInclusion?: (input: {
+    employeeId: string;
+    contributionType: ContributionPreviewLine["contributionType"];
+    includeInPayroll: boolean;
+    updatedAt?: string;
+  }) => void;
 };
 
-type ContributionFormState = {
-  sssEe: number;
-  sssEr: number;
-  isSssActive: boolean;
-  philHealthEe: number;
-  philHealthEr: number;
-  isPhilHealthActive: boolean;
-  pagIbigEe: number;
-  pagIbigEr: number;
-  isPagIbigActive: boolean;
-  withholdingEe: number;
-  withholdingEr: number;
-  isWithholdingActive: boolean;
-};
-
-type ContributionAgencyKey = "sss" | "philHealth" | "pagIbig" | "withholding";
-type ContributionAmountKey = `${ContributionAgencyKey}Ee` | `${ContributionAgencyKey}Er`;
-type ContributionActiveKey =
-  | "isSssActive"
-  | "isPhilHealthActive"
-  | "isPagIbigActive"
-  | "isWithholdingActive";
-
-const contributionEditorSections: {
-  label: string;
-  key: ContributionAgencyKey;
-  activeKey: ContributionActiveKey;
-}[] = [
-  { label: "SSS", key: "sss", activeKey: "isSssActive" },
-  {
-    label: "PhilHealth",
-    key: "philHealth",
-    activeKey: "isPhilHealthActive",
-  },
-  { label: "Pag-IBIG", key: "pagIbig", activeKey: "isPagIbigActive" },
-  {
-    label: "Tax",
-    key: "withholding",
-    activeKey: "isWithholdingActive",
-  },
-];
-
-function formatAmount(value: number) {
-  return new Intl.NumberFormat("en-US", {
+const formatCurrency = (value: number, currencyCode: string) =>
+  new Intl.NumberFormat("en-PH", {
     style: "currency",
-    currency: "PHP",
-    maximumFractionDigits: 0,
+    currency: currencyCode || "PHP",
+    maximumFractionDigits: 2,
   }).format(value);
-}
 
-const agencies: { key: keyof ContributionRow; label: string }[] = [
-  { key: "sssEe", label: "SSS" },
-  { key: "philHealthEe", label: "PhilHealth" },
-  { key: "pagIbigEe", label: "Pag-IBIG" },
-  { key: "withholdingEe", label: "Tax" },
-];
+const formatOptionalCurrency = (value: number | null, currencyCode: string) =>
+  value == null ? "—" : formatCurrency(value, currencyCode);
+
+const humanizeType = (value: ContributionPreviewLine["contributionType"]) => {
+  if (value === "PHILHEALTH") return "PhilHealth";
+  if (value === "PAGIBIG") return "Pag-IBIG";
+  if (value === "WITHHOLDING") return "Withholding";
+  return "SSS";
+};
+
+const statusBadgeClass = (status: ContributionPreviewLine["status"]) => {
+  if (status === "READY") return "border-emerald-600 text-emerald-700";
+  if (status === "MISSING_GOV_ID") return "border-amber-600 text-amber-700";
+  if (status === "NO_BRACKET") return "border-destructive text-destructive";
+  return "border-muted-foreground text-muted-foreground";
+};
+
+const statusLabel = (status: ContributionPreviewLine["status"]) => {
+  if (status === "READY") return "Ready";
+  if (status === "MISSING_GOV_ID") return "Missing ID";
+  if (status === "NO_BRACKET") return "No Bracket";
+  return "Missing Rate";
+};
 
 export function ContributionsTable({
   rows,
   loading,
-  onRefresh,
+  onUpdateContributionInclusion,
 }: ContributionsTableProps) {
   const toast = useToast();
   const [openId, setOpenId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [formState, setFormState] = useState<ContributionFormState | null>(
-    null
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [govIds, setGovIds] = useState<
-    Record<string, GovernmentIdRecord | null>
-  >({});
-  const [govId, setGovId] = useState<GovernmentIdRecord | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  if (loading) {
+  const handleTogglePayrollInclusion = async (
+    row: ContributionRow,
+    line: ContributionPreviewLine,
+  ) => {
+    const key = `${row.employeeId}:${line.contributionType}`;
+    try {
+      setPendingKey(key);
+      const result = await updateContributionPayrollInclusion({
+        employeeId: row.employeeId,
+        contributionType: line.contributionType,
+        includeInPayroll: !line.isIncludedInPayroll,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update payroll inclusion");
+      }
+
+      onUpdateContributionInclusion?.({
+        employeeId: row.employeeId,
+        contributionType: line.contributionType,
+        includeInPayroll: !line.isIncludedInPayroll,
+        updatedAt: result.data?.updatedAt,
+      });
+      toast.success(
+        line.isIncludedInPayroll
+          ? `${humanizeType(line.contributionType)} excluded from payroll.`
+          : `${humanizeType(line.contributionType)} included in payroll.`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update payroll inclusion";
+      toast.error("Failed to update payroll inclusion.", {
+        description: message,
+      });
+    } finally {
+      setPendingKey(null);
+    }
+  };
+
+  if (loading && rows.length === 0) {
     return <InlineLoadingState label="Loading contributions" lines={3} />;
   }
 
   if (!rows.length) {
     return (
       <div className="rounded-2xl border border-border/70 bg-card/70 p-6 text-sm text-muted-foreground">
-        No contributions found.
+        No contribution previews found.
       </div>
     );
   }
 
-  const handleOpenChange = (row: ContributionRow, state: boolean) => {
-    if (state && !govIds[row.employeeId]) {
-      getGovernmentIdByEmployee(row.employeeId)
-        .then((result) => {
-          if (!result.success) return;
-          setGovIds((prev) => ({
-            ...prev,
-            [row.employeeId]: result.data || null,
-          }));
-        })
-        .catch(() => {});
-    }
-    setOpenId(state ? row.employeeId : null);
-  };
-
-  const startEdit = (row: ContributionRow) => {
-    setEditingId(row.employeeId);
-    setFormState({
-      sssEe: row.sssEe ?? 0,
-      sssEr: row.sssEr ?? 0,
-      isSssActive: row.isSssActive ?? true,
-      philHealthEe: row.philHealthEe ?? 0,
-      philHealthEr: row.philHealthEr ?? 0,
-      isPhilHealthActive: row.isPhilHealthActive ?? true,
-      pagIbigEe: row.pagIbigEe ?? 0,
-      pagIbigEr: row.pagIbigEr ?? 0,
-      isPagIbigActive: row.isPagIbigActive ?? true,
-      withholdingEe: row.withholdingEe ?? 0,
-      withholdingEr: row.withholdingEr ?? 0,
-      isWithholdingActive: row.isWithholdingActive ?? true,
-    });
-    setError(null);
-    // Load Government IDs for context inside the editor
-    getGovernmentIdByEmployee(row.employeeId)
-      .then((result) => setGovId(result.success ? result.data || null : null))
-      .catch(() => setGovId(null));
-  };
-
-  const handleSave = async (employeeId: string) => {
-    try {
-      setSaving(true);
-      setError(null);
-      if (!formState) {
-        throw new Error("Form not initialized");
-      }
-      const result = await upsertEmployeeContribution({
-        employeeId,
-        ...formState,
-        effectiveDate: undefined,
-      });
-      if (!result.success) {
-        throw new Error(result.error || "Failed to save");
-      }
-      setEditingId(null);
-      onRefresh?.();
-      toast.success("Contributions saved successfully.");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save";
-      setError(message);
-      toast.error("Failed to save contributions.", {
-        description: message,
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
-    <div className="rounded-2xl border border-border/70 bg-card/70 shadow-sm overflow-hidden">
-      <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-3 text-sm font-medium text-muted-foreground border-b border-border/70">
+    <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/70 shadow-sm">
+      <div className="hidden grid-cols-12 gap-3 border-b border-border/70 px-4 py-3 text-sm font-medium text-muted-foreground md:grid">
         <div className="col-span-5">Employee</div>
-        <div className="col-span-4">EE Contribution</div>
+        <div className="col-span-4">Computed Employee Share</div>
         <div className="col-span-3 text-right">Last Updated</div>
       </div>
       <div className="divide-y divide-border/70">
         {rows.map((row) => {
           const isOpen = openId === row.employeeId;
+          const previewLines = [
+            row.sss,
+            row.philHealth,
+            row.pagIbig,
+            row.withholding,
+          ];
+          const includedLines = previewLines.filter(
+            (line) => line.isIncludedInPayroll,
+          );
+          const excludedCount = previewLines.length - includedLines.length;
+          const includedSummary =
+            includedLines.length > 0
+              ? includedLines.map((line) => humanizeType(line.contributionType)).join(", ")
+              : "No statutory items included in payroll";
+
           return (
             <Collapsible
               key={row.employeeId}
               open={isOpen}
-              onOpenChange={(state) => handleOpenChange(row, state)}
+              onOpenChange={(open) => setOpenId(open ? row.employeeId : null)}
             >
               <CollapsibleTrigger asChild>
-                <button className="w-full grid grid-cols-1 gap-3 px-4 py-4 text-sm items-start md:grid-cols-12 md:items-center hover:bg-muted/40 transition">
-                  <div className="md:col-span-5 flex items-center gap-3 text-left">
+                <button className="grid w-full grid-cols-1 items-start gap-3 px-4 py-4 text-left text-sm transition hover:bg-muted/40 md:grid-cols-12 md:items-center">
+                  <div className="flex items-center gap-3 md:col-span-5">
                     <Avatar className="h-10 w-10">
                       {row.avatarUrl ? (
-                        <AvatarImage
-                          src={row.avatarUrl}
-                          alt={row.employeeName}
-                        />
+                        <AvatarImage src={row.avatarUrl} alt={row.employeeName} />
                       ) : (
                         <AvatarFallback>
                           {row.employeeName
@@ -224,7 +169,7 @@ export function ContributionsTable({
                       )}
                     </Avatar>
                     <div className="min-w-0">
-                      <div className="font-medium text-foreground flex items-center gap-2 truncate">
+                      <div className="flex items-center gap-2 font-medium text-foreground">
                         <span className="truncate">{row.employeeName}</span>
                         {isOpen ? (
                           <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -232,52 +177,36 @@ export function ContributionsTable({
                           <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground truncate">
+                      <div className="text-xs text-muted-foreground">
                         {row.employeeCode}
+                        {row.positionName ? ` • ${row.positionName}` : ""}
                       </div>
                     </div>
                   </div>
 
-                  <div className="md:col-span-4 text-left">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <p className="md:hidden text-muted-foreground">
-                        EE Contribution
+                  <div className="md:col-span-4">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Badge variant={row.isReady ? "success" : "warning"}>
+                          {row.isReady ? "Ready" : "Needs attention"}
+                        </Badge>
+                        <Badge variant="outline">
+                          Included total {formatCurrency(row.eeTotal, row.currencyCode)}
+                        </Badge>
+                        {excludedCount > 0 ? (
+                          <Badge variant="secondary">
+                            {excludedCount} excluded from payroll
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {includedSummary}
                       </p>
-                      <Badge variant={row.isSet ? "default" : "outline"}>
-                        {row.isSet ? "Set" : "Not set"}
-                      </Badge>
-                      {row.isSet ? (
-                        <>
-                          <Badge variant="outline">
-                            SSS {formatAmount(row.sssEe ?? 0)}
-                          </Badge>
-                          <Badge variant="outline">
-                            PhilHealth {formatAmount(row.philHealthEe ?? 0)}
-                          </Badge>
-                          <Badge variant="outline">
-                            Pag-IBIG {formatAmount(row.pagIbigEe ?? 0)}
-                          </Badge>
-                          <Badge variant="outline">
-                            Tax {formatAmount(row.withholdingEe ?? 0)}
-                          </Badge>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          No EE contributions set
-                        </span>
-                      )}
                     </div>
                   </div>
 
-                  <div
-                    className={cn(
-                      "md:col-span-3 text-muted-foreground",
-                      "md:text-right"
-                    )}
-                  >
-                    <p className="text-xs text-muted-foreground md:hidden">
-                      Last Updated
-                    </p>
+                  <div className="text-muted-foreground md:col-span-3 md:text-right">
+                    <p className="text-xs md:hidden">Last Updated</p>
                     <p>
                       {row.updatedAt
                         ? new Date(row.updatedAt).toLocaleDateString()
@@ -286,183 +215,128 @@ export function ContributionsTable({
                   </div>
                 </button>
               </CollapsibleTrigger>
+
               <CollapsibleContent>
-                <div className="px-4 pb-4">
+                <div className="space-y-4 px-4 pb-4">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs">
+                      <p className="text-xs text-muted-foreground">Department</p>
+                      <p className="mt-1 text-sm font-medium">
+                        {row.department || "Unassigned"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs">
+                      <p className="text-xs text-muted-foreground">Current Position</p>
+                      <p className="mt-1 text-sm font-medium">
+                        {row.positionName || "Not assigned"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs">
+                      <p className="text-xs text-muted-foreground">Daily Rate</p>
+                      <p className="mt-1 text-sm font-medium">
+                        {formatOptionalCurrency(row.dailyRate, row.currencyCode)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs">
+                      <p className="text-xs text-muted-foreground">Monthly Rate</p>
+                      <p className="mt-1 text-sm font-medium">
+                        {formatOptionalCurrency(row.monthlyRate, row.currencyCode)}
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {agencies.map((agency) => (
+                    {previewLines.map((line) => (
                       <div
-                        key={agency.key}
-                        className="rounded-lg border bg-background/60 px-3 py-3 shadow-xs"
+                        key={line.contributionType}
+                        className="rounded-xl border border-border/70 bg-background/40 p-4"
                       >
-                        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                          <span>{agency.label} (EE)</span>
-                          {govIds[row.employeeId] && (
-                            <span className="flex items-center gap-1">
-                              <IdCard className="h-3 w-3" />
-                              {agency.key === "sssEe" &&
-                                (govIds[row.employeeId]?.sssNumber || "No SSS")}
-                              {agency.key === "philHealthEe" &&
-                                (govIds[row.employeeId]?.philHealthNumber ||
-                                  "No PhilHealth")}
-                              {agency.key === "pagIbigEe" &&
-                                (govIds[row.employeeId]?.pagIbigNumber ||
-                                  "No Pag-IBIG")}
-                              {agency.key === "withholdingEe" &&
-                                (govIds[row.employeeId]?.tinNumber || "No TIN")}
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-medium">
+                            {humanizeType(line.contributionType)}
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={statusBadgeClass(line.status)}
+                          >
+                            {statusLabel(line.status)}
+                          </Badge>
                         </div>
-                        <div className="text-lg font-semibold">
-                          {formatAmount((row[agency.key] as number) ?? 0)}
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant={
+                              line.isIncludedInPayroll ? "success" : "secondary"
+                            }
+                          >
+                            {line.isIncludedInPayroll
+                              ? "Included in payroll"
+                              : "Excluded from payroll"}
+                          </Badge>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={
+                              line.isIncludedInPayroll ? "outline" : "default"
+                            }
+                            disabled={
+                              pendingKey ===
+                              `${row.employeeId}:${line.contributionType}`
+                            }
+                            onClick={() =>
+                              void handleTogglePayrollInclusion(row, line)
+                            }
+                          >
+                            {pendingKey ===
+                            `${row.employeeId}:${line.contributionType}` ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : null}
+                            {line.isIncludedInPayroll
+                              ? "Exclude from payroll"
+                              : "Include in payroll"}
+                          </Button>
                         </div>
-                        <div className="text-[11px] text-muted-foreground mt-1">
-                          EE only. ER stored for admin views.
+
+                        <div className="mt-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">
+                            Employee share
+                          </p>
+                          <p className="text-lg font-semibold">
+                            {formatCurrency(line.employeeShare, row.currencyCode)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Employer share{" "}
+                            {formatCurrency(line.employerShare, row.currencyCode)}
+                          </p>
+                        </div>
+
+                        <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                          {!line.isIncludedInPayroll ? (
+                            <p className="rounded-md border border-dashed border-border/70 bg-muted/20 px-2 py-1.5">
+                              Excluded items stay visible here for reference but will
+                              not be deducted when payroll is generated.
+                            </p>
+                          ) : null}
+                          <div className="flex items-start gap-2">
+                            <IdCard className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <span>{line.governmentNumber || "Not set"}</span>
+                          </div>
+                          <p>
+                            Basis:{" "}
+                            {line.basisAmount == null
+                              ? "—"
+                              : formatCurrency(line.basisAmount, row.currencyCode)}
+                          </p>
+                          <p>
+                            Range: {line.bracketRangeLabel || "—"}
+                          </p>
+                          <p>
+                            Bracket: {line.bracketReference || line.bracketId || "—"}
+                          </p>
+                          {line.remarks && <p>{line.remarks}</p>}
                         </div>
                       </div>
                     ))}
-                  </div>
-                  <div className="flex justify-end mt-3">
-                    <Dialog
-                      open={editingId === row.employeeId}
-                      onOpenChange={(open) =>
-                        open ? startEdit(row) : setEditingId(null)
-                      }
-                    >
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2">
-                          <Pencil className="h-4 w-4" />
-                          Edit Contributions
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent aria-describedby="contrib-dialog-desc">
-                        <DialogHeader>
-                          <DialogTitle>
-                            Edit contributions for {row.employeeName}
-                          </DialogTitle>
-                          <p id="contrib-dialog-desc" className="sr-only">
-                            Update EE/ER amounts and activate/deactivate
-                            agencies for payroll.
-                          </p>
-                        </DialogHeader>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          {contributionEditorSections.map(
-                            ({ label, key, activeKey }) => {
-                              const eeKey = `${key}Ee` as ContributionAmountKey;
-                              const erKey = `${key}Er` as ContributionAmountKey;
-
-                              return (
-                                <div key={key} className="space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="text-sm font-medium capitalize">
-                                  {label}
-                                </div>
-                                {govId && (
-                                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                    <IdCard className="h-3 w-3" />
-                                    {key === "sss" &&
-                                      (govId.sssNumber || "No SSS")}
-                                    {key === "philHealth" &&
-                                      (govId.philHealthNumber ||
-                                        "No PhilHealth")}
-                                    {key === "pagIbig" &&
-                                      (govId.pagIbigNumber || "No Pag-IBIG")}
-                                    {key === "withholding" &&
-                                      (govId.tinNumber || "No TIN")}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                  <p className="text-[11px] text-muted-foreground">
-                                    EE
-                                  </p>
-                                  <Input
-                                    type="number"
-                                    value={formState ? formState[eeKey] ?? 0 : 0}
-                                    onChange={(e) =>
-                                      setFormState((prev) =>
-                                        prev
-                                          ? {
-                                              ...prev,
-                                              [eeKey]:
-                                                e.target.value === ""
-                                                  ? 0
-                                                  : Number(e.target.value) || 0,
-                                            }
-                                          : null
-                                      )
-                                    }
-                                    placeholder="EE"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <p className="text-[11px] text-muted-foreground">
-                                    ER
-                                  </p>
-                                  <Input
-                                    type="number"
-                                    value={formState ? formState[erKey] ?? 0 : 0}
-                                    onChange={(e) =>
-                                      setFormState((prev) =>
-                                        prev
-                                          ? {
-                                              ...prev,
-                                              [erKey]:
-                                                e.target.value === ""
-                                                  ? 0
-                                                  : Number(e.target.value) || 0,
-                                            }
-                                          : null
-                                      )
-                                    }
-                                    placeholder="ER"
-                                  />
-                                </div>
-                              </div>
-                              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-muted"
-                                  checked={formState ? formState[activeKey] ?? true : true}
-                                  onChange={(e) =>
-                                    setFormState((prev) =>
-                                      prev
-                                        ? {
-                                            ...prev,
-                                            [activeKey]: e.target.checked,
-                                          }
-                                        : null
-                                    )
-                                  }
-                                />
-                                Active in payroll
-                              </label>
-                              <p className="text-[11px] text-muted-foreground">
-                                EE shows in directory; ER is stored for admin
-                                use. Disable to exclude this agency.
-                              </p>
-                                </div>
-                              );
-                            },
-                          )}
-                        </div>
-                        {error && (
-                          <p className="text-sm text-destructive">{error}</p>
-                        )}
-                        <DialogFooter>
-                          <Button
-                            onClick={() => handleSave(row.employeeId)}
-                            disabled={saving}
-                            className="gap-2"
-                          >
-                            {saving && (
-                              <span className="h-3 w-3 animate-spin rounded-full border border-border border-t-transparent" />
-                            )}
-                            Save
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
                   </div>
                 </div>
               </CollapsibleContent>

@@ -15,6 +15,7 @@ import {
   type WeeklyPattern,
 } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { seedContributionBrackets } from "./shared/contribution-brackets";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
@@ -32,7 +33,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const RESTAURANT_NAME = "Jumbo Crab";
 const RESTAURANT_LOCATION = "Alona, Panglao, Bohol";
 const ESTABLISHED_AT = dateAtNoonUtc(2023, 8, 3);
-const CONTRIBUTION_EFFECTIVE_AT = dateAtNoonUtc(2025, 8, 1);
+const SSS_EFFECTIVE_AT = dateAtNoonUtc(2025, 0, 1);
+const PHILHEALTH_EFFECTIVE_AT = dateAtNoonUtc(2024, 0, 1);
+const PAGIBIG_EFFECTIVE_AT = dateAtNoonUtc(2024, 0, 1);
+const WITHHOLDING_EFFECTIVE_AT = dateAtNoonUtc(2023, 0, 1);
 
 type DepartmentName =
   | "Kitchen"
@@ -176,6 +180,19 @@ const shiftIdForWeekday = (snapshot: DayShiftSnapshot, weekday: number) => {
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
+const deriveCompensationRates = (dailyRateInput: number | string) => {
+  const dailyRate =
+    typeof dailyRateInput === "number"
+      ? dailyRateInput
+      : Number.parseFloat(dailyRateInput);
+
+  return {
+    dailyRate: roundMoney(dailyRate),
+    hourlyRate: roundMoney(dailyRate / 8),
+    monthlyRate: roundMoney(dailyRate * 26),
+  };
+};
+
 function buildProfileImageUrl(firstName: string, lastName: string, username: string) {
   const seed = encodeURIComponent(`${firstName} ${lastName} ${username}`);
   return `https://api.dicebear.com/9.x/notionists/svg?seed=${seed}&backgroundColor=f97316,e2e8f0,cbd5e1`;
@@ -246,16 +263,35 @@ function buildPositionSeeds(staff: StaffSeed[]) {
     departmentName: DepartmentName;
     name: string;
     description: string;
+    dailyRate: string;
+    effectiveFrom: Date;
   }> = [];
 
   for (const member of staff) {
     const key = `${member.departmentName}:${member.positionName}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      const existing = positions.find(
+        (position) =>
+          position.departmentName === member.departmentName &&
+          position.name === member.positionName,
+      );
+      if (existing && existing.dailyRate !== member.dailyRate) {
+        throw new Error(
+          `Position ${key} has conflicting rate seeds (${existing.dailyRate} vs ${member.dailyRate}). Split it into separate positions first.`,
+        );
+      }
+      if (existing && member.startDate < existing.effectiveFrom) {
+        existing.effectiveFrom = member.startDate;
+      }
+      continue;
+    }
     seen.add(key);
     positions.push({
       departmentName: member.departmentName,
       name: member.positionName,
       description: `${member.positionName} role for ${member.departmentName.toLowerCase()} operations at ${RESTAURANT_NAME}.`,
+      dailyRate: member.dailyRate,
+      effectiveFrom: member.startDate,
     });
   }
 
@@ -759,8 +795,9 @@ async function seedUsers(staff: StaffSeed[]) {
   return users;
 }
 
-async function seedOrg(staff: StaffSeed[]) {
+async function seedOrg(staff: StaffSeed[], users: UserDirectory) {
   const deptMap = {} as Record<DepartmentName, string>;
+  const createdByUserId = users.gm?.userId ?? users.admin?.userId ?? null;
 
   for (const seed of buildDepartmentSeeds()) {
     const row = await prisma.department.create({
@@ -775,49 +812,34 @@ async function seedOrg(staff: StaffSeed[]) {
 
   const positionMap: Record<string, string> = {};
   for (const seed of buildPositionSeeds(staff)) {
+    const rates = deriveCompensationRates(seed.dailyRate);
     const row = await prisma.position.create({
       data: {
         name: seed.name,
         description: seed.description,
         departmentId: deptMap[seed.departmentName],
+        dailyRate: new Prisma.Decimal(rates.dailyRate.toFixed(2)),
+        hourlyRate: new Prisma.Decimal(rates.hourlyRate.toFixed(2)),
+        monthlyRate: new Prisma.Decimal(rates.monthlyRate.toFixed(2)),
+        currencyCode: "PHP",
         isActive: true,
+        rateHistory: {
+          create: {
+            dailyRate: new Prisma.Decimal(rates.dailyRate.toFixed(2)),
+            hourlyRate: new Prisma.Decimal(rates.hourlyRate.toFixed(2)),
+            monthlyRate: new Prisma.Decimal(rates.monthlyRate.toFixed(2)),
+            currencyCode: "PHP",
+            effectiveFrom: seed.effectiveFrom,
+            reason: "Initial seeded position rate",
+            createdByUserId,
+          },
+        },
       },
     });
     positionMap[`${seed.departmentName}:${seed.name}`] = row.positionId;
   }
 
   return { deptMap, positionMap } satisfies OrgMaps;
-}
-
-function buildContributionValues(dailyRate: number) {
-  const monthlyBase = dailyRate * 26;
-  const sssEe = roundMoney(Math.min(900, Math.max(250, monthlyBase * 0.045)));
-  const sssEr = roundMoney(sssEe * 1.8);
-  const philHealthEe = roundMoney(
-    Math.min(900, Math.max(150, monthlyBase * 0.015)),
-  );
-  const philHealthEr = philHealthEe;
-  const pagIbigEe = roundMoney(Math.min(100, Math.max(50, monthlyBase * 0.02)));
-  const pagIbigEr = pagIbigEe;
-  const withholdingEe = roundMoney(
-    monthlyBase >= 24000
-      ? monthlyBase * 0.04
-      : monthlyBase >= 18000
-        ? monthlyBase * 0.02
-        : monthlyBase >= 14000
-          ? monthlyBase * 0.01
-          : 0,
-  );
-
-  return {
-    sssEe,
-    sssEr,
-    philHealthEe,
-    philHealthEr,
-    pagIbigEe,
-    pagIbigEr,
-    withholdingEe,
-  };
 }
 
 async function seedEmployees(staff: StaffSeed[], users: UserDirectory, maps: OrgMaps) {
@@ -849,7 +871,6 @@ async function seedEmployees(staff: StaffSeed[], users: UserDirectory, maps: Org
         emergencyContactRelationship: "Relative",
         emergencyContactPhone: member.phone,
         emergencyContactEmail: member.email,
-        dailyRate: new Prisma.Decimal(member.dailyRate),
         description: member.description,
         isArchived: false,
         userId: users[member.username]?.userId,
@@ -871,34 +892,14 @@ async function seedEmployees(staff: StaffSeed[], users: UserDirectory, maps: Org
       },
     });
 
-    const contributions = buildContributionValues(Number(member.dailyRate));
-    await prisma.employeeContribution.create({
+    await prisma.employeePositionHistory.create({
       data: {
         employeeId: row.employeeId,
-        sssEe: contributions.sssEe,
-        sssEr: contributions.sssEr,
-        philHealthEe: contributions.philHealthEe,
-        philHealthEr: contributions.philHealthEr,
-        pagIbigEe: contributions.pagIbigEe,
-        pagIbigEr: contributions.pagIbigEr,
-        withholdingEe: contributions.withholdingEe,
-        withholdingEr: 0,
-        isSssActive: true,
-        isPhilHealthActive: true,
-        isPagIbigActive: true,
-        isWithholdingActive: true,
-        effectiveDate: CONTRIBUTION_EFFECTIVE_AT,
-        createdById: gmUserId,
-        updatedById: gmUserId,
-      },
-    });
-
-    await prisma.employeeRateHistory.create({
-      data: {
-        employeeId: row.employeeId,
-        dailyRate: new Prisma.Decimal(member.dailyRate),
+        departmentId: maps.deptMap[member.departmentName],
+        positionId: maps.positionMap[`${member.departmentName}:${member.positionName}`],
         effectiveFrom: member.startDate,
-        reason: "Initial seed rate",
+        reason: "Initial seed assignment",
+        createdByUserId: gmUserId,
       },
     });
 
@@ -1498,7 +1499,13 @@ async function main() {
 
   const staff = buildStaffBlueprint();
   const users = await seedUsers(staff);
-  const orgMaps = await seedOrg(staff);
+  await seedContributionBrackets(prisma, {
+    sssEffectiveFrom: SSS_EFFECTIVE_AT,
+    philHealthEffectiveFrom: PHILHEALTH_EFFECTIVE_AT,
+    pagIbigEffectiveFrom: PAGIBIG_EFFECTIVE_AT,
+    withholdingEffectiveFrom: WITHHOLDING_EFFECTIVE_AT,
+  });
+  const orgMaps = await seedOrg(staff, users);
   const employees = await seedEmployees(staff, users, orgMaps);
   const deductionTypeMap = await seedDeductionTypes(users);
   await seedDeductionAssignments(employees, users, deductionTypeMap);

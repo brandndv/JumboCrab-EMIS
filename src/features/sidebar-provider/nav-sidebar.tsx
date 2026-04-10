@@ -557,7 +557,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                             "!bg-orange-600 !text-white border-orange-500 shadow-lg",
                           arrowClassName: "bg-orange-600 fill-orange-600",
                         }}
-                        className="w-full text-inherit transition-[width,height,padding,gap] duration-300 ease-out hover:bg-transparent hover:text-inherit focus-visible:ring-0"
+                        className="w-full text-inherit transition-[width,height,padding,gap] duration-300 ease-out hover:bg-transparent hover:text-inherit active:bg-transparent active:text-inherit focus-visible:ring-0"
                       >
                         <Link
                           href={item.href}
@@ -631,7 +631,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                             >
                               <SidebarMenuSubButton
                                 asChild
-                                className={`pl-4 w-full text-left transition-colors ${
+                                className={`pl-4 w-full text-left transition-colors active:bg-transparent ${
                                   subActive
                                     ? "text-orange-600 font-medium dark:text-orange-400"
                                     : "text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400"
@@ -667,7 +667,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                           "!bg-orange-600 !text-white border-orange-500 shadow-lg",
                         arrowClassName: "bg-orange-600 fill-orange-600",
                       }}
-                      className="w-full text-inherit transition-[width,height,padding,gap] duration-300 ease-out hover:bg-transparent hover:text-inherit focus-visible:ring-0"
+                      className="w-full text-inherit transition-[width,height,padding,gap] duration-300 ease-out hover:bg-transparent hover:text-inherit active:bg-transparent active:text-inherit focus-visible:ring-0"
                     >
                       <Link href={item.href} className="flex w-full items-center">
                         <div

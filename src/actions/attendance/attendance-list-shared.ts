@@ -19,7 +19,6 @@ import {
   resolveEffectiveDailyRates,
   serializeAttendance,
   serializeEmployeeSummary,
-  toNumberOrNull,
 } from "./attendance-shared";
 
 export type AttendanceDayPunch = {
@@ -61,7 +60,6 @@ export const loadAttendanceListContext = async ({
           employeeCode: true,
           firstName: true,
           lastName: true,
-          dailyRate: true,
           department: { select: { name: true } },
           position: { select: { name: true } },
         },
@@ -82,20 +80,15 @@ export const loadAttendanceListContext = async ({
   });
 
   const recordDatesByEmployee = new Map<string, Date[]>();
-  const recordFallbackRates = new Map<string, unknown>();
   records.forEach((record) => {
     if (!recordDatesByEmployee.has(record.employeeId)) {
       recordDatesByEmployee.set(record.employeeId, []);
     }
     recordDatesByEmployee.get(record.employeeId)!.push(record.workDate);
-    if (!recordFallbackRates.has(record.employeeId)) {
-      recordFallbackRates.set(record.employeeId, record.employee?.dailyRate ?? null);
-    }
   });
 
   const effectiveDailyRates = await resolveEffectiveDailyRates({
     employeeDates: recordDatesByEmployee,
-    fallbackDailyRates: recordFallbackRates,
   });
 
   const punchesByEmployeeDay = new Map<string, AttendanceDayPunch[]>();
@@ -151,7 +144,7 @@ export const enrichAttendanceRecords = ({
     const effectiveDailyRate =
       effectiveDailyRates.get(
         buildRateLookupKey(record.employeeId, record.workDate),
-      ) ?? toNumberOrNull(record.employee?.dailyRate ?? null);
+      ) ?? null;
 
     const dayStart = startOfZonedDay(record.workDate);
     const punches =
@@ -308,7 +301,6 @@ export const buildSingleDayAttendanceList = async ({
       employeeCode: true,
       firstName: true,
       lastName: true,
-      dailyRate: true,
       department: { select: { name: true } },
       position: { select: { name: true } },
     },
@@ -318,14 +310,11 @@ export const buildSingleDayAttendanceList = async ({
   const dayEnd = endOfZonedDay(startDate);
 
   const includeAllDatesByEmployee = new Map<string, Date[]>();
-  const includeAllFallbackRates = new Map<string, unknown>();
   employees.forEach((employee) => {
     includeAllDatesByEmployee.set(employee.employeeId, [dayStart]);
-    includeAllFallbackRates.set(employee.employeeId, employee.dailyRate ?? null);
   });
   const includeAllEffectiveRates = await resolveEffectiveDailyRates({
     employeeDates: includeAllDatesByEmployee,
-    fallbackDailyRates: includeAllFallbackRates,
   });
 
   const employeeIds = employees.map((employee) => employee.employeeId);
@@ -429,7 +418,7 @@ export const buildSingleDayAttendanceList = async ({
     const effectiveDailyRate =
       includeAllEffectiveRates.get(
         buildRateLookupKey(employee.employeeId, dayStart),
-      ) ?? toNumberOrNull(employee.dailyRate ?? null);
+      ) ?? null;
     const ratePerMinute = computeRatePerMinute({
       dailyRate: effectiveDailyRate,
       scheduledPaidMinutes,

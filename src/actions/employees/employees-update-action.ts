@@ -1,16 +1,16 @@
 "use server";
 
+import { getSession } from "@/lib/auth";
 import { checkConnection, db } from "@/lib/db";
 import type { Employee as PrismaEmployee, Prisma } from "@prisma/client";
+import { shiftDateByDays } from "@/lib/payroll/helpers";
 import { SUFFIX } from "@/lib/validations/employees";
 import {
-  isMissingRateHistoryTableError,
-  isSameRate,
+  employeeLookupInclude,
   normalizeEmployeeRelationIds,
   parseDateInput,
   revalidateEmployeePages,
-  serializeEmployeeRecord,
-  toRateNumber,
+  serializeEmployeeWithLookups,
   validateEmployeeRelationIds,
 } from "./employees-shared";
 import type { EmployeeActionRecord } from "./types";
@@ -18,8 +18,6 @@ import type { EmployeeActionRecord } from "./types";
 export async function updateEmployee(
   employeeData: Partial<PrismaEmployee> & {
     employeeId: string;
-    rateEffectiveFrom?: string | Date | null;
-    rateReason?: string | null;
   },
 ): Promise<{
   success: boolean;
@@ -32,11 +30,11 @@ export async function updateEmployee(
   }
 
   try {
+    const session = await getSession();
+    const actorUserId = session.userId ?? null;
     const data = JSON.parse(JSON.stringify(employeeData));
-    const { employeeId, rateEffectiveFrom, rateReason } = data;
+    const { employeeId } = data;
     delete data.employeeId;
-    delete data.rateEffectiveFrom;
-    delete data.rateReason;
 
     if ("employeeCode" in data) {
       delete data.employeeCode;
@@ -49,7 +47,8 @@ export async function updateEmployee(
         firstName: true,
         lastName: true,
         nationality: true,
-        dailyRate: true,
+        departmentId: true,
+        positionId: true,
         updatedAt: true,
       },
     });
@@ -98,7 +97,6 @@ export async function updateEmployee(
       "emergencyContactRelationship",
       "emergencyContactPhone",
       "emergencyContactEmail",
-      "dailyRate",
       "userId",
     ] as const;
 
@@ -148,93 +146,61 @@ export async function updateEmployee(
       delete updateData.suffix;
     }
 
-    const parsedRateEffectiveFrom = parseDateInput(rateEffectiveFrom);
-    if (
-      rateEffectiveFrom != null &&
-      rateEffectiveFrom !== "" &&
-      !parsedRateEffectiveFrom
-    ) {
-      return {
-        success: false,
-        error: "Rate effective date is invalid",
-      };
-    }
-    const rateHistoryEffectiveFrom = parsedRateEffectiveFrom ?? new Date();
-    const normalizedRateReason =
-      typeof rateReason === "string" ? rateReason.trim() : "";
-
-    if ("dailyRate" in updateData) {
-      const value = updateData.dailyRate;
-      if (value == null || value === "") {
-        updateData.dailyRate = null;
-      } else {
-        const parsed =
-          typeof value === "number" ? value : Number.parseFloat(String(value));
-        if (Number.isNaN(parsed) || parsed < 0) {
-          return {
-            success: false,
-            error: "Daily rate must be a valid non-negative number",
-          };
-        } else {
-          updateData.dailyRate = parsed;
-        }
-      }
-    }
-
-    const hasDailyRateUpdate = Object.prototype.hasOwnProperty.call(
-      updateData,
-      "dailyRate",
-    );
-    const previousDailyRate = toRateNumber(currentData.dailyRate);
-    const nextDailyRate = hasDailyRateUpdate
-      ? toRateNumber(updateData.dailyRate)
-      : null;
-
     const updatedEmployee = await db.employee.update({
       where: { employeeId },
       data: updateData as Prisma.EmployeeUncheckedUpdateInput,
+      include: employeeLookupInclude,
     });
+    const hasDepartmentUpdate = Object.prototype.hasOwnProperty.call(
+      updateData,
+      "departmentId",
+    );
+    const hasPositionUpdate = Object.prototype.hasOwnProperty.call(
+      updateData,
+      "positionId",
+    );
+    const nextDepartmentId = hasDepartmentUpdate
+      ? (updateData.departmentId as string | null | undefined) ?? null
+      : currentData.departmentId ?? null;
+    const nextPositionId = hasPositionUpdate
+      ? (updateData.positionId as string | null | undefined) ?? null
+      : currentData.positionId ?? null;
 
-    if (hasDailyRateUpdate && !isSameRate(previousDailyRate, nextDailyRate)) {
-      try {
-        await db.employeeRateHistory.upsert({
-          where: {
-            employeeId_effectiveFrom: {
-              employeeId,
-              effectiveFrom: rateHistoryEffectiveFrom,
-            },
+    if (
+      (hasDepartmentUpdate || hasPositionUpdate) &&
+      (nextDepartmentId !== (currentData.departmentId ?? null) ||
+        nextPositionId !== (currentData.positionId ?? null))
+    ) {
+      const effectiveFrom = new Date();
+      await db.employeePositionHistory.updateMany({
+        where: {
+          employeeId,
+          effectiveTo: null,
+        },
+        data: {
+          effectiveTo: shiftDateByDays(effectiveFrom, -1),
+        },
+      });
+
+      await db.employeePositionHistory.create({
+        data: {
+          employeeId,
+          departmentId: nextDepartmentId,
+          positionId: nextPositionId,
+          effectiveFrom,
+          reason: "Department/position updated",
+          metadata: {
+            previousDepartmentId: currentData.departmentId ?? null,
+            previousPositionId: currentData.positionId ?? null,
+            source: "employee_update",
           },
-          create: {
-            employeeId,
-            dailyRate: nextDailyRate,
-            effectiveFrom: rateHistoryEffectiveFrom,
-            reason:
-              normalizedRateReason ||
-              (nextDailyRate == null
-                ? "Daily rate cleared"
-                : "Daily rate updated"),
-          },
-          update: {
-            dailyRate: nextDailyRate,
-            reason:
-              normalizedRateReason ||
-              (nextDailyRate == null
-                ? "Daily rate cleared (corrected)"
-                : "Daily rate corrected"),
-          },
-        });
-      } catch (error) {
-        if (!isMissingRateHistoryTableError(error)) {
-          throw error;
-        }
-        console.warn(
-          "EmployeeRateHistory table is not available yet. Skipping rate history write.",
-        );
-      }
+          createdByUserId: actorUserId,
+        },
+      });
     }
 
     revalidateEmployeePages(employeeId);
-    return { success: true, data: serializeEmployeeRecord(updatedEmployee) };
+    return { success: true, data: serializeEmployeeWithLookups(updatedEmployee) };
   } catch (error) {
     console.error("Error in updateEmployee:", error);
     return {

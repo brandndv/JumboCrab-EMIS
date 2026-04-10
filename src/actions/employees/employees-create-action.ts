@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 import { generateUniqueEmployeeCode } from "@/lib/employees/employee-code";
 import {
   EMPLOYEE_CODE_REGEX,
@@ -10,11 +11,10 @@ import {
 } from "@/lib/validations/employees";
 import type { Prisma } from "@prisma/client";
 import {
-  isMissingRateHistoryTableError,
+  employeeLookupInclude,
   normalizeEmployeeRelationIds,
   revalidateEmployeePages,
-  serializeEmployeeRecord,
-  toRateNumber,
+  serializeEmployeeWithLookups,
   validateEmployeeRelationIds,
 } from "./employees-shared";
 import type { EmployeeActionRecord } from "./types";
@@ -26,6 +26,7 @@ export async function createEmployee(employeeData: Employee): Promise<{
 }> {
   try {
     console.log("Creating new employee with data:", employeeData);
+    const session = await getSession();
 
     const code =
       typeof employeeData.employeeCode === "string" &&
@@ -90,33 +91,31 @@ export async function createEmployee(employeeData: Employee): Promise<{
     } satisfies Prisma.EmployeeUncheckedCreateInput;
     console.log("Final validated create data:", employeeCreateData);
 
+    const actorUserId = session.userId ?? null;
+
     const newEmployee = await db.employee.create({
       data: employeeCreateData,
+      include: employeeLookupInclude,
     });
 
-    const initialRate = toRateNumber(employeeCreateData.dailyRate);
-    if (initialRate != null) {
-      try {
-        await db.employeeRateHistory.create({
-          data: {
-            employeeId: newEmployee.employeeId,
-            dailyRate: initialRate,
-            effectiveFrom: employeeCreateData.startDate ?? new Date(),
-            reason: "Initial daily rate",
+    if (employeeCreateData.positionId || employeeCreateData.departmentId) {
+      await db.employeePositionHistory.create({
+        data: {
+          employeeId: newEmployee.employeeId,
+          departmentId: employeeCreateData.departmentId ?? null,
+          positionId: employeeCreateData.positionId ?? null,
+          effectiveFrom: employeeCreateData.startDate ?? new Date(),
+          reason: "Initial department/position assignment",
+          metadata: {
+            source: "employee_create",
           },
-        });
-      } catch (error) {
-        if (!isMissingRateHistoryTableError(error)) {
-          throw error;
-        }
-        console.warn(
-          "EmployeeRateHistory table is not available yet. Skipping initial rate history write.",
-        );
-      }
+          createdByUserId: actorUserId,
+        },
+      });
     }
 
     revalidateEmployeePages(newEmployee.employeeId);
-    return { success: true, data: serializeEmployeeRecord(newEmployee) };
+    return { success: true, data: serializeEmployeeWithLookups(newEmployee) };
   } catch (error) {
     console.error("Error in createEmployee:", error);
     return {

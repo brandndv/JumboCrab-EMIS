@@ -28,7 +28,12 @@ export const getCurrentPlainSession = cache(
       include: {
         employee: {
           include: {
-            position: { select: { name: true } },
+            position: {
+              select: {
+                name: true,
+                dailyRate: true,
+              },
+            },
             department: { select: { name: true } },
           },
         },
@@ -50,7 +55,7 @@ export const getCurrentPlainSession = cache(
       employee: user.employee
         ? {
             ...user.employee,
-            dailyRate: toRateNumber(user.employee.dailyRate),
+            dailyRate: toRateNumber(user.employee.position?.dailyRate),
             position: user.employee.position?.name ?? null,
             department: user.employee.department?.name ?? null,
           }

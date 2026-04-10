@@ -259,16 +259,23 @@ const PayrollRunDetailsCard = ({
 
   return (
     <>
-      <Card className="rounded-2xl border border-border/70 shadow-sm">
-        <CardHeader className="border-b bg-gradient-to-b from-muted/15 to-background">
-          <CardTitle className="text-lg">{title}</CardTitle>
+      <Card className="overflow-hidden rounded-[28px] border border-orange-100/70 bg-card/95 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.45)]">
+        <CardHeader className="border-b border-orange-100/70 bg-gradient-to-r from-orange-50/80 via-background to-background">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/80">
+              Run Inspection
+            </p>
+            <CardTitle className="text-xl font-bold tracking-tight">
+              {title}
+            </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {loading ? (
             <InlineLoadingState
               label="Loading details"
               lines={3}
-              className="border-border/60 bg-muted/10"
+              className="border-orange-100/70 bg-orange-50/35"
             />
           ) : null}
           {!loading && error ? (
@@ -277,7 +284,7 @@ const PayrollRunDetailsCard = ({
             </div>
           ) : null}
           {!loading && !error && !run ? (
-            <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-dashed border-orange-200/70 bg-orange-50/35 p-5 text-sm text-slate-600">
               Select a payroll run to inspect employee-level totals and line items.
             </div>
           ) : null}
