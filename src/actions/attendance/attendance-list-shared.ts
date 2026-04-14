@@ -76,6 +76,11 @@ export const loadAttendanceListContext = async ({
           paidHoursPerDay: true,
         },
       },
+      _count: {
+        select: {
+          suspiciousLogs: true,
+        },
+      },
     },
   });
 
@@ -470,10 +475,13 @@ export const buildSingleDayAttendanceList = async ({
       deductedBreakMinutes: 0,
       netWorkedMinutes: null,
       netWorkedHoursAndMinutes: null,
+      isFlagged: false,
+      flaggedAt: null,
       lateMinutes: null,
       undertimeMinutes: null,
       overtimeMinutesRaw: null,
       punchesCount: 0,
+      suspiciousLogCount: 0,
       forgotToTimeOut: forgotTimeoutMap.get(employee.employeeId) ?? false,
       breakCount: breaks.count,
       breakMinutes: breaks.minutes,

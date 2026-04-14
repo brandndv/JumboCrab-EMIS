@@ -102,13 +102,13 @@ export function TableLoadingState({
   );
 }
 
-export function ModuleLoadingState(props: {
+export function ModuleLoadingState({
+  title,
+  description,
+}: {
   title: string;
   description: string;
-  cardCount?: number;
 }) {
-  const { title, description } = props;
-
   return (
     <div className="px-4 py-8 sm:px-8 lg:px-12">
       <div className="flex min-h-[60vh] items-center justify-center">

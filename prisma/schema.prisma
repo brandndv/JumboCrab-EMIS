@@ -45,6 +45,8 @@ model User {
   reviewedDayOffRequests            DayOffRequest[]               @relation("DayOffRequestReviewedBy")
   reviewedScheduleChangeRequests    ScheduleChangeRequest[]       @relation("ScheduleChangeRequestReviewedBy")
   reviewedScheduleSwapRequests      ScheduleSwapRequest[]         @relation("ScheduleSwapRequestReviewedBy")
+  reviewedSuspiciousAttendanceLogs  SuspiciousAttendanceLog[]     @relation("SuspiciousAttendanceLogReviewedBy")
+  updatedAttendanceSecuritySettings AttendanceSecuritySetting[]   @relation("AttendanceSecuritySettingUpdatedBy")
 
   @@index([createdAt])
   @@index([role, username])
@@ -99,6 +101,9 @@ model Employee {
   shiftOverrides               EmployeeShiftOverride[]
   attendances                  Attendance[]
   punches                      Punch[]
+  deviceRegistrations          DeviceRegistration[]
+  attendanceDeviceLogs         AttendanceDeviceLog[]
+  suspiciousAttendanceLogs     SuspiciousAttendanceLog[]
   employeeViolations           EmployeeViolation[]
   violationResets              EmployeeViolationReset[]
   violationAutoResetPolicies   ViolationAutoResetPolicy[]
@@ -158,19 +163,19 @@ model Position {
 
 // ======== EMPLOYEE CONTRIBUTION ========= //
 model GovernmentId {
-  governmentId                  String   @id @default(cuid())
-  sssNumber                     String?
-  isSssIncludedInPayroll        Boolean  @default(true)
-  philHealthNumber              String?
-  isPhilHealthIncludedInPayroll Boolean  @default(true)
-  tinNumber                     String?
-  isWithholdingIncludedInPayroll Boolean @default(true)
-  pagIbigNumber                 String?
-  isPagIbigIncludedInPayroll    Boolean  @default(true)
-  createdAt                     DateTime @default(now())
-  updatedAt                     DateTime @updatedAt
-  employeeId                    String   @unique
-  employee                      Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
+  governmentId                   String   @id @default(cuid())
+  sssNumber                      String?
+  isSssIncludedInPayroll         Boolean  @default(true)
+  philHealthNumber               String?
+  isPhilHealthIncludedInPayroll  Boolean  @default(true)
+  tinNumber                      String?
+  isWithholdingIncludedInPayroll Boolean  @default(true)
+  pagIbigNumber                  String?
+  isPagIbigIncludedInPayroll     Boolean  @default(true)
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  employeeId                     String   @unique
+  employee                       Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
 }
 
 model ContributionBracket {
@@ -381,25 +386,30 @@ model Attendance {
   nightMinutes            Int @default(0)
 
   // Posting/lock
-  isLocked          Boolean @default(false)
+  isLocked          Boolean   @default(false)
+  isFlagged         Boolean   @default(false)
+  flaggedAt         DateTime?
   payrollPeriodId   String?
   payrollEmployeeId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  employee        Employee         @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
-  expectedShift   Shift?           @relation("attendance_expected_shift", fields: [expectedShiftId], references: [id])
-  leaveRequest    LeaveRequest?    @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
-  payroll         Payroll?         @relation("PayrollAttendanceRows", fields: [payrollPeriodId], references: [payrollId], onDelete: SetNull)
-  payrollEmployee PayrollEmployee? @relation("PayrollEmployeeAttendanceRows", fields: [payrollEmployeeId], references: [id], onDelete: SetNull)
+  employee        Employee                  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  expectedShift   Shift?                    @relation("attendance_expected_shift", fields: [expectedShiftId], references: [id])
+  leaveRequest    LeaveRequest?             @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  payroll         Payroll?                  @relation("PayrollAttendanceRows", fields: [payrollPeriodId], references: [payrollId], onDelete: SetNull)
+  payrollEmployee PayrollEmployee?          @relation("PayrollEmployeeAttendanceRows", fields: [payrollEmployeeId], references: [id], onDelete: SetNull)
   punches         Punch[]
+  deviceLogs      AttendanceDeviceLog[]
+  suspiciousLogs  SuspiciousAttendanceLog[]
 
   @@unique([employeeId, workDate])
   @@index([employeeId, workDate])
   @@index([workDate])
   @@index([status, workDate])
   @@index([isLocked, workDate])
+  @@index([isFlagged, workDate])
   @@index([leaveRequestId])
   @@index([payrollPeriodId])
   @@index([payrollEmployeeId])
@@ -423,6 +433,96 @@ model Punch {
   @@index([employeeId, punchTime])
   @@index([punchTime])
   @@index([attendanceId])
+}
+
+model AttendanceSecuritySetting {
+  id                                      String   @id @default("default")
+  deviceTokenTrackingEnabled              Boolean  @default(true)
+  fingerprintTrackingEnabled              Boolean  @default(true)
+  gpsValidationEnabled                    Boolean  @default(false)
+  suspiciousTimeWindowMinutes             Int      @default(3)
+  allowOnlyOneRegisteredDevicePerEmployee Boolean  @default(false)
+  requireManagerReviewForFlaggedLogs      Boolean  @default(true)
+  updatedByUserId                         String?
+  createdAt                               DateTime @default(now())
+  updatedAt                               DateTime @updatedAt
+
+  updatedBy User? @relation("AttendanceSecuritySettingUpdatedBy", fields: [updatedByUserId], references: [userId], onDelete: SetNull)
+
+  @@index([updatedByUserId, updatedAt])
+}
+
+model DeviceRegistration {
+  id          String   @id @default(cuid())
+  employeeId  String
+  deviceToken String?
+  fingerprint String?
+  deviceLabel String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  @@unique([employeeId, deviceToken])
+  @@index([employeeId, isActive, lastSeenAt])
+  @@index([deviceToken])
+  @@index([fingerprint])
+  @@index([employeeId, fingerprint])
+}
+
+model AttendanceDeviceLog {
+  id           String   @id @default(cuid())
+  attendanceId String
+  employeeId   String
+  ipAddress    String?
+  userAgent    String?
+  deviceToken  String?
+  fingerprint  String?
+  latitude     Decimal? @db.Decimal(9, 6)
+  longitude    Decimal? @db.Decimal(9, 6)
+  isFlagged    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  attendance     Attendance                @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  employee       Employee                  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  suspiciousLogs SuspiciousAttendanceLog[]
+
+  @@index([attendanceId])
+  @@index([employeeId, createdAt])
+  @@index([deviceToken, createdAt])
+  @@index([fingerprint, createdAt])
+  @@index([isFlagged, createdAt])
+}
+
+model SuspiciousAttendanceLog {
+  id               String                       @id @default(cuid())
+  attendanceId     String?
+  deviceLogId      String?
+  employeeId       String
+  reason           String
+  severity         SuspiciousAttendanceSeverity
+  detectedByRule   String
+  status           SuspiciousAttendanceStatus   @default(PENDING)
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  remarks          String?
+  details          Json?
+  createdAt        DateTime                     @default(now())
+
+  attendance Attendance?          @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  deviceLog  AttendanceDeviceLog? @relation(fields: [deviceLogId], references: [id], onDelete: SetNull)
+  employee   Employee             @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  reviewedBy User?                @relation("SuspiciousAttendanceLogReviewedBy", fields: [reviewedByUserId], references: [userId], onDelete: SetNull)
+
+  @@index([attendanceId])
+  @@index([deviceLogId])
+  @@index([employeeId, createdAt])
+  @@index([status, createdAt])
+  @@index([severity, createdAt])
+  @@index([reviewedByUserId, reviewedAt])
 }
 
 model EmployeeViolation {
@@ -1107,6 +1207,19 @@ enum PUNCH_TYPE {
   TIME_OUT
   BREAK_OUT
   BREAK_IN
+}
+
+enum SuspiciousAttendanceSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum SuspiciousAttendanceStatus {
+  PENDING
+  VALID
+  REVIEWED
+  REJECTED
 }
 
 enum GENDER {

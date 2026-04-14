@@ -10,10 +10,9 @@ export const dynamic = "force-dynamic";
 export default async function EmployeeViewPage({
   params,
 }: {
-  params: { id: string } | Promise<{ id: string }>;
+  params: Promise<{ id: string }>;
 }) {
-  // Resolve params if it's a Promise
-  const resolvedParams = await Promise.resolve(params);
+  const resolvedParams = await params;
   const response = await getEmployeeById(resolvedParams.id);
 
   const employee = response?.data;

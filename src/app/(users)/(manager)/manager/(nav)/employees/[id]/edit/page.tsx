@@ -118,10 +118,7 @@ function EmployeeEditPageContent({
 export default function EmployeeEditPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  // Create a promise that resolves with the params
-  const paramsPromise = Promise.resolve(params);
-
-  return <EmployeeEditPageContent paramsPromise={paramsPromise} />;
+  return <EmployeeEditPageContent paramsPromise={params} />;
 }

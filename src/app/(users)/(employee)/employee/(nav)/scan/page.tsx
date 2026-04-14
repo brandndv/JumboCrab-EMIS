@@ -14,16 +14,22 @@ import {
   getSelfAttendanceStatus,
   recordSelfPunch,
 } from "@/actions/attendance/attendance-action";
+import { acknowledgeKioskQrScan } from "@/actions/attendance/kiosk-attendance-action";
+import { collectAttendanceDeviceContext } from "@/lib/attendance-security-client";
 
 type KioskParsed = { kioskId: string; nonce: string; exp: number; raw: string };
 type PunchType = "TIME_IN" | "BREAK_IN" | "BREAK_OUT" | "TIME_OUT";
 type Step = "READY" | "SCANNING" | "PROCESSING" | "RESULT" | "ERROR";
 
 type ScanResult = {
+  username: string;
   employeeName: string;
+  employeeCode: string;
   punchType: PunchType;
   punchTime: string;
   kioskId: string;
+  flagged: boolean;
+  suspiciousReasons: string[];
 };
 
 function parseKioskQr(text: string): KioskParsed | null {
@@ -159,9 +165,17 @@ function EmployeeScanPageContent() {
         throw new Error(reasonMessage("already_clocked_out"));
       }
       const nextPunch = allowedNext[lastType ?? "NONE"];
+      const deviceContext = await collectAttendanceDeviceContext(
+        statusResult.data.security ?? {
+          deviceTokenTrackingEnabled: true,
+          fingerprintTrackingEnabled: true,
+          gpsValidationEnabled: false,
+        },
+      );
 
       const punchResult = await recordSelfPunch({
         punchType: nextPunch,
+        ...deviceContext,
       });
       if (!punchResult.success || !punchResult.data) {
         throw new Error(
@@ -174,16 +188,44 @@ function EmployeeScanPageContent() {
 
       const employeeName =
         `${statusResult.data.employee.firstName} ${statusResult.data.employee.lastName}`.trim();
-      setResult({
+      const username = statusResult.data.username || "";
+      const employeeCode = statusResult.data.employee.employeeCode;
+
+      await acknowledgeKioskQrScan({
+        kioskId: parsed.kioskId,
+        nonce: parsed.nonce,
+        exp: parsed.exp,
+        username,
         employeeName,
+        employeeCode,
+        punchType: punchResult.data.punchType,
+        punchTime: punchResult.data.punchTime,
+      });
+
+      setResult({
+        username,
+        employeeName,
+        employeeCode,
         kioskId: parsed.kioskId,
         punchType: punchResult.data.punchType as PunchType,
         punchTime: punchResult.data.punchTime,
+        flagged: Boolean(punchResult.data.flagged),
+        suspiciousReasons: Array.isArray(punchResult.data.suspiciousReasons)
+          ? punchResult.data.suspiciousReasons
+          : [],
       });
       setStep("RESULT");
-      toast.success("Punch recorded successfully.", {
-        description: `${employeeName} ${formatPunchLabel(punchResult.data.punchType as PunchType)} recorded.`,
-      });
+      if (punchResult.data.flagged) {
+        toast.info("Punch recorded and flagged for review.", {
+          description:
+            punchResult.data.suspiciousReasons?.join(" ") ||
+            `${employeeName} ${formatPunchLabel(punchResult.data.punchType as PunchType)} recorded with suspicious device activity.`,
+        });
+      } else {
+        toast.success("Punch recorded successfully.", {
+          description: `${employeeName} ${formatPunchLabel(punchResult.data.punchType as PunchType)} recorded.`,
+        });
+      }
     } catch (err) {
       const message = toErrorMessage(err, "Network error. Please try again.");
       setError(message);
@@ -361,6 +403,18 @@ function EmployeeScanPageContent() {
                 <div>
                   <b>QR Expires:</b> {new Date(kiosk.exp).toLocaleTimeString()}
                 </div>
+                {result.flagged ? (
+                  <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs text-orange-900">
+                    <p className="font-semibold uppercase tracking-wide">
+                      Flagged for manager review
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4">
+                      {result.suspiciousReasons.map((reason, index) => (
+                        <li key={`${result.kioskId}-${index}`}>{reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
               <div className="flex gap-2">
                 <Button onClick={startScan}>Scan again</Button>

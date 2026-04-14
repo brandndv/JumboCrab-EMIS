@@ -21,6 +21,17 @@ import {
   recomputeAttendance as recomputeAttendanceImpl,
   recomputeAttendanceForDate as recomputeAttendanceForDateImpl,
 } from "./attendance-recompute-action";
+import {
+  getAttendancePunchClientConfig as getAttendancePunchClientConfigImpl,
+  getAttendanceSecuritySettings as getAttendanceSecuritySettingsImpl,
+  getSuspiciousAttendanceLogDetail as getSuspiciousAttendanceLogDetailImpl,
+  listEmployeeDeviceRegistrations as listEmployeeDeviceRegistrationsImpl,
+  listSuspiciousAttendanceLogs as listSuspiciousAttendanceLogsImpl,
+} from "./attendance-security-query-action";
+import {
+  reviewSuspiciousAttendanceLog as reviewSuspiciousAttendanceLogImpl,
+  updateAttendanceSecuritySettings as updateAttendanceSecuritySettingsImpl,
+} from "./attendance-security-mutation-action";
 
 export async function listAttendance(
   ...args: Parameters<typeof listAttendanceImpl>
@@ -86,6 +97,48 @@ export async function recordAttendancePunch(
   ...args: Parameters<typeof recordAttendancePunchImpl>
 ) {
   return recordAttendancePunchImpl(...args);
+}
+
+export async function getAttendanceSecuritySettings(
+  ...args: Parameters<typeof getAttendanceSecuritySettingsImpl>
+) {
+  return getAttendanceSecuritySettingsImpl(...args);
+}
+
+export async function getAttendancePunchClientConfig(
+  ...args: Parameters<typeof getAttendancePunchClientConfigImpl>
+) {
+  return getAttendancePunchClientConfigImpl(...args);
+}
+
+export async function listSuspiciousAttendanceLogs(
+  ...args: Parameters<typeof listSuspiciousAttendanceLogsImpl>
+) {
+  return listSuspiciousAttendanceLogsImpl(...args);
+}
+
+export async function getSuspiciousAttendanceLogDetail(
+  ...args: Parameters<typeof getSuspiciousAttendanceLogDetailImpl>
+) {
+  return getSuspiciousAttendanceLogDetailImpl(...args);
+}
+
+export async function reviewSuspiciousAttendanceLog(
+  ...args: Parameters<typeof reviewSuspiciousAttendanceLogImpl>
+) {
+  return reviewSuspiciousAttendanceLogImpl(...args);
+}
+
+export async function updateAttendanceSecuritySettings(
+  ...args: Parameters<typeof updateAttendanceSecuritySettingsImpl>
+) {
+  return updateAttendanceSecuritySettingsImpl(...args);
+}
+
+export async function listEmployeeDeviceRegistrations(
+  ...args: Parameters<typeof listEmployeeDeviceRegistrationsImpl>
+) {
+  return listEmployeeDeviceRegistrationsImpl(...args);
 }
 
 export async function recomputeAttendance(

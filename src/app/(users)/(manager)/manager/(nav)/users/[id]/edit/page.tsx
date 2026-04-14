@@ -84,7 +84,7 @@ function getEntityName(value: unknown): string | null {
 export default function UserEditPage({
   params,
 }: {
-  params: { id: string } | Promise<{ id: string }>;
+  params: Promise<{ id: string }>;
 }) {
   const router = useRouter();
   const toast = useToast();

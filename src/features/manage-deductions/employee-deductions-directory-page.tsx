@@ -115,7 +115,6 @@ function EmployeeDeductionsDirectoryFallback() {
     <ModuleLoadingState
       title="Employee Deductions"
       description="View current and past deduction assignments per employee."
-      cardCount={4}
     />
   );
 }

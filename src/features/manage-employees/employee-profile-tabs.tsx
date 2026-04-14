@@ -1,5 +1,6 @@
 "use client";
 
+import { listEmployeeDeviceRegistrations } from "@/actions/attendance/attendance-action";
 import { getEmployeeContribution } from "@/actions/contributions/contributions-action";
 import {
   getGovernmentIdByEmployee,
@@ -55,10 +56,29 @@ import {
 
 type EmployeeProfileData = EmployeeActionRecord;
 
-type TabKey = "profile" | "compensation" | "violations" | "govIds";
+type EmployeeDeviceRegistrationRow = {
+  id: string;
+  employeeId: string;
+  deviceToken: string | null;
+  fingerprint: string | null;
+  deviceLabel: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type TabKey =
+  | "profile"
+  | "devices"
+  | "compensation"
+  | "violations"
+  | "govIds";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "profile", label: "Profile" },
+  { key: "devices", label: "Devices" },
   { key: "compensation", label: "Compensation" },
   { key: "violations", label: "Employee Violations" },
   { key: "govIds", label: "Government IDs" },
@@ -141,6 +161,14 @@ export function EmployeeProfileTabs({
     useState<boolean>(true);
   const [violationStrikeProgressError, setViolationStrikeProgressError] =
     useState<string | null>(null);
+  const [deviceRegistrations, setDeviceRegistrations] = useState<
+    EmployeeDeviceRegistrationRow[]
+  >([]);
+  const [loadingDeviceRegistrations, setLoadingDeviceRegistrations] =
+    useState<boolean>(true);
+  const [deviceRegistrationsError, setDeviceRegistrationsError] = useState<
+    string | null
+  >(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formState, setFormState] = useState<
@@ -249,6 +277,29 @@ export function EmployeeProfileTabs({
   }, [employee.employeeId]);
 
   useEffect(() => {
+    const fetchDeviceRegistrations = async () => {
+      try {
+        setLoadingDeviceRegistrations(true);
+        setDeviceRegistrationsError(null);
+        const result = await listEmployeeDeviceRegistrations(employee.employeeId);
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load registered devices");
+        }
+        setDeviceRegistrations(
+          (result.data as EmployeeDeviceRegistrationRow[] | undefined) ?? [],
+        );
+      } catch (error) {
+        console.error("Error loading employee devices:", error);
+        setDeviceRegistrationsError("Failed to load registered devices");
+      } finally {
+        setLoadingDeviceRegistrations(false);
+      }
+    };
+
+    fetchDeviceRegistrations();
+  }, [employee.employeeId]);
+
+  useEffect(() => {
     const fetchEmployeeViolations = async () => {
       try {
         setLoadingEmployeeViolations(true);
@@ -335,6 +386,24 @@ export function EmployeeProfileTabs({
       currency: "PHP",
       maximumFractionDigits: 2,
     }).format(value);
+  };
+
+  const formatDateTime = (value: string | null | undefined) => {
+    if (!value) return "—";
+    return new Date(value).toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  const previewHash = (value: string | null | undefined) => {
+    if (!value) return "—";
+    if (value.length <= 12) return value;
+    return `${value.slice(0, 12)}…`;
   };
 
   const approvedViolationsCount = employeeViolations.filter(
@@ -525,6 +594,128 @@ export function EmployeeProfileTabs({
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === "devices" && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card className="border-dashed">
+                <CardHeader className="px-4 pt-4 pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Registered Devices
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-2xl font-semibold">
+                    {deviceRegistrations.length}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-dashed">
+                <CardHeader className="px-4 pt-4 pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Active Devices
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-2xl font-semibold">
+                    {deviceRegistrations.filter((row) => row.isActive).length}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-dashed">
+                <CardHeader className="px-4 pt-4 pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Last Seen
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-sm font-semibold">
+                    {deviceRegistrations[0]
+                      ? formatDateTime(deviceRegistrations[0].lastSeenAt)
+                      : "No device data"}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Registered Devices</CardTitle>
+                <CardDescription>
+                  Browser tokens and lightweight fingerprints captured during
+                  attendance punches for review.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {loadingDeviceRegistrations ? (
+                  <InlineLoadingState
+                    label="Loading registered devices"
+                    lines={2}
+                    className="border-border/60 bg-muted/10"
+                  />
+                ) : deviceRegistrationsError ? (
+                  <p className="text-sm text-destructive">
+                    {deviceRegistrationsError}
+                  </p>
+                ) : deviceRegistrations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No registered devices captured for this employee yet.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Device</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>First Seen</TableHead>
+                          <TableHead>Last Seen</TableHead>
+                          <TableHead>Device Token</TableHead>
+                          <TableHead>Fingerprint</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {deviceRegistrations.map((row) => (
+                          <TableRow key={row.id}>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <p className="font-medium">
+                                  {row.deviceLabel || "Attendance browser device"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Captured {formatDateTime(row.createdAt)}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={row.isActive ? "success" : "secondary"}
+                              >
+                                {row.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {formatDateTime(row.firstSeenAt)}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {formatDateTime(row.lastSeenAt)}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">
+                              {previewHash(row.deviceToken)}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">
+                              {previewHash(row.fingerprint)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
               </CardContent>

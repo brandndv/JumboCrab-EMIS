@@ -32,6 +32,9 @@ export type AttendanceRecord = Attendance & {
     breakMinutesUnpaid?: number | null;
     paidHoursPerDay?: unknown;
   } | null;
+  _count?: {
+    suspiciousLogs?: number;
+  };
 };
 
 export type PunchRecord = Punch & {
@@ -291,8 +294,11 @@ export const serializeAttendance = (
     overtimeMinutesApproved: record.overtimeMinutesApproved ?? 0,
     nightMinutes: record.nightMinutes ?? 0,
     isLocked: record.isLocked,
+    isFlagged: record.isFlagged ?? false,
+    flaggedAt: toIsoString(record.flaggedAt),
     payrollPeriodId: record.payrollPeriodId ?? null,
     punchesCount,
+    suspiciousLogCount: record._count?.suspiciousLogs ?? 0,
     employee: serializeEmployeeSummary(record.employee),
     expectedShift: record.expectedShift
       ? {

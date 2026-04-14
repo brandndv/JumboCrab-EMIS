@@ -1,18 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  Archive,
-  CircleDollarSign,
-  Filter,
-  RefreshCcw,
-  UsersRound,
-  WalletCards,
-} from "lucide-react";
-import {
-  getPayrollRunDetails,
-  listPayrollRuns,
-} from "@/actions/payroll/payroll-action";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { RefreshCcw } from "lucide-react";
+import { listPayrollRuns } from "@/actions/payroll/payroll-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +13,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type {
-  PayrollRunDetail,
   PayrollRunSummary,
   PayrollStatusValue,
   PayrollTypeValue,
@@ -38,6 +27,7 @@ import {
   statusClass,
 } from "./payroll-ui-helpers";
 import PayrollRunDetailsCard from "./payroll-run-details-card";
+import { usePayrollRunDetail } from "./use-payroll-run-detail";
 
 type StatusFilter = "ALL" | PayrollStatusValue;
 type TypeFilter = "ALL" | PayrollTypeValue;
@@ -62,7 +52,7 @@ const DEFAULT_VISIBLE_MONTHS = 3;
 const DEFAULT_EXPANDED_MONTHS = 2;
 const DEFAULT_VISIBLE_RUNS_PER_MONTH = 6;
 const archiveFilterClass =
-  "h-11 rounded-xl border border-orange-200/70 bg-white/90 px-3 text-sm text-foreground shadow-sm transition focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200";
+  "h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/20";
 
 const isReturnedRun = (run: PayrollRunSummary) =>
   run.managerDecision === "REJECTED" || run.gmDecision === "REJECTED";
@@ -94,11 +84,13 @@ const PayrollHistoryPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [selectedRun, setSelectedRun] = useState<PayrollRunDetail | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const {
+    run: selectedRun,
+    loading: loadingDetail,
+    error: detailError,
+  } = usePayrollRunDetail(selectedRunId);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -106,15 +98,11 @@ const PayrollHistoryPage = () => {
       if (!result.success) {
         throw new Error(result.error || "Failed to load payroll history");
       }
-      const rows = (result.data ?? []).sort(
-        (a, b) =>
-          new Date(b.payrollPeriodStart).getTime() -
-          new Date(a.payrollPeriodStart).getTime(),
-      );
+      const rows = result.data ?? [];
       setRuns(rows);
-      if (rows.length > 0 && !selectedRunId) {
-        setSelectedRunId(rows[0].payrollId);
-      }
+      setSelectedRunId((current) =>
+        current || rows.length === 0 ? current : rows[0].payrollId,
+      );
     } catch (err) {
       setRuns([]);
       setError(
@@ -123,39 +111,11 @@ const PayrollHistoryPage = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    const loadDetail = async () => {
-      if (!selectedRunId) {
-        setSelectedRun(null);
-        return;
-      }
-      try {
-        setLoadingDetail(true);
-        setDetailError(null);
-        const result = await getPayrollRunDetails(selectedRunId);
-        if (!result.success) {
-          throw new Error(result.error || "Failed to load payroll run details");
-        }
-        setSelectedRun(result.data ?? null);
-      } catch (err) {
-        setSelectedRun(null);
-        setDetailError(
-          err instanceof Error ? err.message : "Failed to load payroll run details",
-        );
-      } finally {
-        setLoadingDetail(false);
-      }
-    };
-
-    void loadDetail();
-  }, [selectedRunId]);
+    void load();
+  }, [load]);
 
   const filteredRuns = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -272,30 +232,10 @@ const PayrollHistoryPage = () => {
   );
 
   const statCards = [
-    {
-      label: "Runs",
-      value: `${filteredRuns.length}`,
-      accent: "Active archive view",
-      icon: Archive,
-    },
-    {
-      label: "Gross Total",
-      value: formatCurrency(totals.gross),
-      accent: "Before deductions",
-      icon: CircleDollarSign,
-    },
-    {
-      label: "Employees Covered",
-      value: `${totals.employees}`,
-      accent: "Across filtered runs",
-      icon: UsersRound,
-    },
-    {
-      label: "Net Total",
-      value: formatCurrency(totals.net),
-      accent: "Released and retained pay",
-      icon: WalletCards,
-    },
+    { label: "Runs", value: `${filteredRuns.length}` },
+    { label: "Gross Total", value: formatCurrency(totals.gross) },
+    { label: "Employees Covered", value: `${totals.employees}` },
+    { label: "Net Total", value: formatCurrency(totals.net) },
   ];
 
   if (loading && runs.length === 0 && !error) {
@@ -308,103 +248,57 @@ const PayrollHistoryPage = () => {
   }
 
   return (
-    <div className="space-y-8 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary/80">
-          Payroll Archive
+    <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground">Payroll History</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Review completed payroll periods and inspect detailed run breakdowns.
         </p>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Payroll History
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Review completed payroll periods, trace approvals, and open any run
-            to inspect employee-level totals without leaving the archive.
-          </p>
-        </div>
       </div>
 
-      <section className="relative overflow-hidden rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-orange-50 via-background to-amber-50 p-6 shadow-[0_24px_60px_-36px_rgba(249,115,22,0.45)] sm:p-7">
-        <div className="absolute inset-y-0 right-0 w-80 bg-[radial-gradient(circle_at_center,_rgba(249,115,22,0.18),_transparent_68%)]" />
-        <div className="absolute -left-12 top-10 h-28 w-28 rounded-full bg-orange-200/30 blur-3xl" />
-        <div className="absolute bottom-0 right-20 h-32 w-32 rounded-full bg-amber-200/30 blur-3xl" />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((card) => (
+          <Card
+            key={card.label}
+            className="rounded-xl border border-border/70 bg-card shadow-sm"
+          >
+            <CardContent className="p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {card.label}
+              </p>
+              <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+                {card.value}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-orange-200/80 bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary shadow-sm">
-              <Archive className="h-3.5 w-3.5" />
-              Archive Workspace
-            </div>
-            <p className="text-sm font-medium uppercase tracking-[0.26em] text-slate-500">
-              Payroll History
-            </p>
-            <h2 className="max-w-3xl text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-              Audit payroll runs with the same orange system language used across the app.
-            </h2>
-            <p className="max-w-2xl text-sm leading-7 text-slate-600">
-              Filter by month, status, and payroll type, then jump into one run
-              to inspect approvals, totals, and line-level deductions in a
-              focused workspace.
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {statCards.map((card) => (
-              <div
-                key={card.label}
-                className="rounded-[22px] border border-orange-200/70 bg-white/88 px-4 py-4 shadow-sm backdrop-blur"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                      {card.label}
-                    </p>
-                    <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
-                      {card.value}
-                    </p>
-                  </div>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-100 text-primary">
-                    <card.icon className="h-4.5 w-4.5" />
-                  </div>
-                </div>
-                <p className="mt-3 text-xs text-slate-500">{card.accent}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <Card className="overflow-hidden rounded-[28px] border border-orange-100/70 bg-card/95 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.45)]">
-        <CardHeader className="space-y-4 border-b border-orange-100/70 bg-gradient-to-r from-orange-50/80 via-background to-background">
+      <Card className="rounded-2xl border border-border/70 shadow-sm">
+        <CardHeader className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
-              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary/80">
-                <Filter className="h-3.5 w-3.5" />
-                Archive Filters
-              </div>
-              <CardTitle className="text-2xl font-bold tracking-tight">
-                Filter and inspect payroll runs
-              </CardTitle>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Keep the archive readable while still preserving quick access to
-                approvals, totals, and notes.
+              <CardTitle className="text-lg">Archive</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Filter payroll runs by status, type, year, and month.
               </p>
             </div>
             <Button
               type="button"
+              variant="outline"
               onClick={() => void load()}
-              className="gap-2 shadow-sm"
+              className="gap-2"
             >
               <RefreshCcw className="h-4 w-4" />
               Refresh
             </Button>
           </div>
-          <div className="grid gap-3 rounded-[24px] border border-orange-100/80 bg-orange-50/55 p-3 lg:grid-cols-[1.2fr_repeat(4,minmax(0,170px))]">
+          <div className="grid gap-3 lg:grid-cols-[1.2fr_repeat(4,minmax(0,170px))]">
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search payroll id, type, note, or creator"
-              className="h-11 rounded-xl border-orange-200/70 bg-white/90 shadow-sm placeholder:text-slate-400 focus-visible:ring-orange-200"
+              className="h-10"
             />
             <select
               value={statusFilter}
@@ -464,12 +358,12 @@ const PayrollHistoryPage = () => {
             <InlineLoadingState label="Loading payroll history" lines={3} />
           ) : null}
           {!loading && error ? (
-            <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
+            <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
               {error}
             </div>
           ) : null}
           {!loading && !error && groupedRuns.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-orange-200/70 bg-orange-50/35 p-5 text-sm text-slate-600">
+            <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
               No payroll runs found for selected filters.
             </div>
           ) : null}
@@ -485,7 +379,6 @@ const PayrollHistoryPage = () => {
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="border-orange-200 bg-orange-50 text-primary hover:bg-orange-100 hover:text-primary"
                     onClick={() =>
                       setVisibleMonthCount((current) =>
                         Math.min(current + DEFAULT_VISIBLE_MONTHS, groupedRuns.length),
@@ -500,7 +393,6 @@ const PayrollHistoryPage = () => {
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="text-primary hover:bg-orange-50 hover:text-primary"
                     onClick={() =>
                       setVisibleMonthCount(
                         Math.min(DEFAULT_VISIBLE_MONTHS, groupedRuns.length),
@@ -520,29 +412,21 @@ const PayrollHistoryPage = () => {
               visibleGroups.map((group) => (
                 <div
                   key={group.label}
-                  className="space-y-4 rounded-[24px] border border-orange-100/80 bg-gradient-to-br from-white via-orange-50/35 to-amber-50/25 p-4 shadow-sm sm:p-5"
+                  className="space-y-4 rounded-2xl border border-border/70 bg-card/60 p-4 sm:p-5"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="text-lg font-bold tracking-tight text-slate-950">
-                        {group.label}
-                      </h3>
-                      <p className="text-sm text-slate-600">
+                      <h3 className="text-base font-semibold">{group.label}</h3>
+                      <p className="text-sm text-muted-foreground">
                         {group.count} runs · Net {formatCurrency(group.netTotal)}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className="border-orange-200 bg-white/80 text-primary"
-                      >
-                        {group.count} runs
-                      </Badge>
+                      <Badge variant="outline">{group.count} runs</Badge>
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="text-primary hover:bg-orange-100/70 hover:text-primary"
                         onClick={() =>
                           setExpandedGroups((current) => ({
                             ...current,
@@ -571,10 +455,10 @@ const PayrollHistoryPage = () => {
                           type="button"
                           onClick={() => setSelectedRunId(run.payrollId)}
                           className={cn(
-                            "w-full rounded-[22px] border border-orange-100/80 bg-white/92 p-4 text-left shadow-sm transition-all",
-                            "hover:-translate-y-0.5 hover:border-orange-300/80 hover:shadow-md",
+                            "w-full rounded-2xl border border-border/70 bg-background/85 p-4 text-left transition-all",
+                            "hover:-translate-y-0.5 hover:border-border hover:shadow-sm",
                             selected &&
-                              "border-orange-300 bg-gradient-to-r from-orange-50 to-white shadow-[0_18px_30px_-24px_rgba(249,115,22,0.55)] ring-1 ring-orange-200/70",
+                              "border-primary/40 bg-primary/5 shadow-sm ring-1 ring-primary/10",
                           )}
                         >
                           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(280px,0.9fr)] xl:items-start">
@@ -592,7 +476,7 @@ const PayrollHistoryPage = () => {
                                   </span>
                                 ) : null}
                               </div>
-                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                                 <span>
                                   {run.createdByName
                                     ? `Created by ${run.createdByName}`
@@ -602,7 +486,7 @@ const PayrollHistoryPage = () => {
                               </div>
                               {run.notes ? (
                                 <p
-                                  className="truncate text-sm text-slate-500"
+                                  className="truncate text-sm text-muted-foreground"
                                   title={run.notes}
                                 >
                                   {run.notes}
@@ -625,7 +509,7 @@ const PayrollHistoryPage = () => {
                                   {run.status}
                                 </Badge>
                               </div>
-                              <div className="grid gap-2 rounded-2xl border border-orange-100/80 bg-orange-50/45 p-3 text-sm text-slate-600 sm:grid-cols-2">
+                              <div className="grid gap-2 rounded-2xl border border-dashed border-border/70 bg-muted/10 p-3 text-sm text-muted-foreground sm:grid-cols-2">
                                 <span>{run.employeeCount} employees</span>
                                 <span>Gross {formatCurrency(run.grossTotal)}</span>
                                 <span>Net {formatCurrency(run.netTotal)}</span>
@@ -635,7 +519,7 @@ const PayrollHistoryPage = () => {
                               </div>
                             </div>
 
-                            <div className="rounded-2xl border border-orange-100/80 bg-slate-50/80 p-4">
+                            <div className="rounded-2xl border border-border/70 bg-muted/15 p-4">
                               <div className="flex flex-wrap gap-2">
                                 <Badge
                                   variant="outline"
@@ -650,7 +534,7 @@ const PayrollHistoryPage = () => {
                                   GM: {run.gmDecision}
                                 </Badge>
                               </div>
-                              <p className="mt-2 text-sm text-slate-600">
+                              <p className="mt-2 text-sm text-muted-foreground">
                                 {run.releasedByName
                                   ? `Released by ${run.releasedByName}`
                                   : "Release pending or not recorded"}
@@ -668,7 +552,6 @@ const PayrollHistoryPage = () => {
                             type="button"
                             size="sm"
                             variant="outline"
-                            className="border-orange-200 bg-white text-primary hover:bg-orange-50 hover:text-primary"
                             onClick={() =>
                               setVisibleRunsByGroup((current) => ({
                                 ...current,
@@ -692,7 +575,6 @@ const PayrollHistoryPage = () => {
                           type="button"
                           size="sm"
                           variant="ghost"
-                          className="text-primary hover:bg-orange-50 hover:text-primary"
                           onClick={() =>
                             setVisibleRunsByGroup((current) => ({
                               ...current,
@@ -708,7 +590,7 @@ const PayrollHistoryPage = () => {
                       ) : null}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-orange-200/70 bg-orange-50/30 p-4 text-sm text-slate-600">
+                    <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
                       Section collapsed. Expand to view runs for {group.label}.
                     </div>
                   )}

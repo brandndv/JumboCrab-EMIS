@@ -3,12 +3,9 @@ import ViolationCreateForm from "@/features/manage-violations/violation-create-f
 export default async function ViolationCreatePage({
   searchParams,
 }: {
-  searchParams:
-    | Promise<{ employeeId?: string }>
-    | { employeeId?: string }
-    | undefined;
+  searchParams?: Promise<{ employeeId?: string }>;
 }) {
-  const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
+  const resolvedSearchParams = (await searchParams) ?? {};
   const initialEmployeeId =
     typeof resolvedSearchParams.employeeId === "string"
       ? resolvedSearchParams.employeeId

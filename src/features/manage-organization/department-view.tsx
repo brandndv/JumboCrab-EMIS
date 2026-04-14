@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 type Dept = {
   departmentId: string;
@@ -40,6 +41,7 @@ type Dept = {
       employeeCode: string;
       firstName: string;
       lastName: string;
+      img?: string | null;
     }[];
   }[];
   employees: {
@@ -47,9 +49,25 @@ type Dept = {
     employeeCode: string;
     firstName: string;
     lastName: string;
+    img?: string | null;
     position?: { name: string | null; positionId: string | null } | null;
   }[];
 };
+
+type DepartmentEmployee = Dept["employees"][number];
+
+function formatCount(count: number, singular: string) {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
+}
+
+function getEmployeeInitials(employee: DepartmentEmployee) {
+  return `${employee.firstName.charAt(0)}${employee.lastName.charAt(0)}`.toUpperCase();
+}
+
+function getEmployeeImageSrc(employee: DepartmentEmployee) {
+  const image = employee.img?.trim();
+  return image ? image : undefined;
+}
 
 export function DepartmentView({
   onInitialLoadComplete,
@@ -151,25 +169,25 @@ export function DepartmentView({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border bg-muted/15 p-4">
+          <div className="rounded-xl border bg-muted/10 p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               Departments
             </p>
-            <p className="mt-2 text-2xl font-semibold">{totals.departments}</p>
+            <p className="mt-2 text-xl font-semibold">{totals.departments}</p>
           </div>
-          <div className="rounded-xl border bg-muted/15 p-4">
+          <div className="rounded-xl border bg-muted/10 p-4">
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
               <BriefcaseBusiness className="h-4 w-4" />
               Roles
             </div>
-            <p className="mt-2 text-2xl font-semibold">{totals.roles}</p>
+            <p className="mt-2 text-xl font-semibold">{totals.roles}</p>
           </div>
-          <div className="rounded-xl border bg-muted/15 p-4">
+          <div className="rounded-xl border bg-muted/10 p-4">
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
               <Users className="h-4 w-4" />
               Employees
             </div>
-            <p className="mt-2 text-2xl font-semibold">{totals.employees}</p>
+            <p className="mt-2 text-xl font-semibold">{totals.employees}</p>
           </div>
         </div>
       </CardHeader>
@@ -186,6 +204,10 @@ export function DepartmentView({
             {filteredDepartments.map((dept) => {
               const isOpen = !!openIds[dept.departmentId];
               const previewEmployees = dept.employees.slice(0, 4);
+              const previewPositions = dept.positions.slice(0, 5);
+              const filledRoles = dept.positions.filter(
+                (position) => position.employees.length > 0,
+              ).length;
 
               return (
                 <Collapsible
@@ -194,116 +216,192 @@ export function DepartmentView({
                   onOpenChange={(value) =>
                     setOpenIds((prev) => ({ ...prev, [dept.departmentId]: value }))
                   }
-                  className="overflow-hidden rounded-xl border bg-card/60"
+                  className="overflow-hidden rounded-xl border bg-card"
                 >
-                  <CollapsibleTrigger className="w-full p-4 text-left transition-colors hover:bg-muted/10">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-lg font-semibold">{dept.name}</span>
-                          <Badge variant="secondary" className="rounded-full px-3">
-                            {dept.positions.length} role
-                            {dept.positions.length === 1 ? "" : "s"}
-                          </Badge>
-                          <Badge variant="outline" className="rounded-full px-3">
-                            {dept.employees.length} employee
-                            {dept.employees.length === 1 ? "" : "s"}
-                          </Badge>
-                        </div>
-                        {dept.description ? (
-                          <p className="max-w-3xl text-sm text-muted-foreground">
-                            {dept.description}
+                  <CollapsibleTrigger className="w-full p-0 text-left transition-colors hover:bg-muted/5">
+                    <div className="space-y-4 p-4">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="min-w-0 space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-base font-semibold">{dept.name}</span>
+                            <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
+                              {formatCount(dept.positions.length, "role")}
+                            </Badge>
+                            <Badge variant="outline" className="rounded-full px-2.5 py-0.5">
+                              {formatCount(dept.employees.length, "employee")}
+                            </Badge>
+                          </div>
+                          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                            {dept.description || "No description added for this department yet."}
                           </p>
-                        ) : null}
-                        <div className="flex flex-wrap gap-2">
-                          {dept.positions.slice(0, 5).map((position) => (
-                            <Badge
-                              key={position.positionId}
-                              variant="secondary"
-                              className="rounded-full bg-secondary/60 px-3 py-1"
-                            >
-                              {position.name}
-                            </Badge>
-                          ))}
-                          {dept.positions.length > 5 ? (
-                            <Badge variant="outline" className="rounded-full px-3 py-1">
-                              +{dept.positions.length - 5} more
-                            </Badge>
-                          ) : null}
+                          {previewPositions.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {previewPositions.map((position) => (
+                                <Badge
+                                  key={position.positionId}
+                                  variant="secondary"
+                                  className="rounded-full px-2.5 py-0.5"
+                                >
+                                  {position.name}
+                                </Badge>
+                              ))}
+                              {dept.positions.length > previewPositions.length ? (
+                                <Badge variant="outline" className="rounded-full px-2.5 py-0.5">
+                                  +{dept.positions.length - previewPositions.length} more
+                                </Badge>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              No roles are assigned to this department yet.
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-3 xl:min-w-[280px] xl:items-end">
+                          <div className="flex items-center gap-3">
+                            {previewEmployees.length > 0 ? (
+                              <div className="hidden sm:flex -space-x-2">
+                                {previewEmployees.map((employee) => (
+                                  <Avatar
+                                    key={employee.employeeId}
+                                    className="h-8 w-8 border-2 border-background"
+                                  >
+                                    {getEmployeeImageSrc(employee) ? (
+                                      <AvatarImage
+                                        src={getEmployeeImageSrc(employee)}
+                                        alt={`${employee.firstName} ${employee.lastName}`}
+                                      />
+                                    ) : null}
+                                    <AvatarFallback className="bg-primary/10 text-[11px] font-semibold uppercase text-primary">
+                                      {getEmployeeInitials(employee)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                ))}
+                              </div>
+                            ) : null}
+                            <div className="text-left xl:text-right">
+                              <p className="text-sm font-medium">
+                                {formatCount(dept.employees.length, "member")}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatCount(filledRoles, "staffed role")}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-xs font-medium text-foreground">
+                              <span>{isOpen ? "Hide details" : "View details"}</span>
+                              <ChevronDown
+                                className={`h-4 w-4 text-muted-foreground transition-transform ${
+                                  isOpen ? "rotate-180" : ""
+                                }`}
+                              />
+                            </div>
+                          </div>
+
+                          {previewEmployees.length > 0 ? (
+                            <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
+                              {previewEmployees.map((employee) => (
+                                <div
+                                  key={employee.employeeId}
+                                  className="inline-flex items-center gap-2 rounded-full bg-muted/50 px-2.5 py-1"
+                                >
+                                  <Avatar className="h-6 w-6">
+                                    {getEmployeeImageSrc(employee) ? (
+                                      <AvatarImage
+                                        src={getEmployeeImageSrc(employee)}
+                                        alt={`${employee.firstName} ${employee.lastName}`}
+                                      />
+                                    ) : null}
+                                    <AvatarFallback className="bg-primary/10 text-[10px] font-semibold uppercase text-primary">
+                                      {getEmployeeInitials(employee)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="max-w-[140px] truncate text-xs text-foreground">
+                                    {employee.firstName} {employee.lastName}
+                                  </span>
+                                </div>
+                              ))}
+                              {dept.employees.length > previewEmployees.length ? (
+                                <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
+                                  +{dept.employees.length - previewEmployees.length} more
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              No employees are currently assigned.
+                            </p>
+                          )}
                         </div>
                       </div>
-                      <div className="flex flex-col items-start gap-3 lg:items-end">
-                        <div className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
-                          {isOpen ? "Hide details" : "View details"}
+
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-lg border bg-muted/10 px-3 py-2.5">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                            Roles
+                          </p>
+                          <p className="mt-1 text-sm font-medium">
+                            {formatCount(dept.positions.length, "position")}
+                          </p>
                         </div>
-                        <ChevronDown
-                          className={`h-4 w-4 text-muted-foreground transition-transform ${
-                            isOpen ? "rotate-180" : ""
-                          }`}
-                        />
+                        <div className="rounded-lg border bg-muted/10 px-3 py-2.5">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                            Filled
+                          </p>
+                          <p className="mt-1 text-sm font-medium">
+                            {formatCount(filledRoles, "role")}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border bg-muted/10 px-3 py-2.5">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                            Team size
+                          </p>
+                          <p className="mt-1 text-sm font-medium">
+                            {formatCount(dept.employees.length, "member")}
+                          </p>
+                        </div>
                       </div>
                     </div>
-
-                    {previewEmployees.length > 0 ? (
-                      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        {previewEmployees.map((employee) => (
-                          <div
-                            key={employee.employeeId}
-                            className="rounded-lg border border-border/60 bg-background/50 px-3 py-2"
-                          >
-                            <p className="text-sm font-medium">
-                              {employee.firstName} {employee.lastName}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {employee.employeeCode}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {employee.position?.name || "No position assigned"}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
                   </CollapsibleTrigger>
 
-                  <CollapsibleContent className="border-t border-border/60 bg-muted/5 p-4">
-                    <div className="grid gap-4 xl:grid-cols-[1.05fr_1.2fr]">
-                      <section className="space-y-3 rounded-xl border bg-background/60 p-4">
+                  <CollapsibleContent className="border-t border-border/60 bg-muted/5 px-4 pb-4 pt-3">
+                    <div className="grid gap-3 xl:grid-cols-[320px_minmax(0,1fr)]">
+                      <section className="space-y-3 rounded-lg border bg-background p-4">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-semibold">Roles in this department</p>
                           <Badge variant="outline" className="rounded-full px-3">
-                            {dept.positions.length}
+                            {formatCount(dept.positions.length, "role")}
                           </Badge>
                         </div>
                         {dept.positions.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
+                          <div className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
                             No roles in this department yet.
-                          </p>
+                          </div>
                         ) : (
                           <div className="space-y-2">
                             {dept.positions.map((pos) => (
                               <div
                                 key={pos.positionId}
-                                className="rounded-lg border border-border/60 bg-muted/10 px-3 py-3"
+                                className="rounded-lg border border-border/60 px-3 py-2.5"
                               >
-                                <div className="flex items-center justify-between gap-3">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                   <span className="text-sm font-medium">{pos.name}</span>
-                                  <Badge variant="outline" className="rounded-full px-3">
-                                    {pos.employees.length} assigned
+                                  <Badge variant="outline" className="w-fit rounded-full px-3">
+                                    {formatCount(pos.employees.length, "assigned employee")}
                                   </Badge>
                                 </div>
                                 {pos.employees.length > 0 ? (
-                                  <div className="mt-2 flex flex-wrap gap-2">
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
                                     {pos.employees.slice(0, 4).map((emp) => (
                                       <span
                                         key={emp.employeeId}
-                                        className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+                                        className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"
                                       >
                                         {emp.firstName} {emp.lastName}
                                       </span>
                                     ))}
                                     {pos.employees.length > 4 ? (
-                                      <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                                      <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
                                         +{pos.employees.length - 4} more
                                       </span>
                                     ) : null}
@@ -315,7 +413,7 @@ export function DepartmentView({
                         )}
                       </section>
 
-                      <section className="space-y-3 rounded-xl border bg-background/60 p-4">
+                      <section className="space-y-3 rounded-lg border bg-background p-4">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-semibold">Employees</p>
                           <Button
@@ -330,17 +428,28 @@ export function DepartmentView({
                           </Button>
                         </div>
                         {dept.employees.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
+                          <div className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
                             No employees in this department.
-                          </p>
+                          </div>
                         ) : (
-                          <div className="grid gap-2 sm:grid-cols-2">
+                          <div className="overflow-hidden rounded-lg border">
                             {dept.employees.map((emp) => (
                               <div
                                 key={emp.employeeId}
-                                className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/10 px-3 py-3"
+                                className="flex items-center gap-3 border-b bg-background px-3 py-3 last:border-b-0"
                               >
-                                <div className="min-w-0">
+                                <Avatar className="h-10 w-10 shrink-0">
+                                  {getEmployeeImageSrc(emp) ? (
+                                    <AvatarImage
+                                      src={getEmployeeImageSrc(emp)}
+                                      alt={`${emp.firstName} ${emp.lastName}`}
+                                    />
+                                  ) : null}
+                                  <AvatarFallback className="bg-primary/10 text-xs font-semibold uppercase text-primary">
+                                    {getEmployeeInitials(emp)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0 flex-1">
                                   <p className="truncate text-sm font-medium">
                                     {emp.firstName} {emp.lastName}
                                   </p>
@@ -348,7 +457,7 @@ export function DepartmentView({
                                     {emp.employeeCode}
                                   </p>
                                 </div>
-                                <span className="shrink-0 text-xs text-muted-foreground">
+                                <span className="shrink-0 text-right text-xs text-muted-foreground">
                                   {emp.position?.name || "No position"}
                                 </span>
                               </div>

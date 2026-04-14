@@ -70,6 +70,9 @@ type AttendanceRow = {
   overtimeMinutesRaw?: number | null;
   breakMinutes?: number | null;
   breakCount?: number | null;
+  isFlagged?: boolean;
+  flaggedAt?: string | null;
+  suspiciousLogCount?: number | null;
   employeeId: string;
   employee?: {
     employeeId: string;
@@ -383,9 +386,9 @@ export function AttendanceHistoryTable() {
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg">Attendance</CardTitle>
+        <CardTitle className="text-lg">Attendance Logs</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Daily attendance with expected vs. actual times.
+          Daily attendance logs with expected vs. actual times and suspicious review flags.
         </p>
       </CardHeader>
 
@@ -638,6 +641,15 @@ export function AttendanceHistoryTable() {
                           {row.forgotToTimeOut ? (
                             <Badge className="w-fit uppercase tracking-wide" variant="destructive">
                               Forgot time out
+                            </Badge>
+                          ) : null}
+                          {row.isFlagged ? (
+                            <Badge className="w-fit uppercase tracking-wide" variant="warning">
+                              Flagged
+                              {typeof row.suspiciousLogCount === "number" &&
+                              row.suspiciousLogCount > 0
+                                ? ` (${row.suspiciousLogCount})`
+                                : ""}
                             </Badge>
                           ) : null}
                         </div>
