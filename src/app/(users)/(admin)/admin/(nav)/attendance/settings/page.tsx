@@ -6,7 +6,7 @@ export default function AttendanceSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Attendance Settings</h1>
         <p className="text-sm text-muted-foreground">
-          Configure attendance anti-cheating rules, review behavior, and device checks.
+          Configure attendance device context capture.
         </p>
       </div>
       <AttendanceSecuritySettingsPage />

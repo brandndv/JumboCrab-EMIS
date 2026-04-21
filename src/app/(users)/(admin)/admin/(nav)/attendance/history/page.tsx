@@ -8,7 +8,7 @@ export default function AttendanceHistoryPage() {
       <div>
         <h1 className="text-2xl font-semibold">Attendance Logs</h1>
         <p className="text-sm text-muted-foreground">
-          Browse attendance logs, suspicious flags, and recompute days as needed.
+          Browse attendance logs and recompute days as needed.
         </p>
       </div>
       <AttendanceHistoryTable />

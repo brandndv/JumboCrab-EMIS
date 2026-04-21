@@ -37,9 +37,6 @@ export type AttendanceRow = {
   breakMinutes?: number | null;
   breakCount?: number | null;
   punchesCount?: number | null;
-  isFlagged?: boolean;
-  flaggedAt?: string | null;
-  suspiciousLogCount?: number | null;
   expectedShiftName?: string | null;
   employeeId: string;
   employee?: {

@@ -224,11 +224,8 @@ export async function recordKioskPunch(input: {
     if (result.attendance?.id) {
       await captureAttendanceSecurityEvent({
         attendanceId: result.attendance.id,
-        punchId: result.punch.id,
         employeeId: user.employee.employeeId,
-        punchType: punchType as PUNCH_TYPE,
         punchTime: now,
-        source: "KIOSK",
         payload: requestMetadata,
       });
     }

@@ -12,57 +12,54 @@ import { ModuleLoadingState } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
 
 type AttendanceSecuritySettingsForm = {
-  deviceTokenTrackingEnabled: boolean;
-  fingerprintTrackingEnabled: boolean;
   gpsValidationEnabled: boolean;
-  suspiciousTimeWindowMinutes: number;
-  allowOnlyOneRegisteredDevicePerEmployee: boolean;
-  requireManagerReviewForFlaggedLogs: boolean;
+  faceRecognitionEnabled: boolean;
+  faceRequiredForQrPunch: boolean;
+  faceLivenessRequired: boolean;
+  faceMatchMaxDistance: number;
+  faceFailureMode: string;
 };
 
 const defaultForm: AttendanceSecuritySettingsForm = {
-  deviceTokenTrackingEnabled: true,
-  fingerprintTrackingEnabled: true,
   gpsValidationEnabled: false,
-  suspiciousTimeWindowMinutes: 3,
-  allowOnlyOneRegisteredDevicePerEmployee: false,
-  requireManagerReviewForFlaggedLogs: true,
+  faceRecognitionEnabled: false,
+  faceRequiredForQrPunch: false,
+  faceLivenessRequired: true,
+  faceMatchMaxDistance: 0.5,
+  faceFailureMode: "BLOCK",
 };
 
 const settingRows: Array<{
-  key: keyof Omit<AttendanceSecuritySettingsForm, "suspiciousTimeWindowMinutes">;
+  key: Exclude<
+    keyof AttendanceSecuritySettingsForm,
+    "faceMatchMaxDistance" | "faceFailureMode"
+  >;
   title: string;
   description: string;
 }> = [
   {
-    key: "deviceTokenTrackingEnabled",
-    title: "Enable device token tracking",
-    description:
-      "Store persistent browser token from employee device for attendance review.",
-  },
-  {
-    key: "fingerprintTrackingEnabled",
-    title: "Enable fingerprint tracking",
-    description:
-      "Use lightweight browser fingerprint from safe browser properties only.",
-  },
-  {
     key: "gpsValidationEnabled",
-    title: "Enable GPS validation",
+    title: "Capture location when available",
     description:
-      "Capture location when available and flag missing or mismatched GPS activity.",
+      "Attach optional location coordinates to attendance punch context.",
   },
   {
-    key: "allowOnlyOneRegisteredDevicePerEmployee",
-    title: "Allow only one active registered device",
+    key: "faceRecognitionEnabled",
+    title: "Enable face recognition",
     description:
-      "New devices stay flagged until manager validates or admin updates employee device usage.",
+      "Allow QR punches to require employee face verification before the punch is recorded.",
   },
   {
-    key: "requireManagerReviewForFlaggedLogs",
-    title: "Require manager review for flagged logs",
+    key: "faceRequiredForQrPunch",
+    title: "Require face for QR punch",
     description:
-      "Keep suspicious logs pending until manager or admin records review decision.",
+      "When enabled, employee QR scan opens camera and records punch only after face match passes.",
+  },
+  {
+    key: "faceLivenessRequired",
+    title: "Require liveness challenge",
+    description:
+      "Ask employees to blink or turn their head and reject obvious photo-only attempts.",
   },
 ];
 
@@ -85,14 +82,16 @@ export function AttendanceSecuritySettingsPage() {
       }
 
       setForm({
-        deviceTokenTrackingEnabled: result.data.deviceTokenTrackingEnabled,
-        fingerprintTrackingEnabled: result.data.fingerprintTrackingEnabled,
         gpsValidationEnabled: result.data.gpsValidationEnabled,
-        suspiciousTimeWindowMinutes: result.data.suspiciousTimeWindowMinutes,
-        allowOnlyOneRegisteredDevicePerEmployee:
-          result.data.allowOnlyOneRegisteredDevicePerEmployee,
-        requireManagerReviewForFlaggedLogs:
-          result.data.requireManagerReviewForFlaggedLogs,
+        faceRecognitionEnabled:
+          result.data.faceRecognitionEnabled ?? defaultForm.faceRecognitionEnabled,
+        faceRequiredForQrPunch:
+          result.data.faceRequiredForQrPunch ?? defaultForm.faceRequiredForQrPunch,
+        faceLivenessRequired:
+          result.data.faceLivenessRequired ?? defaultForm.faceLivenessRequired,
+        faceMatchMaxDistance:
+          result.data.faceMatchMaxDistance ?? defaultForm.faceMatchMaxDistance,
+        faceFailureMode: result.data.faceFailureMode ?? defaultForm.faceFailureMode,
       });
     } catch (err) {
       setError(
@@ -110,9 +109,9 @@ export function AttendanceSecuritySettingsPage() {
       setSaving(true);
       const result = await updateAttendanceSecuritySettings({
         ...form,
-        suspiciousTimeWindowMinutes: Math.max(
-          1,
-          Math.min(3, Math.round(Number(form.suspiciousTimeWindowMinutes) || 1)),
+        faceMatchMaxDistance: Math.max(
+          0.45,
+          Math.min(0.6, Number(form.faceMatchMaxDistance) || 0.5),
         ),
       });
 
@@ -123,7 +122,7 @@ export function AttendanceSecuritySettingsPage() {
       }
 
       toast.success("Attendance settings updated.", {
-        description: "Anti-cheating rules were saved successfully.",
+        description: "Attendance security settings were saved successfully.",
       });
       await load();
     } catch (err) {
@@ -146,7 +145,7 @@ export function AttendanceSecuritySettingsPage() {
     return (
       <ModuleLoadingState
         title="Attendance Settings"
-        description="Loading anti-cheating attendance configuration."
+        description="Loading attendance security configuration."
       />
     );
   }
@@ -156,7 +155,7 @@ export function AttendanceSecuritySettingsPage() {
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">Attendance Settings</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Configure anti-cheating attendance rules without changing current punch flow.
+          Configure location context and face verification for attendance punches.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -191,23 +190,50 @@ export function AttendanceSecuritySettingsPage() {
 
         <div className="rounded-xl border border-border/70 bg-muted/10 p-4">
           <div className="space-y-2">
-            <p className="font-medium">Suspicious time window in minutes</p>
+            <p className="font-medium">Face match distance threshold</p>
             <p className="text-sm text-muted-foreground">
-              Used for rapid multi-employee device reuse and fingerprint checks.
+              Lower is stricter. Start at 0.50, then tune after real employee
+              enrollment tests.
             </p>
             <Input
               type="number"
-              min={1}
-              max={3}
-              value={form.suspiciousTimeWindowMinutes}
+              min={0.45}
+              max={0.6}
+              step={0.01}
+              value={form.faceMatchMaxDistance}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
-                  suspiciousTimeWindowMinutes: Number(event.target.value),
+                  faceMatchMaxDistance: Number(event.target.value),
                 }))
               }
               className="max-w-xs"
             />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border/70 bg-muted/10 p-4">
+          <div className="space-y-2">
+            <p className="font-medium">Face failure mode</p>
+            <p className="text-sm text-muted-foreground">
+              Block is safest. Fallback allows QR punch when face camera is
+              unavailable, useful for LAN HTTP development on phones.
+            </p>
+            <select
+              value={form.faceFailureMode}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  faceFailureMode: event.target.value,
+                }))
+              }
+              className="h-10 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <option value="BLOCK">Block punch when face check fails</option>
+              <option value="FLAG">
+                Allow fallback punch when camera is unavailable
+              </option>
+            </select>
           </div>
         </div>
 

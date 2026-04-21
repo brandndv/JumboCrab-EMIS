@@ -99,8 +99,6 @@ export async function getSelfAttendanceStatus(input?: { date?: string }) {
 
 export async function recordSelfPunch(input: {
   punchType: string;
-  deviceToken?: string | null;
-  fingerprint?: string | null;
   latitude?: number | null;
   longitude?: number | null;
 }) {
@@ -204,32 +202,22 @@ export async function recordSelfPunch(input: {
       recompute: true,
     });
 
-    const securityResult = punch.attendance?.id
-      ? await captureAttendanceSecurityEvent({
-          attendanceId: punch.attendance.id,
-          punchId: punch.punch.id,
-          employeeId: employee.employeeId,
-          punchType: punchType as PUNCH_TYPE,
-          punchTime: now,
-          source: "WEB_SELF",
-          payload: {
-            ...requestMetadata,
-            deviceToken: input.deviceToken ?? null,
-            fingerprint: input.fingerprint ?? null,
-            latitude: input.latitude ?? null,
-            longitude: input.longitude ?? null,
-          },
-        })
-      : null;
+    if (punch.attendance?.id) {
+      await captureAttendanceSecurityEvent({
+        attendanceId: punch.attendance.id,
+        employeeId: employee.employeeId,
+        punchTime: now,
+        payload: {
+          ...requestMetadata,
+          latitude: input.latitude ?? null,
+          longitude: input.longitude ?? null,
+        },
+      });
+    }
 
     return {
       success: true,
-      data: {
-        ...serializePunch(punch.punch),
-        flagged: securityResult?.flagged ?? false,
-        suspiciousReasons: securityResult?.reasons ?? [],
-        suspiciousStatus: securityResult?.status ?? null,
-      },
+      data: serializePunch(punch.punch),
     };
   } catch (error) {
     console.error("Failed to record self punch", error);

@@ -24,14 +24,17 @@ import {
 import {
   getAttendancePunchClientConfig as getAttendancePunchClientConfigImpl,
   getAttendanceSecuritySettings as getAttendanceSecuritySettingsImpl,
-  getSuspiciousAttendanceLogDetail as getSuspiciousAttendanceLogDetailImpl,
-  listEmployeeDeviceRegistrations as listEmployeeDeviceRegistrationsImpl,
-  listSuspiciousAttendanceLogs as listSuspiciousAttendanceLogsImpl,
 } from "./attendance-security-query-action";
 import {
-  reviewSuspiciousAttendanceLog as reviewSuspiciousAttendanceLogImpl,
   updateAttendanceSecuritySettings as updateAttendanceSecuritySettingsImpl,
 } from "./attendance-security-mutation-action";
+import {
+  enrollEmployeeFace as enrollEmployeeFaceImpl,
+  listEmployeeFaceEnrollments as listEmployeeFaceEnrollmentsImpl,
+  listEmployeeFaceVerificationAttempts as listEmployeeFaceVerificationAttemptsImpl,
+  revokeEmployeeFaceEnrollment as revokeEmployeeFaceEnrollmentImpl,
+  verifyFaceAndRecordQrPunch as verifyFaceAndRecordQrPunchImpl,
+} from "./face-recognition-action";
 
 export async function listAttendance(
   ...args: Parameters<typeof listAttendanceImpl>
@@ -111,34 +114,10 @@ export async function getAttendancePunchClientConfig(
   return getAttendancePunchClientConfigImpl(...args);
 }
 
-export async function listSuspiciousAttendanceLogs(
-  ...args: Parameters<typeof listSuspiciousAttendanceLogsImpl>
-) {
-  return listSuspiciousAttendanceLogsImpl(...args);
-}
-
-export async function getSuspiciousAttendanceLogDetail(
-  ...args: Parameters<typeof getSuspiciousAttendanceLogDetailImpl>
-) {
-  return getSuspiciousAttendanceLogDetailImpl(...args);
-}
-
-export async function reviewSuspiciousAttendanceLog(
-  ...args: Parameters<typeof reviewSuspiciousAttendanceLogImpl>
-) {
-  return reviewSuspiciousAttendanceLogImpl(...args);
-}
-
 export async function updateAttendanceSecuritySettings(
   ...args: Parameters<typeof updateAttendanceSecuritySettingsImpl>
 ) {
   return updateAttendanceSecuritySettingsImpl(...args);
-}
-
-export async function listEmployeeDeviceRegistrations(
-  ...args: Parameters<typeof listEmployeeDeviceRegistrationsImpl>
-) {
-  return listEmployeeDeviceRegistrationsImpl(...args);
 }
 
 export async function recomputeAttendance(
@@ -151,4 +130,34 @@ export async function recomputeAttendanceForDate(
   ...args: Parameters<typeof recomputeAttendanceForDateImpl>
 ) {
   return recomputeAttendanceForDateImpl(...args);
+}
+
+export async function listEmployeeFaceEnrollments(
+  ...args: Parameters<typeof listEmployeeFaceEnrollmentsImpl>
+) {
+  return listEmployeeFaceEnrollmentsImpl(...args);
+}
+
+export async function enrollEmployeeFace(
+  ...args: Parameters<typeof enrollEmployeeFaceImpl>
+) {
+  return enrollEmployeeFaceImpl(...args);
+}
+
+export async function listEmployeeFaceVerificationAttempts(
+  ...args: Parameters<typeof listEmployeeFaceVerificationAttemptsImpl>
+) {
+  return listEmployeeFaceVerificationAttemptsImpl(...args);
+}
+
+export async function revokeEmployeeFaceEnrollment(
+  ...args: Parameters<typeof revokeEmployeeFaceEnrollmentImpl>
+) {
+  return revokeEmployeeFaceEnrollmentImpl(...args);
+}
+
+export async function verifyFaceAndRecordQrPunch(
+  ...args: Parameters<typeof verifyFaceAndRecordQrPunchImpl>
+) {
+  return verifyFaceAndRecordQrPunchImpl(...args);
 }

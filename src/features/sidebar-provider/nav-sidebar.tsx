@@ -188,11 +188,6 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "manager", "supervisor"],
         },
         {
-          label: "Suspicious Logs",
-          path: "/suspicious",
-          roles: ["admin", "manager"],
-        },
-        {
           label: "Attendance Settings",
           path: "/settings",
           roles: ["admin"],

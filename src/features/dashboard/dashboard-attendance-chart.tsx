@@ -14,8 +14,8 @@ const chartConfig = {
     label: "Logged",
     color: "var(--color-chart-1)",
   },
-  flagged: {
-    label: "Flagged",
+  exceptions: {
+    label: "Exceptions",
     color: "var(--color-chart-2)",
   },
 } satisfies ChartConfig;
@@ -44,8 +44,8 @@ export default function DashboardAttendanceChart({
           maxBarSize={28}
         />
         <Bar
-          dataKey="flagged"
-          fill="var(--color-flagged)"
+          dataKey="exceptions"
+          fill="var(--color-exceptions)"
           radius={[6, 6, 0, 0]}
           maxBarSize={28}
         />

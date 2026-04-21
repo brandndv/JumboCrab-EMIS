@@ -133,7 +133,7 @@ export type DashboardPanel = {
 export type DashboardChartPoint = {
   label: string;
   recorded: number;
-  flagged: number;
+  exceptions: number;
 };
 
 export type DashboardChart = {
@@ -382,7 +382,7 @@ const getDayBounds = (dateKey = todayKey()) => {
   };
 };
 
-const buildAttendanceFlagWhere = (
+const buildAttendanceExceptionWhere = (
   start: Date,
   end: Date,
 ): Prisma.AttendanceWhereInput => ({
@@ -395,7 +395,6 @@ const buildAttendanceFlagWhere = (
     { status: ATTENDANCE_STATUS.INCOMPLETE },
     { lateMinutes: { gt: 0 } },
     { undertimeMinutes: { gt: 0 } },
-    { isFlagged: true },
   ],
 });
 
@@ -420,7 +419,7 @@ const loadAttendanceTrend = async (days = 7): Promise<DashboardChartPoint[]> => 
   return Promise.all(
     dateKeys.map(async (dateKey) => {
       const { start, end } = getDayBounds(dateKey);
-      const [recorded, flagged] = await Promise.all([
+      const [recorded, exceptions] = await Promise.all([
         db.attendance.count({
           where: {
             workDate: {
@@ -430,14 +429,14 @@ const loadAttendanceTrend = async (days = 7): Promise<DashboardChartPoint[]> => 
           },
         }),
         db.attendance.count({
-          where: buildAttendanceFlagWhere(start, end),
+          where: buildAttendanceExceptionWhere(start, end),
         }),
       ]);
 
       return {
         label: formatChartDayLabel(dateKey),
         recorded,
-        flagged,
+        exceptions,
       };
     }),
   );
@@ -998,7 +997,7 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
     userCount,
     disabledUsers,
     attendanceRecordedCount,
-    attendanceFlaggedCount,
+    attendanceExceptionCount,
     departmentCount,
     payrollQueueCount,
     deductionDraftCount,
@@ -1030,7 +1029,7 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
       },
     }),
     db.attendance.count({
-      where: buildAttendanceFlagWhere(todayStart, todayEnd),
+      where: buildAttendanceExceptionWhere(todayStart, todayEnd),
     }),
     db.department.count({ where: { isActive: true } }),
     db.payroll.count({
@@ -1068,11 +1067,11 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
         tone: "info",
       },
       {
-        label: "Attendance Flags",
-        value: toCompactNumber(attendanceFlaggedCount),
+        label: "Attendance Exceptions",
+        value: toCompactNumber(attendanceExceptionCount),
         description: `${attendanceRecordedCount} logged today`,
         icon: "alert",
-        tone: attendanceFlaggedCount > 0 ? "warning" : "success",
+        tone: attendanceExceptionCount > 0 ? "warning" : "success",
       },
       {
         label: "Open Review Work",
@@ -1101,11 +1100,13 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
       },
       {
         title: "Check Attendance",
-        description: "Review today’s flagged logs.",
+        description: "Review today’s attendance exceptions.",
         href: "/admin/attendance",
         icon: "clock",
         badge:
-          attendanceFlaggedCount > 0 ? `${attendanceFlaggedCount} flagged` : undefined,
+          attendanceExceptionCount > 0
+            ? `${attendanceExceptionCount} exceptions`
+            : undefined,
       },
       {
         title: "Update Organization",
@@ -1117,11 +1118,11 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
     notes: [
       `${missingAccounts} missing account${missingAccounts === 1 ? "" : "s"}`,
       `${payrollQueueCount} open payroll run${payrollQueueCount === 1 ? "" : "s"}`,
-      `${attendanceFlaggedCount} flagged attendance item${attendanceFlaggedCount === 1 ? "" : "s"}`,
+      `${attendanceExceptionCount} attendance exception${attendanceExceptionCount === 1 ? "" : "s"}`,
     ],
     chart: {
       title: "Attendance activity",
-      description: "Logged vs flagged over the last 7 days.",
+      description: "Logged vs exception records over the last 7 days.",
       data: attendanceTrend,
     },
     primaryPanel: {
@@ -1185,10 +1186,10 @@ const buildAdminDashboard = async (session: DashboardSession): Promise<Dashboard
           meta: `${attendanceRecordedCount} total attendance row${attendanceRecordedCount === 1 ? "" : "s"} today`,
           icon: "clock",
           href: "/admin/attendance/history",
-          value: String(attendanceFlaggedCount),
-          statusLabel: attendanceFlaggedCount > 0 ? "Check now" : "Stable",
+          value: String(attendanceExceptionCount),
+          statusLabel: attendanceExceptionCount > 0 ? "Check now" : "Stable",
           statusClassName: toneBadgeClass(
-            attendanceFlaggedCount > 0 ? "warning" : "success",
+            attendanceExceptionCount > 0 ? "warning" : "success",
           ),
         },
       ],
@@ -1356,7 +1357,7 @@ const buildManagerDashboard = async (
     payrollQueueCount,
     payrollReturnedCount,
     gmApprovalCount,
-    attendanceFlaggedCount,
+    attendanceExceptionCount,
     activeEmployeeCount,
     deductionDraftCount,
     draftViolationCount,
@@ -1478,10 +1479,10 @@ const buildManagerDashboard = async (
       },
       {
         label: "Attendance Exceptions",
-        value: toCompactNumber(attendanceFlaggedCount),
+        value: toCompactNumber(attendanceExceptionCount),
         description: `${activeEmployeeCount} active employee${activeEmployeeCount === 1 ? "" : "s"} on record`,
         icon: "clock",
-        tone: attendanceFlaggedCount > 0 ? "warning" : "info",
+        tone: attendanceExceptionCount > 0 ? "warning" : "info",
       },
     ],
     actions: [
@@ -1524,15 +1525,15 @@ const buildManagerDashboard = async (
         href: "/manager/attendance/history",
         icon: "clock",
         badge:
-          attendanceFlaggedCount > 0
-            ? `${attendanceFlaggedCount} flagged`
+          attendanceExceptionCount > 0
+            ? `${attendanceExceptionCount} exceptions`
             : undefined,
       },
     ],
     notes: [
       `${draftViolationCount} violation draft${draftViolationCount === 1 ? "" : "s"} are still pending review.`,
       `${gmApprovalCount} payroll run${gmApprovalCount === 1 ? "" : "s"} are waiting on General Manager approval or release.`,
-      `${attendanceFlaggedCount} attendance record${attendanceFlaggedCount === 1 ? "" : "s"} need a second look today.`,
+      `${attendanceExceptionCount} attendance record${attendanceExceptionCount === 1 ? "" : "s"} need a second look today.`,
     ],
     primaryPanel: {
       title: "Requests Waiting for Action",
