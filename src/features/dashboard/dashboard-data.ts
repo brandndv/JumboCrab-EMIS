@@ -645,7 +645,13 @@ const loadTodayAttendanceSnapshot = async (
         },
       },
       orderBy: { workDate: "desc" },
-      include: {
+      select: {
+        id: true,
+        status: true,
+        lateMinutes: true,
+        undertimeMinutes: true,
+        actualInAt: true,
+        actualOutAt: true,
         expectedShift: {
           select: {
             name: true,
