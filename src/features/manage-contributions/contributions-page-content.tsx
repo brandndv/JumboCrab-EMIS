@@ -167,11 +167,11 @@ export default function ContributionsPageContent() {
             </div>
           )}
 
-          <div className="text-sm text-muted-foreground">
-            {activeView === "employees"
-              ? "Expand a row to review bracket details and choose which items will be included in payroll."
-              : "SSS, PhilHealth, Pag-IBIG, and withholding previews use the active monthly bracket tables."}
-          </div>
+          {activeView === "brackets" ? (
+            <div className="text-sm text-muted-foreground">
+              SSS, PhilHealth, Pag-IBIG, and withholding previews use the active monthly bracket tables.
+            </div>
+          ) : null}
         </div>
 
         {error && (

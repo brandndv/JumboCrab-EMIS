@@ -55,7 +55,6 @@ export default function EmployeesPageContent() {
       <ModuleLoadingState
         title="Employees"
         description="Loading employee records, filters, and archive state."
-        cardCount={4}
       />
     );
   }

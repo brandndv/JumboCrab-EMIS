@@ -138,7 +138,10 @@ export const groupAttendanceRowsByEmployee = (
   periodStartKey: string,
   periodEndKey: string,
 ) => {
-  const attendanceByEmployee = new Map<string, PayrollGenerationAttendanceRow[]>();
+  const attendanceByEmployee = new Map<
+    string,
+    PayrollGenerationAttendanceRow[]
+  >();
 
   rows.forEach((row) => {
     const key = toDateKeyInTz(row.workDate);
@@ -190,7 +193,9 @@ const getEmployeeLabel = (employee: {
   employeeCode: string;
   firstName: string;
   lastName: string;
-}) => [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim() || employee.employeeCode;
+}) =>
+  [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim() ||
+  employee.employeeCode;
 
 const getRequiredCompensationSnapshot = (input: {
   employee: PayrollGenerationEmployee;
@@ -404,36 +409,33 @@ export const buildEmployeePayrollDraft = (input: {
       Math.max(0, row.workedMinutes ?? 0) === 0 &&
       Math.max(0, row.netWorkedMinutes ?? 0) === 0;
 
-    const baseEarningMinutes =
-      isPaidLeaveRow
-        ? scheduledPaidMinutes ?? 0
-        : isZeroWorkRow
-          ? 0
-          : scheduledPaidMinutes != null
-            ? scheduledPaidMinutes
-            : payableWorkedMinutes;
+    const baseEarningMinutes = isPaidLeaveRow
+      ? (scheduledPaidMinutes ?? 0)
+      : isZeroWorkRow
+        ? 0
+        : scheduledPaidMinutes != null
+          ? scheduledPaidMinutes
+          : payableWorkedMinutes;
 
     const ratePerMinute = computeRatePerMinute({
       dailyRate,
       scheduledPaidMinutes: scheduledPaidMinutes ?? baselinePaidMinutes,
     });
 
-    const basePayAmount =
-      isZeroWorkRow
-        ? 0
-        : (computePayableAmountFromNetMinutes({
-            netWorkedMinutes: baseEarningMinutes,
-            ratePerMinute,
-          }) ?? 0);
+    const basePayAmount = isZeroWorkRow
+      ? 0
+      : (computePayableAmountFromNetMinutes({
+          netWorkedMinutes: baseEarningMinutes,
+          ratePerMinute,
+        }) ?? 0);
 
     const undertimeDeductionAmount =
       isPaidLeaveRow || isZeroWorkRow || scheduledPaidMinutes == null
         ? 0
-        : ((computePayableAmountFromNetMinutes({
+        : (computePayableAmountFromNetMinutes({
             netWorkedMinutes: undertimeMinutes,
             ratePerMinute,
-          }) ?? 0) *
-            UNDERTIME_DEDUCTION_MULTIPLIER);
+          }) ?? 0) * UNDERTIME_DEDUCTION_MULTIPLIER;
 
     const approvedOvertime = Math.max(0, row.overtimeMinutesApproved ?? 0);
     const rawOvertime = Math.max(0, row.overtimeMinutesRaw ?? 0);
@@ -500,7 +502,9 @@ export const buildEmployeePayrollDraft = (input: {
     ),
   ];
   const distinctPositionIds = [
-    ...new Set(rowPayrollMetrics.map((row) => row.compensationSnapshot.positionId)),
+    ...new Set(
+      rowPayrollMetrics.map((row) => row.compensationSnapshot.positionId),
+    ),
   ];
 
   const earnings: PayrollEarningDraft[] = [];
@@ -511,7 +515,9 @@ export const buildEmployeePayrollDraft = (input: {
       amount: basePay,
       minutes: minutesBasePay,
       rateSnapshot:
-        distinctRateSnapshots.length === 1 ? distinctRateSnapshots[0] : undefined,
+        distinctRateSnapshots.length === 1
+          ? distinctRateSnapshots[0]
+          : undefined,
       source: PayrollLineSource.SYSTEM,
       isManual: false,
       referenceType: PayrollReferenceType.ATTENDANCE,
@@ -529,7 +535,9 @@ export const buildEmployeePayrollDraft = (input: {
       amount: overtimePay,
       minutes: minutesOvertime,
       rateSnapshot:
-        distinctRateSnapshots.length === 1 ? distinctRateSnapshots[0] : undefined,
+        distinctRateSnapshots.length === 1
+          ? distinctRateSnapshots[0]
+          : undefined,
       source: PayrollLineSource.SYSTEM,
       isManual: false,
       referenceType: PayrollReferenceType.ATTENDANCE,
@@ -558,7 +566,9 @@ export const buildEmployeePayrollDraft = (input: {
       amount: undertimeDeduction,
       minutes: minutesUndertime,
       rateSnapshot:
-        distinctRateSnapshots.length === 1 ? distinctRateSnapshots[0] : undefined,
+        distinctRateSnapshots.length === 1
+          ? distinctRateSnapshots[0]
+          : undefined,
       source: PayrollLineSource.SYSTEM,
       isManual: false,
       referenceType: PayrollReferenceType.ATTENDANCE,
@@ -597,7 +607,10 @@ export const buildEmployeePayrollDraft = (input: {
           continue;
         }
 
-        const governmentNumber = resolveGovernmentNumber(employee, contributionType);
+        const governmentNumber = resolveGovernmentNumber(
+          employee,
+          contributionType,
+        );
         if (!governmentNumber) {
           continue;
         }
@@ -627,7 +640,8 @@ export const buildEmployeePayrollDraft = (input: {
           deductionType: deductionTypeForContribution(contributionType),
           contributionType,
           bracketIdSnapshot: calculation.bracket.id,
-          bracketReferenceSnapshot: calculation.bracket.referenceCode ?? undefined,
+          bracketReferenceSnapshot:
+            calculation.bracket.referenceCode ?? undefined,
           payrollFrequency: runFrequency,
           periodStartSnapshot: input.payrollPeriodStart,
           periodEndSnapshot: input.payrollPeriodEnd,
@@ -655,7 +669,9 @@ export const buildEmployeePayrollDraft = (input: {
       }
     }
 
-    if (isContributionIncludedInPayroll(employee, ContributionType.WITHHOLDING)) {
+    if (
+      isContributionIncludedInPayroll(employee, ContributionType.WITHHOLDING)
+    ) {
       const withholdingBracket = findApplicableContributionBracket({
         brackets: input.contributionBrackets,
         contributionType: ContributionType.WITHHOLDING,
@@ -739,7 +755,10 @@ export const buildEmployeePayrollDraft = (input: {
         assignment.remainingBalance ?? assignment.installmentTotal,
         0,
       );
-      const installmentValue = toNumber(assignment.installmentPerPayroll, amount);
+      const installmentValue = toNumber(
+        assignment.installmentPerPayroll,
+        amount,
+      );
       const effectiveInstallment = Math.max(
         0,
         installmentValue > 0 ? installmentValue : amount,

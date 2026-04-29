@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TZ } from "@/lib/timezone";
 import {
   listAttendance,
@@ -75,7 +75,7 @@ export function useAttendanceState(initialDate = todayISO()) {
   const [recomputeLoading, setRecomputeLoading] = useState(false);
   const [recomputeMessage, setRecomputeMessage] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -104,9 +104,9 @@ export function useAttendanceState(initialDate = todayISO()) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [date]);
 
-  const recomputeDay = async () => {
+  const recomputeDay = useCallback(async () => {
     try {
       setRecomputeLoading(true);
       setRecomputeMessage(null);
@@ -125,11 +125,11 @@ export function useAttendanceState(initialDate = todayISO()) {
     } finally {
       setRecomputeLoading(false);
     }
-  };
+  }, [date, load]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   return {
     rows,

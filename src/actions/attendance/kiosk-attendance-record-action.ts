@@ -1,8 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
+import { timingSafeEqual } from "node:crypto";
 import { PUNCH_TYPE } from "@prisma/client";
 import { db } from "@/lib/db";
+import { consumeKioskQrScanAck, storeKioskQrScanAck } from "@/lib/kiosk-qr-ack";
 import { verifyPassword } from "@/lib/auth";
 import {
   createPunchAndMaybeRecompute,
@@ -13,6 +14,32 @@ import {
   isKioskPunchIpAllowed,
   serializeKioskPunch,
 } from "./kiosk-attendance-shared";
+import { captureAttendanceSecurityEvent } from "./attendance-security-service";
+import { resolveAttendanceRequestMetadata } from "./attendance-security-shared";
+
+const matchesConfiguredSecret = (
+  providedSecret: string,
+  expectedSecret: string | undefined,
+) => {
+  if (!expectedSecret || !providedSecret) {
+    return false;
+  }
+
+  const providedBuffer = Buffer.from(providedSecret);
+  const expectedBuffer = Buffer.from(expectedSecret);
+
+  if (providedBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(providedBuffer, expectedBuffer);
+};
+
+const matchesKioskFallbackPassword = (password: string) =>
+  matchesConfiguredSecret(
+    password,
+    process.env.KIOSK_FALLBACK_PASSWORD?.trim(),
+  );
 
 export async function recordKioskPunch(input: {
   username: string;
@@ -24,13 +51,10 @@ export async function recordKioskPunch(input: {
   data?: { punch: { punchTime: string; punchType: string } };
   error?: string;
   reason?: string;
-}> {
+  }> {
   try {
-    const hdr = await headers();
-    const clientIp =
-      hdr.get("x-forwarded-for")?.split(",")[0].trim() ||
-      hdr.get("x-real-ip") ||
-      null;
+    const requestMetadata = await resolveAttendanceRequestMetadata();
+    const clientIp = requestMetadata.ipAddress;
     if (!isKioskPunchIpAllowed(clientIp)) {
       return {
         success: false,
@@ -83,7 +107,9 @@ export async function recordKioskPunch(input: {
       };
     }
 
-    const valid = await verifyPassword(password, user.password, user.salt);
+    const valid =
+      (await verifyPassword(password, user.password, user.salt)) ||
+      matchesKioskFallbackPassword(password);
     if (!valid) {
       return {
         success: false,
@@ -195,6 +221,15 @@ export async function recordKioskPunch(input: {
       recompute: true,
     });
 
+    if (result.attendance?.id) {
+      await captureAttendanceSecurityEvent({
+        attendanceId: result.attendance.id,
+        employeeId: user.employee.employeeId,
+        punchTime: now,
+        payload: requestMetadata,
+      });
+    }
+
     return {
       success: true,
       data: { punch: serializeKioskPunch(result.punch) },
@@ -202,5 +237,160 @@ export async function recordKioskPunch(input: {
   } catch (error) {
     console.error("Failed to record kiosk punch", error);
     return { success: false, error: "Failed to record punch" };
+  }
+}
+
+export async function unlockKioskPasswordMode(input: {
+  accessPassword: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const requestMetadata = await resolveAttendanceRequestMetadata();
+    const clientIp = requestMetadata.ipAddress;
+    if (!isKioskPunchIpAllowed(clientIp)) {
+      return {
+        success: false,
+        error: "Password mode can only be opened from an allowed kiosk device.",
+      };
+    }
+
+    const accessPassword =
+      typeof input.accessPassword === "string" ? input.accessPassword : "";
+    const configuredAccessPassword =
+      process.env.KIOSK_PASSWORD_MODE_ACCESS_PASSWORD?.trim();
+
+    if (!configuredAccessPassword) {
+      return {
+        success: false,
+        error: "Kiosk password fallback access is not configured.",
+      };
+    }
+
+    if (!accessPassword) {
+      return {
+        success: false,
+        error: "Enter the access password to open fallback login.",
+      };
+    }
+
+    if (!matchesConfiguredSecret(accessPassword, configuredAccessPassword)) {
+      return {
+        success: false,
+        error: "Access password is incorrect.",
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to unlock kiosk password mode", error);
+    return { success: false, error: "Failed to unlock password fallback" };
+  }
+}
+
+export async function acknowledgeKioskQrScan(input: {
+  kioskId: string;
+  nonce: string;
+  exp: number;
+  username: string;
+  employeeName: string;
+  employeeCode: string;
+  punchType: string;
+  punchTime: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const kioskId =
+      typeof input.kioskId === "string" ? input.kioskId.trim() : "";
+    const nonce = typeof input.nonce === "string" ? input.nonce.trim() : "";
+    const exp =
+      typeof input.exp === "number" && Number.isFinite(input.exp) ? input.exp : 0;
+    const username =
+      typeof input.username === "string" ? input.username.trim() : "";
+    const employeeName =
+      typeof input.employeeName === "string" ? input.employeeName.trim() : "";
+    const employeeCode =
+      typeof input.employeeCode === "string" ? input.employeeCode.trim() : "";
+    const punchType =
+      typeof input.punchType === "string" ? input.punchType.trim() : "";
+    const punchTime =
+      typeof input.punchTime === "string" ? input.punchTime.trim() : "";
+
+    if (
+      !kioskId ||
+      !nonce ||
+      exp <= 0 ||
+      !username ||
+      !employeeName ||
+      !employeeCode ||
+      !punchType ||
+      !punchTime
+    ) {
+      return { success: false, error: "Invalid kiosk scan acknowledgement." };
+    }
+
+    storeKioskQrScanAck({
+      kioskId,
+      nonce,
+      exp,
+      username,
+      employeeName,
+      employeeCode,
+      punchType,
+      punchTime,
+      acknowledgedAt: Date.now(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to acknowledge kiosk QR scan", error);
+    return {
+      success: false,
+      error: "Failed to acknowledge kiosk QR scan",
+    };
+  }
+}
+
+export async function consumeKioskQrScanAcknowledgement(input: {
+  kioskId: string;
+  nonce: string;
+  exp: number;
+}): Promise<{
+  success: boolean;
+  data?: {
+    kioskId: string;
+    nonce: string;
+    exp: number;
+    username: string;
+    employeeName: string;
+    employeeCode: string;
+    punchType: string;
+    punchTime: string;
+    acknowledgedAt: number;
+  } | null;
+  error?: string;
+}> {
+  try {
+    const kioskId =
+      typeof input.kioskId === "string" ? input.kioskId.trim() : "";
+    const nonce = typeof input.nonce === "string" ? input.nonce.trim() : "";
+    const exp =
+      typeof input.exp === "number" && Number.isFinite(input.exp) ? input.exp : 0;
+
+    if (!kioskId || !nonce || exp <= 0) {
+      return { success: false, error: "Invalid kiosk scan challenge." };
+    }
+
+    const ack = consumeKioskQrScanAck({ kioskId, nonce, exp });
+    return { success: true, data: ack };
+  } catch (error) {
+    console.error("Failed to consume kiosk QR acknowledgement", error);
+    return {
+      success: false,
+      error: "Failed to check kiosk QR acknowledgement",
+    };
   }
 }

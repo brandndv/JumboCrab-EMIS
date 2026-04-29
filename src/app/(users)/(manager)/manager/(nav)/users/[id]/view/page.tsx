@@ -49,6 +49,13 @@ const getInitials = (user?: UserWithEmployee | null) => {
   return initials || "U";
 };
 
+const resolveNamedValue = (
+  value?: string | { name?: string | null } | null,
+) => {
+  if (typeof value === "string") return value;
+  return value?.name ?? "—";
+};
+
 function UserViewPageContent({
   paramsPromise,
 }: {
@@ -74,7 +81,7 @@ function UserViewPageContent({
           throw new Error(fetchError || "Failed to load user");
         }
 
-        setUser(data as unknown as UserWithEmployee);
+        setUser(data);
       } catch (err) {
         console.error("Error loading user:", err);
         setError(
@@ -231,19 +238,11 @@ function UserViewPageContent({
               />
               <InfoField
                 label="Position"
-                value={
-                  typeof user.employee.position === "string"
-                    ? user.employee.position
-                    : (user.employee.position as any)?.name
-                }
+                value={resolveNamedValue(user.employee.position)}
               />
               <InfoField
                 label="Department"
-                value={
-                  typeof user.employee.department === "string"
-                    ? user.employee.department
-                    : (user.employee.department as any)?.name
-                }
+                value={resolveNamedValue(user.employee.department)}
               />
               <InfoField
                 label="Employment Status"
@@ -281,7 +280,10 @@ function UserViewPageContent({
   );
 }
 
-export default function UserViewPage({ params }: { params: { id: string } }) {
-  const paramsPromise = Promise.resolve(params);
-  return <UserViewPageContent paramsPromise={paramsPromise} />;
+export default function UserViewPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return <UserViewPageContent paramsPromise={params} />;
 }

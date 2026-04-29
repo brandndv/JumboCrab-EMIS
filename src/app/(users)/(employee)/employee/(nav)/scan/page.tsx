@@ -13,17 +13,44 @@ import { formatZonedTime } from "@/lib/timezone";
 import {
   getSelfAttendanceStatus,
   recordSelfPunch,
+  verifyFaceAndRecordQrPunch,
 } from "@/actions/attendance/attendance-action";
+import { acknowledgeKioskQrScan } from "@/actions/attendance/kiosk-attendance-action";
+import { collectAttendanceContext } from "@/lib/attendance-security-client";
+import {
+  FACE_API_LIVENESS_PROMPTS,
+  captureFaceVerificationPayload,
+  livenessInstructionText,
+  loadFaceApiModels,
+  type FaceApiLivenessPrompt,
+} from "@/lib/face-api-client";
 
 type KioskParsed = { kioskId: string; nonce: string; exp: number; raw: string };
 type PunchType = "TIME_IN" | "BREAK_IN" | "BREAK_OUT" | "TIME_OUT";
-type Step = "READY" | "SCANNING" | "PROCESSING" | "RESULT" | "ERROR";
+type Step = "READY" | "SCANNING" | "PROCESSING" | "FACE" | "RESULT" | "ERROR";
 
 type ScanResult = {
+  username: string;
   employeeName: string;
+  employeeCode: string;
   punchType: PunchType;
   punchTime: string;
   kioskId: string;
+  faceVerified?: boolean;
+  faceDistance?: number | null;
+};
+
+type PendingFacePunch = {
+  parsed: KioskParsed;
+  username: string;
+  employeeName: string;
+  employeeCode: string;
+  nextPunch: PunchType;
+  attendanceContext: {
+    latitude: number | null;
+    longitude: number | null;
+  };
+  livenessPrompt: FaceApiLivenessPrompt;
 };
 
 function parseKioskQr(text: string): KioskParsed | null {
@@ -69,6 +96,17 @@ const reasonMessage = (reason?: string, fallback?: string) => {
     too_late: "Cannot clock in after your scheduled end time.",
     already_clocked_out: "Already clocked out today.",
     invalid_sequence: "Wrong punch order. Follow the punch sequence.",
+    qr_expired: "Kiosk QR expired. Please scan a fresh QR.",
+    face_not_enabled: "Face recognition is not enabled for QR punches.",
+    missing_face_descriptor: "Face scan is required before punching.",
+    no_face_enrollment:
+      "No active face enrollment found. Ask a manager to enroll your face.",
+    liveness_failed: "Face liveness check failed. Please retry.",
+    no_face_detected: "No face detected. Please retry.",
+    multiple_faces: "Only one employee may be in frame.",
+    face_mismatch: "Face did not match enrolled employee.",
+    face_verification_error:
+      "Face verification failed. Use supervisor fallback if needed.",
   };
   if (reason && map[reason]) return map[reason];
   return fallback || "Failed to punch";
@@ -92,6 +130,18 @@ const formatPunchLabel = (punchType: PunchType) => {
 const toErrorMessage = (err: unknown, fallback: string) =>
   err instanceof Error ? err.message : fallback;
 
+const cameraUnavailableMessage =
+  "Camera is unavailable in this browser context. iPhone and other phones require HTTPS for camera access on LAN IP addresses. Use the phone Camera app to open the kiosk QR directly, or run the app over HTTPS if face verification is required.";
+
+const inPageScannerUnavailableMessage =
+  "This browser cannot open the in-page scanner on this network address. Use the phone Camera app to scan the kiosk QR so it opens this page directly.";
+
+const canUseBrowserCamera = () =>
+  typeof window !== "undefined" &&
+  window.isSecureContext &&
+  typeof navigator !== "undefined" &&
+  Boolean(navigator.mediaDevices?.getUserMedia);
+
 export default function EmployeeScanPage() {
   return (
     <Suspense
@@ -112,6 +162,8 @@ export default function EmployeeScanPage() {
 
 function EmployeeScanPageContent() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const faceVideoRef = useRef<HTMLVideoElement | null>(null);
+  const faceStreamRef = useRef<MediaStream | null>(null);
   const reader = useMemo(() => new BrowserMultiFormatReader(), []);
   const searchParams = useSearchParams();
   const handledChallengeRef = useRef<string | null>(null);
@@ -121,47 +173,21 @@ function EmployeeScanPageContent() {
   const [error, setError] = useState("");
   const [kiosk, setKiosk] = useState<KioskParsed | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [pendingFacePunch, setPendingFacePunch] =
+    useState<PendingFacePunch | null>(null);
+  const [faceStream, setFaceStream] = useState<MediaStream | null>(null);
+  const [faceCameraReady, setFaceCameraReady] = useState(false);
+  const [faceModelsReady, setFaceModelsReady] = useState(false);
+  const [faceSubmitting, setFaceSubmitting] = useState(false);
+  const [browserCameraAvailable, setBrowserCameraAvailable] = useState(true);
 
-  const submitPunchFromKioskQr = useCallback(async (parsed: KioskParsed) => {
-    setKiosk(parsed);
-    setStep("PROCESSING");
-    setError("");
-    setResult(null);
+  const livenessPrompts = useMemo(() => FACE_API_LIVENESS_PROMPTS, []);
 
-    if (Date.now() > parsed.exp) {
-      setError("Kiosk QR expired. Please rescan (kiosk QR rotates).");
-      setStep("ERROR");
-      return;
-    }
-
-    try {
-      const statusResult = await getSelfAttendanceStatus();
-      if (!statusResult.success || !statusResult.data) {
-        throw new Error(
-          reasonMessage(
-            statusResult.reason,
-            statusResult.error || "Failed to load attendance status",
-          ),
-        );
-      }
-
-      const lastType = statusResult.data.lastPunch?.punchType as
-        | PunchType
-        | undefined;
-      const allowedNext: Record<PunchType | "NONE", PunchType> = {
-        NONE: "TIME_IN",
-        TIME_OUT: "TIME_IN",
-        TIME_IN: "BREAK_IN",
-        BREAK_IN: "BREAK_OUT",
-        BREAK_OUT: "TIME_OUT",
-      };
-      if (lastType === "TIME_OUT") {
-        throw new Error(reasonMessage("already_clocked_out"));
-      }
-      const nextPunch = allowedNext[lastType ?? "NONE"];
-
+  const submitLegacyPunch = useCallback(
+    async (parsed: KioskParsed, pending: PendingFacePunch) => {
       const punchResult = await recordSelfPunch({
-        punchType: nextPunch,
+        punchType: pending.nextPunch,
+        ...pending.attendanceContext,
       });
       if (!punchResult.success || !punchResult.data) {
         throw new Error(
@@ -172,27 +198,135 @@ function EmployeeScanPageContent() {
         );
       }
 
-      const employeeName =
-        `${statusResult.data.employee.firstName} ${statusResult.data.employee.lastName}`.trim();
+      await acknowledgeKioskQrScan({
+        kioskId: parsed.kioskId,
+        nonce: parsed.nonce,
+        exp: parsed.exp,
+        username: pending.username,
+        employeeName: pending.employeeName,
+        employeeCode: pending.employeeCode,
+        punchType: punchResult.data.punchType,
+        punchTime: punchResult.data.punchTime,
+      });
+
       setResult({
-        employeeName,
+        username: pending.username,
+        employeeName: pending.employeeName,
+        employeeCode: pending.employeeCode,
         kioskId: parsed.kioskId,
         punchType: punchResult.data.punchType as PunchType,
         punchTime: punchResult.data.punchTime,
       });
       setStep("RESULT");
       toast.success("Punch recorded successfully.", {
-        description: `${employeeName} ${formatPunchLabel(punchResult.data.punchType as PunchType)} recorded.`,
+        description: `${pending.employeeName} ${formatPunchLabel(
+          punchResult.data.punchType as PunchType,
+        )} recorded.`,
       });
-    } catch (err) {
-      const message = toErrorMessage(err, "Network error. Please try again.");
-      setError(message);
-      setStep("ERROR");
-      toast.error("Failed to record punch.", {
-        description: message,
-      });
-    }
-  }, [toast]);
+    },
+    [toast],
+  );
+
+  const submitPunchFromKioskQr = useCallback(
+    async (parsed: KioskParsed) => {
+      setKiosk(parsed);
+      setStep("PROCESSING");
+      setError("");
+      setResult(null);
+      setPendingFacePunch(null);
+
+      if (Date.now() > parsed.exp) {
+        setError("Kiosk QR expired. Please rescan (kiosk QR rotates).");
+        setStep("ERROR");
+        return;
+      }
+
+      try {
+        const statusResult = await getSelfAttendanceStatus();
+        if (!statusResult.success || !statusResult.data) {
+          throw new Error(
+            reasonMessage(
+              statusResult.reason,
+              statusResult.error || "Failed to load attendance status",
+            ),
+          );
+        }
+
+        const lastType = statusResult.data.lastPunch?.punchType as
+          | PunchType
+          | undefined;
+        const allowedNext: Record<PunchType | "NONE", PunchType> = {
+          NONE: "TIME_IN",
+          TIME_OUT: "TIME_IN",
+          TIME_IN: "BREAK_IN",
+          BREAK_IN: "BREAK_OUT",
+          BREAK_OUT: "TIME_OUT",
+        };
+        if (lastType === "TIME_OUT") {
+          throw new Error(reasonMessage("already_clocked_out"));
+        }
+        const nextPunch = allowedNext[lastType ?? "NONE"];
+        const securityConfig = statusResult.data.security ?? {
+          gpsValidationEnabled: false,
+          faceRecognitionEnabled: false,
+          faceRequiredForQrPunch: false,
+          faceLivenessRequired: true,
+          faceMatchMaxDistance: 0.5,
+          faceFailureMode: "BLOCK",
+        };
+        const attendanceContext = await collectAttendanceContext(securityConfig);
+        const employeeName =
+          `${statusResult.data.employee.firstName} ${statusResult.data.employee.lastName}`.trim();
+        const pending: PendingFacePunch = {
+          parsed,
+          username: statusResult.data.username || "",
+          employeeName,
+          employeeCode: statusResult.data.employee.employeeCode,
+          nextPunch,
+          attendanceContext,
+          livenessPrompt:
+            livenessPrompts[Math.floor(Math.random() * livenessPrompts.length)] ??
+            "Blink twice",
+        };
+
+        if (
+          securityConfig.faceRecognitionEnabled &&
+          securityConfig.faceRequiredForQrPunch
+        ) {
+          if (!canUseBrowserCamera()) {
+            if (securityConfig.faceFailureMode === "FLAG") {
+              toast.info("Face check skipped.", {
+                description:
+                  "Camera is unavailable on this development network address. QR punch fallback mode recorded the punch.",
+              });
+              await submitLegacyPunch(parsed, pending);
+              return;
+            }
+
+            throw new Error(cameraUnavailableMessage);
+          }
+
+          setPendingFacePunch(pending);
+          setStep("FACE");
+          return;
+        }
+
+        await submitLegacyPunch(parsed, pending);
+      } catch (err) {
+        const message = toErrorMessage(err, "Network error. Please try again.");
+        setError(message);
+        setStep("ERROR");
+        toast.error("Failed to record punch.", {
+          description: message,
+        });
+      }
+    },
+    [livenessPrompts, submitLegacyPunch, toast],
+  );
+
+  useEffect(() => {
+    setBrowserCameraAvailable(canUseBrowserCamera());
+  }, []);
 
   useEffect(() => {
     const parsed = parseKioskQuery(searchParams);
@@ -213,6 +347,10 @@ function EmployeeScanPageContent() {
 
     (async () => {
       try {
+        if (!canUseBrowserCamera()) {
+          throw new Error(inPageScannerUnavailableMessage);
+        }
+
         const video = videoRef.current;
         if (!video) return;
 
@@ -264,9 +402,7 @@ function EmployeeScanPageContent() {
             msg,
           )
         ) {
-          setError(
-            "This browser cannot open the in-page scanner. Use your phone Camera app to scan the kiosk QR so it opens this page directly.",
-          );
+          setError(inPageScannerUnavailableMessage);
         } else {
           setError(msg);
         }
@@ -281,10 +417,198 @@ function EmployeeScanPageContent() {
     };
   }, [reader, step, submitPunchFromKioskQr]);
 
+  useEffect(() => {
+    if (step !== "FACE") {
+      faceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      faceStreamRef.current = null;
+      setFaceStream(null);
+      setFaceCameraReady(false);
+      setFaceModelsReady(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        if (!canUseBrowserCamera()) {
+          throw new Error(cameraUnavailableMessage);
+        }
+
+        await loadFaceApiModels();
+        if (!cancelled) {
+          setFaceModelsReady(true);
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: { ideal: 720 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        faceStreamRef.current = stream;
+        setFaceStream(stream);
+      } catch (err) {
+        const message = toErrorMessage(
+          err,
+          "Face camera error. Please allow camera permission.",
+        );
+        setError(message);
+        setStep("ERROR");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      faceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      faceStreamRef.current = null;
+      setFaceStream(null);
+      setFaceCameraReady(false);
+      setFaceModelsReady(false);
+    };
+  }, [step]);
+
+  useEffect(() => {
+    if (step !== "FACE" || !faceStream || !faceVideoRef.current) return;
+
+    const video = faceVideoRef.current;
+    setFaceCameraReady(false);
+
+    const markReady = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        setError("");
+        setFaceCameraReady(true);
+      }
+    };
+
+    video.addEventListener("loadedmetadata", markReady);
+    video.addEventListener("loadeddata", markReady);
+    video.addEventListener("canplay", markReady);
+    video.addEventListener("playing", markReady);
+    video.srcObject = faceStream;
+
+    const frameTimeout = window.setTimeout(() => {
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        setError(
+          "Camera permission is active, but no video frames are arriving. Close other apps or browser tabs using the camera, then retry.",
+        );
+      }
+    }, 3000);
+
+    void video.play().then(markReady).catch(() => {
+      setError("Face camera preview could not start.");
+    });
+
+    return () => {
+      window.clearTimeout(frameTimeout);
+      video.removeEventListener("loadedmetadata", markReady);
+      video.removeEventListener("loadeddata", markReady);
+      video.removeEventListener("canplay", markReady);
+      video.removeEventListener("playing", markReady);
+    };
+  }, [faceStream, step]);
+
+  const submitFaceVerification = async () => {
+    if (!pendingFacePunch) return;
+    const video = faceVideoRef.current;
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      setError("Face camera is not ready yet.");
+      return;
+    }
+
+    try {
+      setFaceSubmitting(true);
+      setError("");
+      const facePayload = await captureFaceVerificationPayload(
+        video,
+        pendingFacePunch.livenessPrompt,
+      );
+      const punchResult = await verifyFaceAndRecordQrPunch({
+        punchType: pendingFacePunch.nextPunch,
+        kioskId: pendingFacePunch.parsed.kioskId,
+        nonce: pendingFacePunch.parsed.nonce,
+        exp: pendingFacePunch.parsed.exp,
+        descriptor: facePayload.descriptor,
+        livenessPassed: facePayload.livenessPassed,
+        livenessPrompt: facePayload.livenessPrompt,
+        faceCount: facePayload.faceCount,
+        modelVersion: facePayload.modelVersion,
+        faceMetadata: facePayload.metadata,
+        ...pendingFacePunch.attendanceContext,
+      });
+
+      if (!punchResult.success || !punchResult.data) {
+        throw new Error(
+          reasonMessage(
+            punchResult.reason,
+            punchResult.error || "Failed to verify face and record punch",
+          ),
+        );
+      }
+
+      await acknowledgeKioskQrScan({
+        kioskId: pendingFacePunch.parsed.kioskId,
+        nonce: pendingFacePunch.parsed.nonce,
+        exp: pendingFacePunch.parsed.exp,
+        username: pendingFacePunch.username,
+        employeeName: pendingFacePunch.employeeName,
+        employeeCode: pendingFacePunch.employeeCode,
+        punchType: punchResult.data.punchType,
+        punchTime: punchResult.data.punchTime,
+      });
+
+      faceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      faceStreamRef.current = null;
+      setFaceStream(null);
+      setFaceCameraReady(false);
+      setFaceModelsReady(false);
+      setResult({
+        username: pendingFacePunch.username,
+        employeeName: pendingFacePunch.employeeName,
+        employeeCode: pendingFacePunch.employeeCode,
+        kioskId: pendingFacePunch.parsed.kioskId,
+        punchType: punchResult.data.punchType as PunchType,
+        punchTime: punchResult.data.punchTime,
+        faceVerified: Boolean(punchResult.data.faceVerified),
+        faceDistance:
+          typeof punchResult.data.faceDistance === "number"
+            ? punchResult.data.faceDistance
+            : null,
+      });
+      setStep("RESULT");
+      toast.success("Face verified. Punch recorded.", {
+        description: `${pendingFacePunch.employeeName} ${formatPunchLabel(
+          punchResult.data.punchType as PunchType,
+        )} recorded.`,
+      });
+    } catch (err) {
+      const message = toErrorMessage(err, "Face verification failed.");
+      setError(message);
+      toast.error("Failed to record punch.", {
+        description: message,
+      });
+    } finally {
+      setFaceSubmitting(false);
+    }
+  };
+
   const startScan = () => {
     setError("");
     setResult(null);
     setKiosk(null);
+    setPendingFacePunch(null);
+    if (!canUseBrowserCamera()) {
+      setBrowserCameraAvailable(false);
+      setError(inPageScannerUnavailableMessage);
+      setStep("ERROR");
+      return;
+    }
     setStep("SCANNING");
   };
 
@@ -292,6 +616,7 @@ function EmployeeScanPageContent() {
     setKiosk(null);
     setResult(null);
     setError("");
+    setPendingFacePunch(null);
     setStep("READY");
   };
 
@@ -308,17 +633,27 @@ function EmployeeScanPageContent() {
         <CardContent className="space-y-4">
           {step === "READY" ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Tap start, allow camera access, then point at the kiosk QR.
-              </p>
-              <Button onClick={startScan}>Start scanning kiosk QR</Button>
+              {browserCameraAvailable ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Tap start, allow camera access, then point at the kiosk QR.
+                  </p>
+                  <Button onClick={startScan}>Start scanning kiosk QR</Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  In-page scanning is unavailable on this network address. Open
+                  the phone Camera app and scan the kiosk QR; the QR should open
+                  this page with the punch challenge already attached.
+                </p>
+              )}
             </div>
           ) : null}
 
           {step === "PROCESSING" ? (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Verifying kiosk QR and submitting your punch...
+                Verifying kiosk QR and preparing secure punch...
               </p>
             </div>
           ) : null}
@@ -328,11 +663,76 @@ function EmployeeScanPageContent() {
               <p className="text-sm text-muted-foreground">
                 Point your camera at the kiosk QR code.
               </p>
-              <video ref={videoRef} className="w-full rounded-xl bg-black" />
+              <video
+                ref={videoRef}
+                className="w-full rounded-xl bg-black"
+                autoPlay
+                playsInline
+                muted
+              />
               <p className="text-xs text-muted-foreground">
                 If camera doesn&apos;t open, check browser permission and use
                 HTTPS on real devices.
               </p>
+            </div>
+          ) : null}
+
+          {step === "FACE" && pendingFacePunch ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+                <div>
+                  <b>Employee:</b> {pendingFacePunch.employeeName}
+                </div>
+                <div>
+                  <b>Next punch:</b>{" "}
+                  {formatPunchLabel(pendingFacePunch.nextPunch)}
+                </div>
+                <div>
+                  <b>Liveness prompt:</b> {pendingFacePunch.livenessPrompt}
+                </div>
+              </div>
+              <div className="relative mx-auto max-w-sm overflow-hidden rounded-xl bg-black">
+                <div className="pointer-events-none absolute inset-x-3 top-3 z-10 rounded-lg bg-black/75 px-3 py-3 text-center text-xl font-bold tracking-wide text-white">
+                  {livenessInstructionText(pendingFacePunch.livenessPrompt)}
+                </div>
+                <video
+                  ref={faceVideoRef}
+                  className="aspect-[4/3] w-full object-cover"
+                  autoPlay
+                  playsInline
+                  muted
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Tap verify, then follow the large camera prompt while the app
+                reads your face descriptor. No punch-time photo is stored.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
+                  <p className="text-xs text-muted-foreground">Face models</p>
+                  <p className="font-medium">
+                    {faceModelsReady ? "Loaded" : "Loading..."}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
+                  <p className="text-xs text-muted-foreground">Camera</p>
+                  <p className="font-medium">
+                    {faceCameraReady ? "Ready" : "Starting..."}
+                  </p>
+                </div>
+              </div>
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => void submitFaceVerification()}
+                  disabled={!faceCameraReady || !faceModelsReady || faceSubmitting}
+                >
+                  {faceSubmitting ? "Checking liveness..." : "Verify face and punch"}
+                </Button>
+                <Button variant="outline" onClick={reset} disabled={faceSubmitting}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           ) : null}
 
@@ -361,6 +761,14 @@ function EmployeeScanPageContent() {
                 <div>
                   <b>QR Expires:</b> {new Date(kiosk.exp).toLocaleTimeString()}
                 </div>
+                {result.faceVerified ? (
+                  <div>
+                    <b>Face:</b> Verified
+                    {result.faceDistance != null
+                      ? ` (${result.faceDistance.toFixed(3)})`
+                      : ""}
+                  </div>
+                ) : null}
               </div>
               <div className="flex gap-2">
                 <Button onClick={startScan}>Scan again</Button>

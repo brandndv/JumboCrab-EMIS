@@ -45,6 +45,9 @@ model User {
   reviewedDayOffRequests            DayOffRequest[]               @relation("DayOffRequestReviewedBy")
   reviewedScheduleChangeRequests    ScheduleChangeRequest[]       @relation("ScheduleChangeRequestReviewedBy")
   reviewedScheduleSwapRequests      ScheduleSwapRequest[]         @relation("ScheduleSwapRequestReviewedBy")
+  updatedAttendanceSecuritySettings AttendanceSecuritySetting[]   @relation("AttendanceSecuritySettingUpdatedBy")
+  enrolledEmployeeFaces             EmployeeFaceEnrollment[]      @relation("EmployeeFaceEnrollmentEnrolledBy")
+  revokedEmployeeFaces              EmployeeFaceEnrollment[]      @relation("EmployeeFaceEnrollmentRevokedBy")
 
   @@index([createdAt])
   @@index([role, username])
@@ -99,6 +102,9 @@ model Employee {
   shiftOverrides               EmployeeShiftOverride[]
   attendances                  Attendance[]
   punches                      Punch[]
+  attendanceContextLogs        AttendanceContextLog[]
+  faceEnrollments              EmployeeFaceEnrollment[]
+  faceVerificationAttempts     FaceVerificationAttempt[]
   employeeViolations           EmployeeViolation[]
   violationResets              EmployeeViolationReset[]
   violationAutoResetPolicies   ViolationAutoResetPolicy[]
@@ -158,19 +164,19 @@ model Position {
 
 // ======== EMPLOYEE CONTRIBUTION ========= //
 model GovernmentId {
-  governmentId                  String   @id @default(cuid())
-  sssNumber                     String?
-  isSssIncludedInPayroll        Boolean  @default(true)
-  philHealthNumber              String?
-  isPhilHealthIncludedInPayroll Boolean  @default(true)
-  tinNumber                     String?
-  isWithholdingIncludedInPayroll Boolean @default(true)
-  pagIbigNumber                 String?
-  isPagIbigIncludedInPayroll    Boolean  @default(true)
-  createdAt                     DateTime @default(now())
-  updatedAt                     DateTime @updatedAt
-  employeeId                    String   @unique
-  employee                      Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
+  governmentId                   String   @id @default(cuid())
+  sssNumber                      String?
+  isSssIncludedInPayroll         Boolean  @default(true)
+  philHealthNumber               String?
+  isPhilHealthIncludedInPayroll  Boolean  @default(true)
+  tinNumber                      String?
+  isWithholdingIncludedInPayroll Boolean  @default(true)
+  pagIbigNumber                  String?
+  isPagIbigIncludedInPayroll     Boolean  @default(true)
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+  employeeId                     String   @unique
+  employee                       Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
 }
 
 model ContributionBracket {
@@ -388,12 +394,14 @@ model Attendance {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  employee        Employee         @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
-  expectedShift   Shift?           @relation("attendance_expected_shift", fields: [expectedShiftId], references: [id])
-  leaveRequest    LeaveRequest?    @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
-  payroll         Payroll?         @relation("PayrollAttendanceRows", fields: [payrollPeriodId], references: [payrollId], onDelete: SetNull)
-  payrollEmployee PayrollEmployee? @relation("PayrollEmployeeAttendanceRows", fields: [payrollEmployeeId], references: [id], onDelete: SetNull)
-  punches         Punch[]
+  employee                 Employee                  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  expectedShift            Shift?                    @relation("attendance_expected_shift", fields: [expectedShiftId], references: [id])
+  leaveRequest             LeaveRequest?             @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  payroll                  Payroll?                  @relation("PayrollAttendanceRows", fields: [payrollPeriodId], references: [payrollId], onDelete: SetNull)
+  payrollEmployee          PayrollEmployee?          @relation("PayrollEmployeeAttendanceRows", fields: [payrollEmployeeId], references: [id], onDelete: SetNull)
+  punches                  Punch[]
+  contextLogs              AttendanceContextLog[]
+  faceVerificationAttempts FaceVerificationAttempt[]
 
   @@unique([employeeId, workDate])
   @@index([employeeId, workDate])
@@ -413,16 +421,106 @@ model Punch {
   punchTime    DateTime
   punchType    PUNCH_TYPE
   source       String? // e.g., "BIOMETRIC", "WEB"
-  deviceId     String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  employee   Employee    @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
-  attendance Attendance? @relation(fields: [attendanceId], references: [id])
+  employee                 Employee                  @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  attendance               Attendance?               @relation(fields: [attendanceId], references: [id])
+  faceVerificationAttempts FaceVerificationAttempt[]
 
   @@index([employeeId, punchTime])
   @@index([punchTime])
   @@index([attendanceId])
+}
+
+model AttendanceSecuritySetting {
+  id                     String   @id @default("default")
+  gpsValidationEnabled   Boolean  @default(false)
+  faceRecognitionEnabled Boolean  @default(false)
+  faceRequiredForQrPunch Boolean  @default(false)
+  faceLivenessRequired   Boolean  @default(true)
+  faceMatchMaxDistance   Decimal  @default(0.50) @db.Decimal(4, 2)
+  faceFailureMode        String   @default("BLOCK")
+  updatedByUserId        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  updatedBy User? @relation("AttendanceSecuritySettingUpdatedBy", fields: [updatedByUserId], references: [userId], onDelete: SetNull)
+
+  @@index([updatedByUserId, updatedAt])
+}
+
+model EmployeeFaceEnrollment {
+  id               String    @id @default(cuid())
+  employeeId       String
+  embedding        Bytes
+  sampleCount      Int       @default(0)
+  modelVersion     String
+  consentText      String?
+  consentedAt      DateTime?
+  enrolledByUserId String?
+  revokedByUserId  String?
+  revokedAt        DateTime?
+  revokeReason     String?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  employee   Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  enrolledBy User?    @relation("EmployeeFaceEnrollmentEnrolledBy", fields: [enrolledByUserId], references: [userId], onDelete: SetNull)
+  revokedBy  User?    @relation("EmployeeFaceEnrollmentRevokedBy", fields: [revokedByUserId], references: [userId], onDelete: SetNull)
+
+  @@index([employeeId, isActive, createdAt])
+  @@index([enrolledByUserId, createdAt])
+  @@index([revokedByUserId, revokedAt])
+}
+
+model FaceVerificationAttempt {
+  id               String      @id @default(cuid())
+  employeeId       String
+  attendanceId     String?
+  punchId          String?
+  kioskId          String?
+  kioskNonce       String?
+  punchType        PUNCH_TYPE?
+  status           String
+  reason           String?
+  distance         Decimal?    @db.Decimal(8, 6)
+  threshold        Decimal?    @db.Decimal(4, 2)
+  livenessPassed   Boolean?
+  livenessPrompt   String?
+  faceCount        Int?
+  modelVersion     String?
+  serviceLatencyMs Int?
+  details          Json?
+  createdAt        DateTime    @default(now())
+
+  employee   Employee    @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  attendance Attendance? @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  punch      Punch?      @relation(fields: [punchId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, createdAt])
+  @@index([attendanceId])
+  @@index([punchId])
+  @@index([status, createdAt])
+  @@index([kioskId, createdAt])
+}
+
+model AttendanceContextLog {
+  id           String   @id @default(cuid())
+  attendanceId String
+  employeeId   String
+  ipAddress    String?
+  userAgent    String?
+  latitude     Decimal? @db.Decimal(9, 6)
+  longitude    Decimal? @db.Decimal(9, 6)
+  createdAt    DateTime @default(now())
+
+  attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+
+  @@index([attendanceId])
+  @@index([employeeId, createdAt])
 }
 
 model EmployeeViolation {

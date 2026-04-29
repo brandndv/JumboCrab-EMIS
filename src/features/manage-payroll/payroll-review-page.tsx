@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  getPayrollRunDetails,
   listPayrollRuns,
   releasePayrollRun,
   reviewPayrollRun,
@@ -19,7 +18,6 @@ import { useToast } from "@/components/ui/toast-provider";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
 import type {
-  PayrollRunDetail,
   PayrollRunSummary,
   PayrollTypeValue,
 } from "@/types/payroll";
@@ -33,6 +31,7 @@ import {
   statusClass,
 } from "./payroll-ui-helpers";
 import PayrollRunDetailsCard from "./payroll-run-details-card";
+import { usePayrollRunDetail } from "./use-payroll-run-detail";
 
 type QueueView = "NEEDS_ACTION" | "RETURNED" | "RELEASED" | "ALL";
 
@@ -118,9 +117,12 @@ const PayrollReviewPage = () => {
   const [loadingRuns, setLoadingRuns] = useState(true);
   const [runsError, setRunsError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [selectedRun, setSelectedRun] = useState<PayrollRunDetail | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const {
+    run: selectedRun,
+    loading: loadingDetail,
+    error: detailError,
+    cacheDetail,
+  } = usePayrollRunDetail(selectedRunId);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [reviewRemarks, setReviewRemarks] = useState("");
@@ -131,7 +133,7 @@ const PayrollReviewPage = () => {
   const canManagerReview = user?.role === "manager";
   const canGmReview = user?.role === "generalManager";
 
-  const loadRuns = async () => {
+  const loadRuns = useCallback(async () => {
     try {
       setLoadingRuns(true);
       setRunsError(null);
@@ -139,15 +141,11 @@ const PayrollReviewPage = () => {
       if (!result.success) {
         throw new Error(result.error || "Failed to load payroll review queue");
       }
-      const rows = (result.data ?? []).sort(
-        (a, b) =>
-          new Date(b.payrollPeriodStart).getTime() -
-          new Date(a.payrollPeriodStart).getTime(),
-      );
+      const rows = result.data ?? [];
       setRuns(rows);
-      if (rows.length > 0 && !selectedRunId) {
-        setSelectedRunId(rows[0].payrollId);
-      }
+      setSelectedRunId((current) =>
+        current || rows.length === 0 ? current : rows[0].payrollId,
+      );
     } catch (err) {
       setRuns([]);
       setRunsError(
@@ -156,38 +154,13 @@ const PayrollReviewPage = () => {
     } finally {
       setLoadingRuns(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!sessionLoading) {
       void loadRuns();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionLoading]);
-
-  useEffect(() => {
-    const loadDetail = async () => {
-      if (!selectedRunId) {
-        setSelectedRun(null);
-        return;
-      }
-      try {
-        setLoadingDetail(true);
-        setDetailError(null);
-        const result = await getPayrollRunDetails(selectedRunId);
-        if (!result.success) {
-          throw new Error(result.error || "Failed to load payroll run");
-        }
-        setSelectedRun(result.data ?? null);
-      } catch (err) {
-        setSelectedRun(null);
-        setDetailError(err instanceof Error ? err.message : "Failed to load payroll");
-      } finally {
-        setLoadingDetail(false);
-      }
-    };
-    void loadDetail();
-  }, [selectedRunId]);
+  }, [loadRuns, sessionLoading]);
 
   const pendingRuns = useMemo(
     () => runs.filter((run) => run.status !== "RELEASED"),
@@ -271,7 +244,7 @@ const PayrollReviewPage = () => {
       setActionSuccess("Payroll review updated.");
       toast.success("Payroll review updated successfully.");
       setReviewRemarks("");
-      setSelectedRun(result.data ?? null);
+      cacheDetail(result.data ?? null);
       await loadRuns();
     } catch (err) {
       const message =
@@ -297,7 +270,7 @@ const PayrollReviewPage = () => {
       }
       setActionSuccess("Payroll run released.");
       toast.success("Payroll run released successfully.");
-      setSelectedRun(result.data ?? null);
+      cacheDetail(result.data ?? null);
       await loadRuns();
     } catch (err) {
       const message =

@@ -71,7 +71,7 @@ function DeductionAssignmentFormFallback({
   title,
   description,
 }: Pick<DeductionAssignmentFormPageProps, "title" | "description">) {
-  return <ModuleLoadingState title={title} description={description} cardCount={2} />;
+  return <ModuleLoadingState title={title} description={description} />;
 }
 
 function DeductionAssignmentFormPageContent({

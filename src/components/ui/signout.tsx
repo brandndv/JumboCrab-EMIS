@@ -7,7 +7,6 @@ import React, {
   useState,
 } from "react";
 import { signOutUser } from "@/actions/auth/auth-action";
-import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FullScreenLoadingState } from "@/components/loading/loading-states";
@@ -51,7 +50,6 @@ const SignOutButton = forwardRef(function SignOutButton<T extends ElementType = 
   }: SignOutButtonProps<T>,
   ref: React.ForwardedRef<HTMLElement>
 ) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const handleSignOut = async (e: React.MouseEvent) => {
@@ -68,8 +66,7 @@ const SignOutButton = forwardRef(function SignOutButton<T extends ElementType = 
       if (!result.success) {
         throw new Error(result.error || "Failed to sign out");
       }
-      router.push("/");
-      router.refresh();
+      window.location.replace("/sign-in");
     } catch (error) {
       console.error("Error signing out:", error);
     } finally {

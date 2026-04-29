@@ -383,9 +383,9 @@ export function AttendanceHistoryTable() {
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg">Attendance</CardTitle>
+        <CardTitle className="text-lg">Attendance Logs</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Daily attendance with expected vs. actual times.
+          Daily attendance logs with expected vs. actual times.
         </p>
       </CardHeader>
 

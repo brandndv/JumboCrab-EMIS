@@ -1,7 +1,6 @@
 "use server";
 
 import { PUNCH_TYPE } from "@prisma/client";
-import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -16,6 +15,12 @@ import {
   serializePunch,
   serializePunchNullable,
 } from "./attendance-shared";
+import { captureAttendanceSecurityEvent } from "./attendance-security-service";
+import {
+  ensureAttendanceSecuritySettings,
+  resolveAttendanceRequestMetadata,
+  serializeAttendanceSecurityClientConfig,
+} from "./attendance-security-shared";
 
 export async function getSelfAttendanceStatus(input?: { date?: string }) {
   try {
@@ -63,10 +68,12 @@ export async function getSelfAttendanceStatus(input?: { date?: string }) {
 
     const breakStats = computeBreakStats(punches);
     const lastPunch = punches[punches.length - 1] ?? null;
+    const securitySettings = await ensureAttendanceSecuritySettings();
 
     return {
       success: true,
       data: {
+        username: session.username ?? "",
         employee,
         expected: {
           start: expected.scheduledStartMinutes,
@@ -78,6 +85,7 @@ export async function getSelfAttendanceStatus(input?: { date?: string }) {
         lastPunch: serializePunchNullable(lastPunch),
         breakCount: breakStats.breakCount,
         breakMinutes: breakStats.breakMinutes,
+        security: serializeAttendanceSecurityClientConfig(securitySettings),
       },
     };
   } catch (error) {
@@ -89,18 +97,19 @@ export async function getSelfAttendanceStatus(input?: { date?: string }) {
   }
 }
 
-export async function recordSelfPunch(input: { punchType: string }) {
+export async function recordSelfPunch(input: {
+  punchType: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}) {
   try {
     const session = await getSession();
     if (!session.isLoggedIn || !session.userId) {
       return { success: false, error: "Unauthorized" };
     }
 
-    const hdr = await headers();
-    const clientIp =
-      hdr.get("x-forwarded-for")?.split(",")[0].trim() ||
-      hdr.get("x-real-ip") ||
-      null;
+    const requestMetadata = await resolveAttendanceRequestMetadata();
+    const clientIp = requestMetadata.ipAddress;
     if (!isSelfPunchIpAllowed(clientIp)) {
       return {
         success: false,
@@ -193,7 +202,23 @@ export async function recordSelfPunch(input: { punchType: string }) {
       recompute: true,
     });
 
-    return { success: true, data: serializePunch(punch.punch) };
+    if (punch.attendance?.id) {
+      await captureAttendanceSecurityEvent({
+        attendanceId: punch.attendance.id,
+        employeeId: employee.employeeId,
+        punchTime: now,
+        payload: {
+          ...requestMetadata,
+          latitude: input.latitude ?? null,
+          longitude: input.longitude ?? null,
+        },
+      });
+    }
+
+    return {
+      success: true,
+      data: serializePunch(punch.punch),
+    };
   } catch (error) {
     console.error("Failed to record self punch", error);
     return { success: false, error: "Failed to record punch" };

@@ -5,6 +5,12 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --font-geist-sans:
+    "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-geist-mono:
+    "SFMono-Regular", ui-monospace, "Cascadia Code", "Source Code Pro", Menlo,
+    Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --sidebar: var(--background);
   --sidebar-foreground: #111827;
   --sidebar-primary: #f97316;

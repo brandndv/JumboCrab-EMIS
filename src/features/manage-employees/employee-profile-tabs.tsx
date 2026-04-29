@@ -44,6 +44,7 @@ import { InlineLoadingState } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
 import { IdCard, Loader2, Plus } from "lucide-react";
 import EmployeeForm from "./employee-form";
+import { EmployeeFaceEnrollmentCard } from "./employee-face-enrollment-card";
 import {
   Table,
   TableBody,
@@ -55,10 +56,16 @@ import {
 
 type EmployeeProfileData = EmployeeActionRecord;
 
-type TabKey = "profile" | "compensation" | "violations" | "govIds";
+type TabKey =
+  | "profile"
+  | "face"
+  | "compensation"
+  | "violations"
+  | "govIds";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "profile", label: "Profile" },
+  { key: "face", label: "Face ID" },
   { key: "compensation", label: "Compensation" },
   { key: "violations", label: "Employee Violations" },
   { key: "govIds", label: "Government IDs" },
@@ -529,6 +536,12 @@ export function EmployeeProfileTabs({
                 )}
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {activeTab === "face" && (
+          <div className="space-y-4">
+            <EmployeeFaceEnrollmentCard employeeId={employee.employeeId} />
           </div>
         )}
 

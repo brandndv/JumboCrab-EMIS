@@ -19,6 +19,7 @@ export type DepartmentDetail = {
       employeeCode: string;
       firstName: string;
       lastName: string;
+      img?: string | null;
     }[];
   }[];
   employees: {
@@ -26,6 +27,7 @@ export type DepartmentDetail = {
     employeeCode: string;
     firstName: string;
     lastName: string;
+    img?: string | null;
     position?: {
       name: string | null;
       positionId: string | null;

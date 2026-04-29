@@ -6,12 +6,6 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import Image from "next/image";
-import { Sora } from "next/font/google";
-
-const brandFont = Sora({
-  subsets: ["latin"],
-  weight: ["600", "700"],
-});
 
 const HeaderSidebar = () => {
   return (
@@ -33,9 +27,7 @@ const HeaderSidebar = () => {
               />
             </div>
             <div className="grid max-w-[12rem] flex-1 overflow-hidden text-left text-sm leading-tight opacity-100 transition-[max-width,opacity,transform] duration-300 ease-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
-              <span
-                className={`${brandFont.className} truncate text-[1.05rem] font-semibold tracking-tight`}
-              >
+              <span className="truncate text-[1.05rem] font-semibold tracking-tight">
                 JumboCrab EMIS
               </span>
             </div>

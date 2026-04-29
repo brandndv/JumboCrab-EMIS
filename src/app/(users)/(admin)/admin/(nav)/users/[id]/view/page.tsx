@@ -288,7 +288,10 @@ function UserViewPageContent({
   );
 }
 
-export default function UserViewPage({ params }: { params: { id: string } }) {
-  const paramsPromise = Promise.resolve(params);
-  return <UserViewPageContent paramsPromise={paramsPromise} />;
+export default function UserViewPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return <UserViewPageContent paramsPromise={params} />;
 }

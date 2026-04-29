@@ -183,9 +183,14 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin", "generalManager", "manager", "supervisor"],
         },
         {
-          label: "Attendance History",
+          label: "Attendance Logs",
           path: "/history",
           roles: ["admin", "generalManager", "manager", "supervisor"],
+        },
+        {
+          label: "Attendance Settings",
+          path: "/settings",
+          roles: ["admin"],
         },
         {
           label: "Overrides",

@@ -78,6 +78,49 @@ export type PatternAssignment = {
   isLatest?: boolean;
 };
 
+type ShiftInput = {
+  id: number;
+  code: string;
+  name: string;
+  startMinutes: number;
+  endMinutes: number;
+  spansMidnight?: boolean | null;
+  breakStartMinutes?: number | null;
+  breakEndMinutes?: number | null;
+  breakMinutesUnpaid?: number | null;
+  paidHoursPerDay?: number | string | null;
+  notes?: string | null;
+};
+
+type PatternInput = {
+  id: string;
+  code: string;
+  name: string;
+  sunShiftId?: number | null;
+  monShiftId?: number | null;
+  tueShiftId?: number | null;
+  wedShiftId?: number | null;
+  thuShiftId?: number | null;
+  friShiftId?: number | null;
+  satShiftId?: number | null;
+  sunShift?: ShiftInput | null;
+  monShift?: ShiftInput | null;
+  tueShift?: ShiftInput | null;
+  wedShift?: ShiftInput | null;
+  thuShift?: ShiftInput | null;
+  friShift?: ShiftInput | null;
+  satShift?: ShiftInput | null;
+};
+
+type OverrideInput = {
+  id: string;
+  workDate: string;
+  source: string;
+  note?: string | null;
+  employee: EmployeeLite;
+  shift?: ShiftInput | null;
+};
+
 export const todayISO = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: TZ });
 
@@ -107,7 +150,7 @@ export const formatDateDisplay = (value: string) => {
   });
 };
 
-export const normalizeShift = (s: any): ShiftLite => ({
+export const normalizeShift = (s: ShiftInput): ShiftLite => ({
   id: s.id,
   code: s.code,
   name: s.name,
@@ -128,7 +171,7 @@ export const normalizeShift = (s: any): ShiftLite => ({
   notes: s.notes ?? "",
 });
 
-export const normalizePattern = (p: any): Pattern => ({
+export const normalizePattern = (p: PatternInput): Pattern => ({
   id: p.id,
   code: p.code,
   name: p.name,
@@ -148,7 +191,7 @@ export const normalizePattern = (p: any): Pattern => ({
   satShift: p.satShift ? normalizeShift(p.satShift) : null,
 });
 
-export const normalizeOverride = (o: any): OverrideRow => ({
+export const normalizeOverride = (o: OverrideInput): OverrideRow => ({
   id: o.id,
   workDate: o.workDate,
   source: o.source,
@@ -182,9 +225,17 @@ export const makeDate = (val?: string | null) => {
 };
 
 export const patternLabel = (p: Pattern) => {
-  const days = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-  const first = days
-    .map((d) => (p as any)[`${d}Shift`] as ShiftLite | undefined | null)
-    .find((s) => s);
+  const shiftKeys = [
+    "sunShift",
+    "monShift",
+    "tueShift",
+    "wedShift",
+    "thuShift",
+    "friShift",
+    "satShift",
+  ] as const;
+  const first = shiftKeys
+    .map((key) => p[key])
+    .find((shift): shift is ShiftLite => shift != null);
   return `${p.name}${first ? ` • ${first.name}` : ""}`;
 };

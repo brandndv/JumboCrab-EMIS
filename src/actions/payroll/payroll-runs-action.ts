@@ -3,7 +3,7 @@
 import { PayrollStatus, PayrollType } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { toNumber, toNumberOrNull } from "@/lib/payroll/helpers";
+import { toIsoString, toNumber, toNumberOrNull } from "@/lib/payroll/helpers";
 import {
   canViewPayrollRuns,
   formatEmployeeName,
@@ -33,26 +33,85 @@ export async function listPayrollRuns(input?: {
         status: input?.status?.length ? { in: input.status } : undefined,
         payrollType: input?.payrollType ?? undefined,
       },
-      include: {
+      select: {
+        payrollId: true,
+        payrollPeriodStart: true,
+        payrollPeriodEnd: true,
+        payrollType: true,
+        status: true,
+        managerDecision: true,
+        gmDecision: true,
+        generatedAt: true,
+        managerReviewedAt: true,
+        gmReviewedAt: true,
+        releasedAt: true,
+        managerReviewRemarks: true,
+        gmReviewRemarks: true,
+        notes: true,
         createdBy: { select: { username: true } },
         managerReviewedBy: { select: { username: true } },
         gmReviewedBy: { select: { username: true } },
         releasedBy: { select: { username: true } },
-        payrollEmployees: {
-          select: {
-            grossPay: true,
-            totalDeductions: true,
-            netPay: true,
-          },
-        },
       },
       orderBy: [{ payrollPeriodStart: "desc" }, { createdAt: "desc" }],
       take: input?.limit && input.limit > 0 ? input.limit : undefined,
     });
 
+    if (rows.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const aggregates = await db.payrollEmployee.groupBy({
+      by: ["payrollId"],
+      where: {
+        payrollId: {
+          in: rows.map((row) => row.payrollId),
+        },
+      },
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        grossPay: true,
+        totalDeductions: true,
+        netPay: true,
+      },
+    });
+
+    const aggregateByPayrollId = new Map(
+      aggregates.map((row) => [row.payrollId, row]),
+    );
+
     return {
       success: true,
-      data: rows.map(serializePayrollRunSummary),
+      data: rows.map((row): PayrollRunSummary => {
+        const aggregate = aggregateByPayrollId.get(row.payrollId);
+
+        return {
+          payrollId: row.payrollId,
+          payrollPeriodStart: row.payrollPeriodStart.toISOString(),
+          payrollPeriodEnd: row.payrollPeriodEnd.toISOString(),
+          payrollType: row.payrollType,
+          status: row.status,
+          managerDecision: row.managerDecision,
+          gmDecision: row.gmDecision,
+          generatedAt: row.generatedAt.toISOString(),
+          managerReviewedAt: toIsoString(row.managerReviewedAt),
+          gmReviewedAt: toIsoString(row.gmReviewedAt),
+          releasedAt: toIsoString(row.releasedAt),
+          managerReviewRemarks: row.managerReviewRemarks ?? null,
+          gmReviewRemarks: row.gmReviewRemarks ?? null,
+          notes: row.notes ?? null,
+          createdByName: row.createdBy?.username ?? null,
+          managerReviewedByName: row.managerReviewedBy?.username ?? null,
+          gmReviewedByName: row.gmReviewedBy?.username ?? null,
+          releasedByName: row.releasedBy?.username ?? null,
+          employeeCount: aggregate?._count._all ?? 0,
+          grossTotal: toNumber(aggregate?._sum.grossPay, 0),
+          deductionsTotal: toNumber(aggregate?._sum.totalDeductions, 0),
+          netTotal: toNumber(aggregate?._sum.netPay, 0),
+        };
+      }),
     };
   } catch (error) {
     console.error("Error listing payroll runs:", error);

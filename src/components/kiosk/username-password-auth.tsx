@@ -1,7 +1,5 @@
 "use client";
 
-import { LogIn, QrCode } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export type KioskAuthMode = "password" | "qr";
@@ -18,8 +16,6 @@ export type KioskUserSuggestion = {
 };
 
 type UsernamePasswordAuthProps = {
-  authMode: KioskAuthMode;
-  onAuthModeChange: (mode: KioskAuthMode) => void;
   username: string;
   onUsernameChange: (value: string) => void;
   onUsernameFocus?: () => void;
@@ -29,11 +25,11 @@ type UsernamePasswordAuthProps = {
   suggestions: KioskUserSuggestion[];
   fetchingSuggestions?: boolean;
   onSelectSuggestion: (username: string) => void;
+  title?: string;
+  description?: string;
 };
 
 export function UsernamePasswordAuth({
-  authMode,
-  onAuthModeChange,
   username,
   onUsernameChange,
   onUsernameFocus,
@@ -43,74 +39,63 @@ export function UsernamePasswordAuth({
   suggestions,
   fetchingSuggestions = false,
   onSelectSuggestion,
+  title = "Manual fallback login",
+  description = "Enter a valid employee username and password to punch from this kiosk.",
 }: UsernamePasswordAuthProps) {
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2 text-xs">
-        <Button
-          type="button"
-          variant={authMode === "password" ? "default" : "outline"}
-          size="sm"
-          className="gap-2"
-          onClick={() => onAuthModeChange("password")}
-        >
-          <LogIn className="h-4 w-4" />
-          Username & password
-        </Button>
-        <Button
-          type="button"
-          variant={authMode === "qr" ? "default" : "outline"}
-          size="sm"
-          className="gap-2"
-          onClick={() => onAuthModeChange("qr")}
-        >
-          <QrCode className="h-4 w-4" />
-          QR mode
-        </Button>
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-slate-100">{title}</p>
+        <p className="text-sm text-slate-400">{description}</p>
       </div>
 
-      {authMode === "password" ? (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              placeholder="Username"
-              value={username}
-              onChange={(e) => onUsernameChange(e.target.value)}
-              onFocus={onUsernameFocus}
-              onBlur={onUsernameBlur}
-            />
-            <Input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => onPasswordChange(e.target.value)}
-            />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input
+          placeholder="Username"
+          value={username}
+          onChange={(e) => onUsernameChange(e.target.value)}
+          onFocus={onUsernameFocus}
+          onBlur={onUsernameBlur}
+          className="h-11 border-slate-800 bg-slate-950/70 text-slate-100 placeholder:text-slate-500"
+        />
+        <Input
+          type="password"
+          placeholder="Employee or kiosk fallback password"
+          value={password}
+          onChange={(e) => onPasswordChange(e.target.value)}
+          className="h-11 border-slate-800 bg-slate-950/70 text-slate-100 placeholder:text-slate-500"
+        />
+      </div>
+
+      {suggestions.length > 0 ? (
+        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+            Suggested users
+          </p>
+          <div className="space-y-1">
+            {suggestions.map((s) => (
+              <button
+                key={s.username}
+                className="w-full rounded-xl border border-transparent px-3 py-2 text-left transition hover:border-slate-700 hover:bg-slate-900"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onSelectSuggestion(s.username)}
+                type="button"
+              >
+                <span className="text-sm font-medium text-slate-100">
+                  {s.username}
+                </span>
+                <span className="block text-xs text-slate-400">
+                  {s.employee?.firstName} {s.employee?.lastName} (
+                  {s.employee?.employeeCode})
+                </span>
+              </button>
+            ))}
           </div>
-          {suggestions.length > 0 && (
-            <div className="rounded-lg border bg-muted/30 p-2 space-y-1">
-              <p className="text-xs text-muted-foreground">Select user</p>
-              {suggestions.map((s) => (
-                <button
-                  key={s.username}
-                  className="w-full rounded-md px-2 py-1 text-left hover:bg-muted"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => onSelectSuggestion(s.username)}
-                >
-                  <span className="text-sm font-medium">{s.username}</span>{" "}
-                  <span className="text-xs text-muted-foreground">
-                    {s.employee?.firstName} {s.employee?.lastName} (
-                    {s.employee?.employeeCode})
-                  </span>
-                </button>
-              ))}
-              {fetchingSuggestions && (
-                <p className="text-xs text-muted-foreground">Searching...</p>
-              )}
-            </div>
-          )}
-        </>
+          {fetchingSuggestions ? (
+            <p className="text-xs text-slate-500">Searching...</p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
 }
-

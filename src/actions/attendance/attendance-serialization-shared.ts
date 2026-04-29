@@ -126,7 +126,6 @@ export const serializePunch = (punch: PunchRecord) => {
     punchTime: punch.punchTime.toISOString(),
     punchType: punch.punchType,
     source: punch.source ?? null,
-    deviceId: punch.deviceId ?? null,
     createdAt: punch.createdAt.toISOString(),
     updatedAt: punch.updatedAt.toISOString(),
     employee: serializeEmployeeSummary(punch.employee),

@@ -1,13 +1,15 @@
 import ContributionEditPage from "@/features/manage-contributions/contribution-edit-page";
 
-export default function ManagerContributionEditPage({
+export default async function ManagerContributionEditPage({
   params,
 }: {
-  params: { employeeId: string };
+  params: Promise<{ employeeId: string }>;
 }) {
+  const { employeeId } = await params;
+
   return (
     <ContributionEditPage
-      employeeId={params.employeeId}
+      employeeId={employeeId}
       returnPath="/manager/contributions"
     />
   );

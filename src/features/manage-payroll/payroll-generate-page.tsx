@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   generatePayrollRun,
   getPayrollGenerationReadiness,
-  getPayrollRunDetails,
   listPayrollEligibleEmployees,
   listPayrollRuns,
   regenerateRejectedPayrollRun,
@@ -30,7 +36,6 @@ import {
 import type {
   PayrollEligibleEmployeeOption,
   PayrollGenerationReadiness,
-  PayrollRunDetail,
   PayrollRunSummary,
   PayrollTypeValue,
 } from "@/types/payroll";
@@ -43,6 +48,7 @@ import {
   statusClass,
 } from "./payroll-ui-helpers";
 import PayrollRunDetailsCard from "./payroll-run-details-card";
+import { usePayrollRunDetail } from "./use-payroll-run-detail";
 
 type RunMode = "STANDARD" | "CUSTOM";
 type BiMonthlyHalf = "FIRST" | "SECOND";
@@ -133,9 +139,16 @@ const PayrollGeneratePage = () => {
   const [runs, setRuns] = useState<PayrollRunSummary[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [selectedRun, setSelectedRun] = useState<PayrollRunDetail | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const {
+    run: selectedRun,
+    loading: loadingDetail,
+    error: detailError,
+    cacheDetail,
+  } = usePayrollRunDetail(selectedRunId);
+  const eligibleEmployeesCacheRef = useRef(
+    new Map<string, PayrollEligibleEmployeeOption[]>(),
+  );
+  const deferredEmployeeSearch = useDeferredValue(employeeSearch);
 
   const standardRange = useMemo(
     () => getHalfRange(selectedYear, selectedMonthIndex, selectedHalf),
@@ -187,23 +200,13 @@ const PayrollGeneratePage = () => {
     [runs],
   );
 
-  const filteredEligibleEmployees = useMemo(() => {
-    const term = employeeSearch.trim().toLowerCase();
-    if (!term) return eligibleEmployees;
-    return eligibleEmployees.filter((row) =>
-      `${row.employeeCode} ${row.employeeName}`.toLowerCase().includes(term),
-    );
-  }, [eligibleEmployees, employeeSearch]);
-
   const allFilteredSelected = useMemo(() => {
-    if (filteredEligibleEmployees.length === 0) return false;
+    if (eligibleEmployees.length === 0) return false;
     const selected = new Set(selectedEmployeeIds);
-    return filteredEligibleEmployees.every((employee) =>
-      selected.has(employee.employeeId),
-    );
-  }, [filteredEligibleEmployees, selectedEmployeeIds]);
+    return eligibleEmployees.every((employee) => selected.has(employee.employeeId));
+  }, [eligibleEmployees, selectedEmployeeIds]);
 
-  const loadRuns = async () => {
+  const loadRuns = useCallback(async () => {
     try {
       setLoadingRuns(true);
       setError(null);
@@ -219,36 +222,51 @@ const PayrollGeneratePage = () => {
         return;
       }
 
-      const preferred =
-        rows.find((run) => isActionableRun(run)) ??
-        rows.find((run) => run.payrollId === selectedRunId) ??
-        rows[0];
-      setSelectedRunId(preferred.payrollId);
+      setSelectedRunId((current) => {
+        const preferred =
+          rows.find((run) => isActionableRun(run)) ??
+          rows.find((run) => run.payrollId === current) ??
+          rows[0];
+        return preferred?.payrollId ?? null;
+      });
     } catch (err) {
       setRuns([]);
       setError(err instanceof Error ? err.message : "Failed to load payroll runs");
     } finally {
       setLoadingRuns(false);
     }
-  };
+  }, []);
 
-  const loadEligibleEmployees = async () => {
+  const loadEligibleEmployees = useCallback(async (query?: string) => {
+    const normalizedQuery = query?.trim() ?? "";
+    const cached = eligibleEmployeesCacheRef.current.get(normalizedQuery);
+    if (cached) {
+      setEligibleEmployees(cached);
+      setEligibleLoading(false);
+      return;
+    }
+
     try {
       setEligibleLoading(true);
-      const result = await listPayrollEligibleEmployees({ limit: 500 });
+      const result = await listPayrollEligibleEmployees({
+        query: normalizedQuery,
+        limit: 500,
+      });
       if (!result.success) {
         throw new Error(result.error || "Failed to load employees");
       }
-      setEligibleEmployees(result.data ?? []);
+      const rows = result.data ?? [];
+      eligibleEmployeesCacheRef.current.set(normalizedQuery, rows);
+      setEligibleEmployees(rows);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load employees");
       setEligibleEmployees([]);
     } finally {
       setEligibleLoading(false);
     }
-  };
+  }, []);
 
-  const loadReadiness = async (
+  const loadReadiness = useCallback(async (
     start: string,
     end: string,
     employeeIds?: string[],
@@ -286,44 +304,29 @@ const PayrollGeneratePage = () => {
     } finally {
       setReadinessLoading(false);
     }
-  };
+  }, [mode]);
 
   useEffect(() => {
-    void Promise.all([loadRuns(), loadEligibleEmployees()]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void loadRuns();
+  }, [loadRuns]);
 
   useEffect(() => {
-    const loadDetail = async () => {
-      if (!selectedRunId) {
-        setSelectedRun(null);
-        return;
-      }
-      try {
-        setLoadingDetail(true);
-        setDetailError(null);
-        const result = await getPayrollRunDetails(selectedRunId);
-        if (!result.success) {
-          throw new Error(result.error || "Failed to load payroll details");
-        }
-        setSelectedRun(result.data ?? null);
-      } catch (err) {
-        setSelectedRun(null);
-        setDetailError(
-          err instanceof Error ? err.message : "Failed to load payroll details",
-        );
-      } finally {
-        setLoadingDetail(false);
-      }
-    };
+    if (mode !== "CUSTOM") {
+      return;
+    }
 
-    void loadDetail();
-  }, [selectedRunId]);
+    void loadEligibleEmployees(deferredEmployeeSearch);
+  }, [deferredEmployeeSearch, loadEligibleEmployees, mode]);
 
   useEffect(() => {
     void loadReadiness(activeRange.start, activeRange.end, activeEmployeeScope);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRange.start, activeRange.end, mode, selectedEmployeeIds.join("|")]);
+  }, [
+    activeEmployeeScope,
+    activeRange.end,
+    activeRange.start,
+    loadReadiness,
+    selectedEmployeeIds,
+  ]);
 
   const handleGenerate = async () => {
     try {
@@ -388,6 +391,7 @@ const PayrollGeneratePage = () => {
       setSuccess("Payroll draft generated successfully.");
       toast.success("Payroll draft generated successfully.");
       if (createdRun) {
+        cacheDetail(createdRun);
         setSelectedRunId(createdRun.payrollId);
       }
       await Promise.all([
@@ -418,7 +422,8 @@ const PayrollGeneratePage = () => {
       }
       setSuccess("Rejected payroll regenerated into a new draft.");
       toast.success("Rejected payroll regenerated into a new draft.");
-      if (result.data?.payrollId) {
+      if (result.data) {
+        cacheDetail(result.data);
         setSelectedRunId(result.data.payrollId);
       }
       await loadRuns();
@@ -450,9 +455,7 @@ const PayrollGeneratePage = () => {
 
   const toggleSelectAllFiltered = (checked: boolean) => {
     if (!checked) {
-      const visibleIds = new Set(
-        filteredEligibleEmployees.map((employee) => employee.employeeId),
-      );
+      const visibleIds = new Set(eligibleEmployees.map((employee) => employee.employeeId));
       setSelectedEmployeeIds((current) =>
         current.filter((id) => !visibleIds.has(id)),
       );
@@ -461,7 +464,7 @@ const PayrollGeneratePage = () => {
 
     setSelectedEmployeeIds((current) => {
       const selected = new Set(current);
-      filteredEligibleEmployees.forEach((employee) => {
+      eligibleEmployees.forEach((employee) => {
         selected.add(employee.employeeId);
       });
       return Array.from(selected);
@@ -634,9 +637,7 @@ const PayrollGeneratePage = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => toggleSelectAllFiltered(true)}
-                      disabled={
-                        filteredEligibleEmployees.length === 0 || allFilteredSelected
-                      }
+                      disabled={eligibleEmployees.length === 0 || allFilteredSelected}
                     >
                       Select Visible
                     </Button>
@@ -645,7 +646,7 @@ const PayrollGeneratePage = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => toggleSelectAllFiltered(false)}
-                      disabled={filteredEligibleEmployees.length === 0}
+                      disabled={eligibleEmployees.length === 0}
                     >
                       Clear Visible
                     </Button>
@@ -665,12 +666,12 @@ const PayrollGeneratePage = () => {
                       <div className="p-3">
                         <InlineLoadingState label="Loading employees" lines={2} />
                       </div>
-                    ) : filteredEligibleEmployees.length === 0 ? (
+                    ) : eligibleEmployees.length === 0 ? (
                       <p className="p-3 text-sm text-muted-foreground">
                         No employees match your search.
                       </p>
                     ) : (
-                      filteredEligibleEmployees.map((employee) => {
+                      eligibleEmployees.map((employee) => {
                         const isSelected = selectedEmployeeIds.includes(
                           employee.employeeId,
                         );

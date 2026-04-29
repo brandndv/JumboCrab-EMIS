@@ -1,5 +1,6 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { toDateKeyInTz } from "@/lib/payroll/helpers";
@@ -99,33 +100,61 @@ export async function getPayrollGenerationReadiness(input: {
     }
 
     const scopedEmployeeIds = normalizeEmployeeIds(input.employeeIds);
-
-    const activeEmployees = await db.employee.findMany({
-      where: {
-        isArchived: false,
-        currentStatus: {
-          notIn: ["INACTIVE", "ENDED"],
-        },
-        ...(scopedEmployeeIds.length > 0
-          ? { employeeId: { in: scopedEmployeeIds } }
-          : {}),
+    const activeEmployeeWhere: Prisma.EmployeeWhereInput = {
+      isArchived: false,
+      currentStatus: {
+        notIn: ["INACTIVE", "ENDED"],
       },
-      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-      select: {
-        employeeId: true,
-        employeeCode: true,
-        firstName: true,
-        lastName: true,
-      },
-    });
+      ...(scopedEmployeeIds.length > 0
+        ? { employeeId: { in: scopedEmployeeIds } }
+        : {}),
+    };
 
-    const employeeIds = activeEmployees.map((employee) => employee.employeeId);
     const safeLimit =
       typeof input.limit === "number" && Number.isFinite(input.limit)
         ? Math.max(1, Math.min(Math.floor(input.limit), 200))
         : 20;
 
-    if (employeeIds.length === 0) {
+    const attendanceWhere = {
+      payrollPeriodId: null,
+      workDate: { gte: period.startAt, lte: period.endAt },
+      employee: activeEmployeeWhere,
+      ...(scopedEmployeeIds.length > 0
+        ? { employeeId: { in: scopedEmployeeIds } }
+        : {}),
+    } as const;
+
+    const [activeEmployeeCount, groupedRows, groupedUnlockedRows] =
+      await Promise.all([
+        db.employee.count({
+          where: activeEmployeeWhere,
+        }),
+        db.attendance.groupBy({
+          by: ["employeeId"],
+          where: attendanceWhere,
+          _count: {
+            _all: true,
+          },
+        }),
+        db.attendance.groupBy({
+          by: ["employeeId"],
+          where: {
+            ...attendanceWhere,
+            isLocked: false,
+          },
+          _count: {
+            _all: true,
+          },
+          _min: {
+            workDate: true,
+          },
+          _max: {
+            workDate: true,
+          },
+        }),
+      ]);
+
+    if (activeEmployeeCount === 0) {
       return {
         success: true,
         data: {
@@ -143,67 +172,39 @@ export async function getPayrollGenerationReadiness(input: {
       };
     }
 
-    const rows = await db.attendance.findMany({
-      where: {
-        employeeId: { in: employeeIds },
-        workDate: { gte: period.startAt, lte: period.endAt },
-        payrollPeriodId: null,
-      },
-      select: {
-        employeeId: true,
-        workDate: true,
-        isLocked: true,
-      },
-    });
+    const unlockedEmployeeIds = groupedUnlockedRows.map((row) => row.employeeId);
+    const unlockedEmployeesById = unlockedEmployeeIds.length
+      ? new Map(
+          (
+            await db.employee.findMany({
+              where: {
+                employeeId: { in: unlockedEmployeeIds },
+              },
+              select: {
+                employeeId: true,
+                employeeCode: true,
+                firstName: true,
+                lastName: true,
+              },
+            })
+          ).map((employee) => [employee.employeeId, employee]),
+        )
+      : new Map();
 
-    let lockedRows = 0;
-    const rowsPerEmployee = new Map<string, number>();
-    const unlockedPerEmployee = new Map<
-      string,
-      { count: number; first: string; last: string }
-    >();
-
-    rows.forEach((row) => {
-      rowsPerEmployee.set(
-        row.employeeId,
-        (rowsPerEmployee.get(row.employeeId) ?? 0) + 1,
-      );
-
-      if (row.isLocked) {
-        lockedRows += 1;
-        return;
-      }
-
-      const dateKey = toDateKeyInTz(row.workDate);
-      const current = unlockedPerEmployee.get(row.employeeId);
-      if (!current) {
-        unlockedPerEmployee.set(row.employeeId, {
-          count: 1,
-          first: dateKey,
-          last: dateKey,
-        });
-        return;
-      }
-
-      current.count += 1;
-      if (dateKey < current.first) current.first = dateKey;
-      if (dateKey > current.last) current.last = dateKey;
-    });
-
-    const byEmployee = new Map(
-      activeEmployees.map((employee) => [employee.employeeId, employee]),
-    );
-
-    const unlockedEmployees = Array.from(unlockedPerEmployee.entries())
-      .map(([employeeId, lock]) => {
-        const employee = byEmployee.get(employeeId);
+    const unlockedEmployees = groupedUnlockedRows
+      .map((row) => {
+        const employee = unlockedEmployeesById.get(row.employeeId);
         return {
-          employeeId,
+          employeeId: row.employeeId,
           employeeCode: employee?.employeeCode ?? "—",
           employeeName: employee ? formatEmployeeName(employee) : "Unknown employee",
-          unlockedRows: lock.count,
-          firstUnlockedDate: lock.first,
-          lastUnlockedDate: lock.last,
+          unlockedRows: row._count._all,
+          firstUnlockedDate: row._min.workDate
+            ? toDateKeyInTz(row._min.workDate)
+            : period.startKey,
+          lastUnlockedDate: row._max.workDate
+            ? toDateKeyInTz(row._max.workDate)
+            : period.endKey,
         };
       })
       .sort((a, b) => {
@@ -214,19 +215,22 @@ export async function getPayrollGenerationReadiness(input: {
       })
       .slice(0, safeLimit);
 
-    const totalRows = rows.length;
-    const unlockedRows = Math.max(0, totalRows - lockedRows);
+    const totalRows = groupedRows.reduce((sum, row) => sum + row._count._all, 0);
+    const unlockedRows = groupedUnlockedRows.reduce(
+      (sum, row) => sum + row._count._all,
+      0,
+    );
 
     return {
       success: true,
       data: {
         payrollPeriodStart: period.startKey,
         payrollPeriodEnd: period.endKey,
-        activeEmployees: activeEmployees.length,
-        employeesWithRows: rowsPerEmployee.size,
-        employeesWithUnlockedRows: unlockedPerEmployee.size,
+        activeEmployees: activeEmployeeCount,
+        employeesWithRows: groupedRows.length,
+        employeesWithUnlockedRows: groupedUnlockedRows.length,
         totalRows,
-        lockedRows,
+        lockedRows: Math.max(0, totalRows - unlockedRows),
         unlockedRows,
         allLocked: unlockedRows === 0,
         unlockedEmployees,
