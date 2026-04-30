@@ -17,6 +17,8 @@ model User {
   createdAt                         DateTime                      @default(now())
   updatedAt                         DateTime                      @updatedAt
   isDisabled                        Boolean                       @default(false)
+  mustChangePassword                Boolean                       @default(false)
+  passwordChangedAt                 DateTime?
   employee                          Employee?
   // Users who supervise employees
   supervisedEmployees               Employee[]                    @relation("EmployeeSupervisorUser")
@@ -48,10 +50,56 @@ model User {
   updatedAttendanceSecuritySettings AttendanceSecuritySetting[]   @relation("AttendanceSecuritySettingUpdatedBy")
   enrolledEmployeeFaces             EmployeeFaceEnrollment[]      @relation("EmployeeFaceEnrollmentEnrolledBy")
   revokedEmployeeFaces              EmployeeFaceEnrollment[]      @relation("EmployeeFaceEnrollmentRevokedBy")
+  createdNotifications              Notification[]               @relation("NotificationActor")
+  userNotifications                 UserNotification[]
 
   @@index([createdAt])
   @@index([role, username])
   @@index([isDisabled, username])
+  @@index([mustChangePassword, username])
+  @@index([passwordChangedAt])
+}
+
+model Notification {
+  id            String               @id @default(cuid())
+  eventType     NotificationEventType
+  module        NotificationModule
+  title         String
+  message       String
+  severity      NotificationSeverity @default(INFO)
+  actorUserId   String?
+  entityType    String?
+  entityId      String?
+  linkHref      String
+  metadata      Json?
+  emailEligible Boolean              @default(false)
+  createdAt     DateTime             @default(now())
+  actor         User?                @relation("NotificationActor", fields: [actorUserId], references: [userId], onDelete: SetNull)
+  recipients    UserNotification[]
+
+  @@index([module, createdAt])
+  @@index([eventType, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model UserNotification {
+  id             String                  @id @default(cuid())
+  notificationId String
+  userId         String
+  readAt         DateTime?
+  archivedAt     DateTime?
+  emailedAt      DateTime?
+  emailStatus    NotificationEmailStatus @default(PENDING)
+  emailError     String?
+  createdAt      DateTime                @default(now())
+  notification   Notification            @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User                    @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@index([userId, readAt, archivedAt, createdAt])
+  @@index([notificationId, createdAt])
+  @@index([emailStatus, emailedAt])
 }
 
 model Employee {
@@ -1240,6 +1288,78 @@ enum SUFFIX {
   II
   III
   IV
+}
+
+enum NotificationModule {
+  USERS
+  REQUESTS
+  PAYROLL
+  VIOLATIONS
+  DEDUCTIONS
+  ATTENDANCE
+  SCHEDULE
+  CONTRIBUTIONS
+  ORGANIZATION
+  SECURITY
+  SYSTEM
+}
+
+enum NotificationSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+enum NotificationEmailStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum NotificationEventType {
+  ACCOUNT_CREATED
+  ACCOUNT_DISABLED
+  ACCOUNT_ENABLED
+  ACCOUNT_CREDENTIAL_EMAIL_FAILED
+  PASSWORD_CHANGE_REQUIRED
+  LEAVE_REQUEST_SUBMITTED
+  LEAVE_REQUEST_APPROVED
+  LEAVE_REQUEST_REJECTED
+  DAY_OFF_REQUEST_SUBMITTED
+  DAY_OFF_REQUEST_APPROVED
+  DAY_OFF_REQUEST_REJECTED
+  SCHEDULE_CHANGE_REQUEST_SUBMITTED
+  SCHEDULE_CHANGE_REQUEST_APPROVED
+  SCHEDULE_CHANGE_REQUEST_REJECTED
+  SCHEDULE_SWAP_REQUEST_SUBMITTED
+  SCHEDULE_SWAP_REQUEST_COWORKER_APPROVED
+  SCHEDULE_SWAP_REQUEST_COWORKER_REJECTED
+  SCHEDULE_SWAP_REQUEST_APPROVED
+  SCHEDULE_SWAP_REQUEST_REJECTED
+  CASH_ADVANCE_REQUEST_SUBMITTED
+  CASH_ADVANCE_REQUEST_APPROVED
+  CASH_ADVANCE_REQUEST_REJECTED
+  DEDUCTION_ASSIGNMENT_SUBMITTED
+  DEDUCTION_ASSIGNMENT_APPROVED
+  DEDUCTION_ASSIGNMENT_REJECTED
+  DEDUCTION_ASSIGNMENT_COMPLETED
+  VIOLATION_SUBMITTED
+  VIOLATION_APPROVED
+  VIOLATION_REJECTED
+  VIOLATION_ACKNOWLEDGEMENT_REQUIRED
+  VIOLATION_ACKNOWLEDGED
+  PAYROLL_GENERATED
+  PAYROLL_READY_FOR_REVIEW
+  PAYROLL_MANAGER_APPROVED
+  PAYROLL_MANAGER_REJECTED
+  PAYROLL_GM_APPROVED
+  PAYROLL_GM_REJECTED
+  PAYROLL_RELEASED
+  PAYSLIP_AVAILABLE
+  ATTENDANCE_ACTION_REQUIRED
+  SCHEDULE_UPDATED
 }
 
 enum Roles {
