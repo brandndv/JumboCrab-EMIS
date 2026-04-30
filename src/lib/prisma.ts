@@ -13,8 +13,10 @@ const REQUIRED_DELEGATES = [
   "cashAdvanceRequest",
   "dayOffRequest",
   "leaveRequest",
+  "notification",
   "scheduleChangeRequest",
   "scheduleSwapRequest",
+  "userNotification",
 ] as const;
 
 const createPrismaClient = () =>
@@ -36,7 +38,15 @@ const isUsablePrismaClient = (
 export const getPrismaClient = (): PrismaClient => {
   // In development, recreate the cached client if it predates newly added
   // Prisma models so long-lived server action modules do not keep stale delegates.
-  if (!isUsablePrismaClient(global.prisma)) {
+  const cachedClient = global.prisma;
+  if (!isUsablePrismaClient(cachedClient)) {
+    if (cachedClient) {
+      void (cachedClient as PrismaClient).$disconnect().catch(() => undefined);
+    }
+    global.prisma = createPrismaClient();
+  }
+
+  if (!global.prisma) {
     global.prisma = createPrismaClient();
   }
 

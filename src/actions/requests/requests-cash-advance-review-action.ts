@@ -19,6 +19,7 @@ import {
   revalidateRequestLayouts,
   serializeCashAdvanceRequest,
 } from "./requests-shared";
+import { notifyEmployeeOfRequestDecision } from "./requests-notifications";
 import type { CashAdvanceRequestRow, RequestReviewPayload } from "./types";
 
 export async function reviewCashAdvanceRequest(
@@ -102,6 +103,16 @@ export async function reviewCashAdvanceRequest(
       });
 
       revalidateRequestLayouts();
+      await notifyEmployeeOfRequestDecision({
+        eventType: "CASH_ADVANCE_REQUEST_REJECTED",
+        title: "Cash advance request rejected",
+        message: "Your cash advance request was rejected.",
+        actorUserId: session.userId ?? null,
+        employeeId: reviewed.employee.employeeId,
+        entityType: "CashAdvanceRequest",
+        entityId: reviewed.id,
+        linkHref: "/employee/requests",
+      });
       return { success: true, data: serializeCashAdvanceRequest(reviewed) };
     }
 
@@ -204,6 +215,16 @@ export async function reviewCashAdvanceRequest(
       });
 
       revalidateRequestLayouts();
+      await notifyEmployeeOfRequestDecision({
+        eventType: "CASH_ADVANCE_REQUEST_APPROVED",
+        title: "Cash advance request approved",
+        message: "Your cash advance request was approved.",
+        actorUserId: session.userId ?? null,
+        employeeId: reviewed.employee.employeeId,
+        entityType: "CashAdvanceRequest",
+        entityId: reviewed.id,
+        linkHref: "/employee/requests",
+      });
       return { success: true, data: serializeCashAdvanceRequest(reviewed) };
     } catch (error) {
       if (

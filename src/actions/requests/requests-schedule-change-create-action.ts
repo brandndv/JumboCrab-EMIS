@@ -19,6 +19,7 @@ import {
   reviewedBySelect,
   serializeScheduleChangeRequest,
 } from "./requests-shared";
+import { notifyManagersOfRequest } from "./requests-notifications";
 import type {
   ScheduleChangeRequestPayload,
   ScheduleChangeRequestRow,
@@ -184,6 +185,14 @@ export async function createScheduleChangeRequest(
     });
 
     revalidateRequestLayouts();
+    await notifyManagersOfRequest({
+      eventType: "SCHEDULE_CHANGE_REQUEST_SUBMITTED",
+      title: "Schedule change request submitted",
+      message: `${employee.firstName} ${employee.lastName} submitted a schedule change request.`,
+      actorUserId: session.userId ?? null,
+      entityType: "ScheduleChangeRequest",
+      entityId: created.id,
+    });
     return { success: true, data: serializeScheduleChangeRequest(created) };
   } catch (error) {
     console.error("Error creating schedule change request:", error);

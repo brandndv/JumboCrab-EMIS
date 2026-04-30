@@ -1,8 +1,14 @@
 "use server";
 
-import { EmployeeDeductionWorkflowStatus } from "@prisma/client";
+import {
+  EmployeeDeductionWorkflowStatus,
+  NotificationEventType,
+  NotificationModule,
+  NotificationSeverity,
+} from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { createAndDispatchNotification } from "@/lib/notifications";
 import {
   canReviewDeductionAssignments,
   employeeDeductionAssignmentInclude,
@@ -70,6 +76,33 @@ export async function reviewEmployeeDeductionAssignment(input: {
     });
 
     revalidateDeductionLayouts();
+    await createAndDispatchNotification({
+      eventType:
+        input.decision === "APPROVED"
+          ? NotificationEventType.DEDUCTION_ASSIGNMENT_APPROVED
+          : NotificationEventType.DEDUCTION_ASSIGNMENT_REJECTED,
+      module: NotificationModule.DEDUCTIONS,
+      title:
+        input.decision === "APPROVED"
+          ? "Deduction request approved"
+          : "Deduction request rejected",
+      message:
+        input.decision === "APPROVED"
+          ? "A deduction request was approved."
+          : "A deduction request was rejected.",
+      severity:
+        input.decision === "APPROVED"
+          ? NotificationSeverity.SUCCESS
+          : NotificationSeverity.WARNING,
+      actorUserId: session.userId ?? null,
+      entityType: "EmployeeDeductionAssignment",
+      entityId: reviewed.id,
+      linkHref: "/employee/deductions",
+      recipients: {
+        employeeIds: [reviewed.employeeId],
+      },
+      emailEligible: true,
+    });
     return { success: true, data: serializeDeductionAssignment(reviewed) };
   } catch (error) {
     console.error("Error reviewing deduction assignment:", error);

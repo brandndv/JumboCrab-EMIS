@@ -13,6 +13,7 @@ import {
   roundMoney,
   serializeCashAdvanceRequest,
 } from "./requests-shared";
+import { notifyManagersOfRequest } from "./requests-notifications";
 import type { CashAdvanceRequestPayload, CashAdvanceRequestRow } from "./types";
 
 //! LOGIC - CREATE CASH ADVANCE REQUEST
@@ -72,6 +73,14 @@ export async function createCashAdvanceRequest(
     });
 
     revalidateRequestLayouts();
+    await notifyManagersOfRequest({
+      eventType: "CASH_ADVANCE_REQUEST_SUBMITTED",
+      title: "Cash advance request submitted",
+      message: `${employee.firstName} ${employee.lastName} submitted a cash advance request.`,
+      actorUserId: session.userId ?? null,
+      entityType: "CashAdvanceRequest",
+      entityId: created.id,
+    });
     return { success: true, data: serializeCashAdvanceRequest(created) };
   } catch (error) {
     console.error("Error creating cash advance request:", error);

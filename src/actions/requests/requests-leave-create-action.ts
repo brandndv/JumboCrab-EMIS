@@ -12,6 +12,7 @@ import {
   reviewedBySelect,
   serializeLeaveRequest,
 } from "./requests-shared";
+import { notifyManagersOfRequest } from "./requests-notifications";
 import type { LeaveRequestPayload, LeaveRequestRow } from "./types";
 
 export async function createLeaveRequest(
@@ -92,6 +93,14 @@ export async function createLeaveRequest(
     });
 
     revalidateRequestLayouts();
+    await notifyManagersOfRequest({
+      eventType: "LEAVE_REQUEST_SUBMITTED",
+      title: "Leave request submitted",
+      message: `${employee.firstName} ${employee.lastName} submitted a leave request.`,
+      actorUserId: session.userId ?? null,
+      entityType: "LeaveRequest",
+      entityId: created.id,
+    });
     return { success: true, data: serializeLeaveRequest(created) };
   } catch (error) {
     console.error("Error creating leave request:", error);

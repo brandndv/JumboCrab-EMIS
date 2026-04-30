@@ -44,6 +44,10 @@ const RBAC_RULES: AccessRule[] = [
     allowedRoles: ["admin", "generalManager"],
   },
   {
+    path: rolePath("admin", "/notifications"),
+    allowedRoles: ["admin", "generalManager"],
+  },
+  {
     path: rolePath("admin", "/employees/new"),
     allowedRoles: ["admin"],
   },
@@ -96,6 +100,22 @@ const RBAC_RULES: AccessRule[] = [
     path: rolePath("manager", "/users"),
     allowedRoles: ["manager"],
   },
+  {
+    path: rolePath("manager", "/notifications"),
+    allowedRoles: ["manager"],
+  },
+  {
+    path: rolePath("supervisor", "/notifications"),
+    allowedRoles: ["supervisor"],
+  },
+  {
+    path: rolePath("generalManager", "/notifications"),
+    allowedRoles: ["generalManager"],
+  },
+  {
+    path: rolePath("employee", "/notifications"),
+    allowedRoles: ["employee"],
+  },
   { path: rolePath("admin"), allowedRoles: ADMIN_PANEL_ROLES },
   { path: rolePath("employee"), allowedRoles: EMPLOYEE_PANEL_ROLES },
   { path: rolePath("manager"), allowedRoles: ["manager"] },
@@ -123,6 +143,20 @@ export function normalizeRole(role: unknown): AppRole | null {
 
 export function getHomePathForRole(role: AppRole): string {
   return rolePath(role, "/dashboard");
+}
+
+export function getNotificationsPathForRole(role: AppRole): string {
+  return rolePath(role, "/notifications");
+}
+
+export function getForcedPasswordChangePath(role: AppRole): string {
+  return rolePath(role, "/account/force-password-change");
+}
+
+export function getPostSignInPath(role: AppRole, mustChangePassword = false) {
+  return mustChangePassword
+    ? getForcedPasswordChangePath(role)
+    : getHomePathForRole(role);
 }
 
 export function getRoleFromPath(pathname: string): AppRole | null {

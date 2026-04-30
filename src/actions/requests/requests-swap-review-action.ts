@@ -21,6 +21,11 @@ import {
   serializeScheduleSwapRequest,
   toEmployeeName,
 } from "./requests-shared";
+import {
+  notifyEmployeeOfRequestDecision,
+  notifyManagersOfRequest,
+  notifySwapRequester,
+} from "./requests-notifications";
 import type {
   RequestReviewPayload,
   ScheduleSwapCoworkerReviewPayload,
@@ -102,6 +107,33 @@ export async function respondToScheduleSwapRequest(
     });
 
     revalidateRequestLayouts();
+    if (parsed.data.decision === "ACCEPTED") {
+      await notifyManagersOfRequest({
+        eventType: "SCHEDULE_SWAP_REQUEST_COWORKER_APPROVED",
+        title: "Schedule swap ready for manager review",
+        message: `${updated.coworkerEmployee.firstName} ${updated.coworkerEmployee.lastName} accepted a schedule swap request.`,
+        actorUserId: session.userId ?? null,
+        entityType: "ScheduleSwapRequest",
+        entityId: updated.id,
+      });
+    }
+    await notifySwapRequester({
+      eventType:
+        parsed.data.decision === "ACCEPTED"
+          ? "SCHEDULE_SWAP_REQUEST_COWORKER_APPROVED"
+          : "SCHEDULE_SWAP_REQUEST_COWORKER_REJECTED",
+      actorUserId: session.userId ?? null,
+      requesterEmployeeId: updated.requesterEmployee.employeeId,
+      requestId: updated.id,
+      title:
+        parsed.data.decision === "ACCEPTED"
+          ? "Coworker accepted your schedule swap request"
+          : "Coworker declined your schedule swap request",
+      message:
+        parsed.data.decision === "ACCEPTED"
+          ? "Your schedule swap request was accepted by your coworker and is now waiting for manager review."
+          : "Your schedule swap request was declined by your coworker.",
+    });
     return {
       success: true,
       data: serializeScheduleSwapRequest(updated, employee.employeeId),
@@ -186,6 +218,24 @@ export async function reviewScheduleSwapRequest(
       });
 
       revalidateRequestLayouts();
+      await notifySwapRequester({
+        eventType: "SCHEDULE_SWAP_REQUEST_REJECTED",
+        actorUserId: session.userId ?? null,
+        requesterEmployeeId: reviewed.requesterEmployee.employeeId,
+        requestId: reviewed.id,
+        title: "Schedule swap request rejected",
+        message: "Your schedule swap request was rejected by management.",
+      });
+      await notifyEmployeeOfRequestDecision({
+        eventType: "SCHEDULE_SWAP_REQUEST_REJECTED",
+        title: "Schedule swap request rejected",
+        message: "A schedule swap request involving you was rejected by management.",
+        actorUserId: session.userId ?? null,
+        employeeId: reviewed.coworkerEmployee.employeeId,
+        entityType: "ScheduleSwapRequest",
+        entityId: reviewed.id,
+        linkHref: "/employee/requests",
+      });
       return { success: true, data: serializeScheduleSwapRequest(reviewed) };
     }
 
@@ -336,6 +386,24 @@ export async function reviewScheduleSwapRequest(
     });
 
     revalidateRequestLayouts();
+    await notifySwapRequester({
+      eventType: "SCHEDULE_SWAP_REQUEST_APPROVED",
+      actorUserId: session.userId ?? null,
+      requesterEmployeeId: reviewed.requesterEmployee.employeeId,
+      requestId: reviewed.id,
+      title: "Schedule swap request approved",
+      message: "Your schedule swap request was approved.",
+    });
+    await notifyEmployeeOfRequestDecision({
+      eventType: "SCHEDULE_SWAP_REQUEST_APPROVED",
+      title: "Schedule swap request approved",
+      message: "A schedule swap request involving you was approved.",
+      actorUserId: session.userId ?? null,
+      employeeId: reviewed.coworkerEmployee.employeeId,
+      entityType: "ScheduleSwapRequest",
+      entityId: reviewed.id,
+      linkHref: "/employee/requests",
+    });
     return { success: true, data: serializeScheduleSwapRequest(reviewed) };
   } catch (error) {
     console.error("Error reviewing schedule swap request:", error);

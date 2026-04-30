@@ -50,6 +50,7 @@ export type sessionData = {
   username?: string;
   email?: string;
   role?: Roles;
+  mustChangePassword?: boolean;
   isLoggedIn: boolean;
 };
 
@@ -117,6 +118,7 @@ export async function signIn(username: string, password: string) {
         email: user.email,
         role: user.role,
         isDisabled: user.isDisabled,
+        mustChangePassword: user.mustChangePassword,
         employee: user.employee,
       },
     };

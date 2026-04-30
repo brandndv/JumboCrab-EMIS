@@ -27,6 +27,7 @@ import { ThemeMenuSub } from "@/components/theme-provider/theme-menu-sub";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AppHeaderLoadingState } from "@/components/loading/loading-states";
 import { CircleUserRound, LogOutIcon } from "lucide-react";
+import { NotificationBell } from "@/features/notifications/notification-bell";
 
 /**
  * NavHeader Component
@@ -150,6 +151,7 @@ const NavHeader = () => {
 
         {/* Right side: User info */}
         <div className="flex items-center gap-4">
+          <NotificationBell />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button

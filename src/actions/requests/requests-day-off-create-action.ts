@@ -19,6 +19,7 @@ import {
   reviewedBySelect,
   serializeDayOffRequest,
 } from "./requests-shared";
+import { notifyManagersOfRequest } from "./requests-notifications";
 import type { DayOffRequestPayload, DayOffRequestRow } from "./types";
 
 export async function createDayOffRequest(
@@ -167,6 +168,14 @@ export async function createDayOffRequest(
     });
 
     revalidateRequestLayouts();
+    await notifyManagersOfRequest({
+      eventType: "DAY_OFF_REQUEST_SUBMITTED",
+      title: "Day off request submitted",
+      message: `${employee.firstName} ${employee.lastName} submitted a day off request.`,
+      actorUserId: session.userId ?? null,
+      entityType: "DayOffRequest",
+      entityId: created.id,
+    });
     return { success: true, data: serializeDayOffRequest(created) };
   } catch (error) {
     console.error("Error creating day off request:", error);

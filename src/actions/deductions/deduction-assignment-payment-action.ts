@@ -4,10 +4,14 @@ import {
   DeductionFrequency,
   EmployeeDeductionAssignmentStatus,
   EmployeeDeductionWorkflowStatus,
+  NotificationEventType,
+  NotificationModule,
+  NotificationSeverity,
   PayrollStatus,
 } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { createAndDispatchNotification } from "@/lib/notifications";
 import { deductionPaymentSchema } from "@/lib/validations/deductions";
 import {
   canRecordDeductionPayments,
@@ -170,6 +174,23 @@ export async function recordEmployeeDeductionPayment(
     });
 
     revalidateDeductionLayouts();
+    if (updated.status === EmployeeDeductionAssignmentStatus.COMPLETED) {
+      await createAndDispatchNotification({
+        eventType: NotificationEventType.DEDUCTION_ASSIGNMENT_COMPLETED,
+        module: NotificationModule.DEDUCTIONS,
+        title: "Deduction completed",
+        message: "A deduction assignment has been fully settled.",
+        severity: NotificationSeverity.SUCCESS,
+        actorUserId: session.userId ?? null,
+        entityType: "EmployeeDeductionAssignment",
+        entityId: updated.id,
+        linkHref: "/employee/deductions",
+        recipients: {
+          employeeIds: [updated.employeeId],
+        },
+        emailEligible: true,
+      });
+    }
     return { success: true, data: serializeDeductionAssignment(updated) };
   } catch (error) {
     console.error("Error recording deduction payment:", error);

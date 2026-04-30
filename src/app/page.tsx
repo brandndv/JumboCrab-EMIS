@@ -1,5 +1,5 @@
 import { getSession } from "@/lib/auth";
-import { getHomePathForRole, normalizeRole } from "@/lib/rbac";
+import { getPostSignInPath, normalizeRole } from "@/lib/rbac";
 import { redirect } from "next/navigation";
 
 const Home = async () => {
@@ -8,7 +8,7 @@ const Home = async () => {
   if (session.isLoggedIn) {
     const role = normalizeRole(session.role);
     if (role) {
-      redirect(getHomePathForRole(role));
+      redirect(getPostSignInPath(role, Boolean(session.mustChangePassword)));
     }
   }
 

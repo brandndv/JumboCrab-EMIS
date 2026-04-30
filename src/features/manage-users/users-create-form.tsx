@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Eye, EyeOff, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { usePathname, useRouter } from "next/navigation";
 import { createAuthUser } from "@/actions/auth/auth-action";
@@ -58,11 +58,9 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
   const usersBasePath = useMemo(() => getUsersBasePath(pathname), [pathname]);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState<AppRole | "">(
     defaultEmployeeId ? "employee" : "",
   );
-  const [showPassword, setShowPassword] = useState(false);
   const [roleError, setRoleError] = useState("");
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -127,10 +125,6 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters long.");
-      return;
-    }
     if (!role) {
       setRoleError("Please select a role");
       return;
@@ -147,7 +141,6 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
       const result = await createAuthUser({
         username,
         email,
-        password,
         role,
         employeeId: selectedEmployee?.employeeId || null,
       });
@@ -158,14 +151,23 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
 
       setUsername("");
       setEmail("");
-      setPassword("");
       setRole("");
       setSelectedEmployee(null);
       setSearchTerm("");
 
-      toast.success("User created successfully.", {
-        description: "The account is ready to sign in.",
-      });
+      if (result.emailSent) {
+        toast.success("User created successfully.", {
+          description: "Temporary credentials were emailed to the user.",
+        });
+      } else {
+        toast.info("User created with manual credential handoff required.", {
+          description:
+            result.temporaryPassword != null
+              ? `Temporary password: ${result.temporaryPassword}`
+              : result.warning || "Credentials email could not be sent.",
+          duration: 12000,
+        });
+      }
       router.replace(usersBasePath);
     } catch (error) {
       console.error("Error creating user:", error);
@@ -247,37 +249,6 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
 
                 <div className="space-y-2">
                   <label
-                    htmlFor="password"
-                    className="text-sm font-medium leading-none"
-                  >
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? "text" : "password"}
-                      id="password"
-                      name="password"
-                      placeholder="••••••••"
-                      className="h-11 rounded-lg pr-10"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label
                     htmlFor="role"
                     className="text-sm font-medium leading-none"
                   >
@@ -319,6 +290,10 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+              System will generate a temporary password automatically and require a password change on first sign in.
             </div>
 
             {role === "employee" && (

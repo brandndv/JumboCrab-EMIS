@@ -18,6 +18,7 @@ import {
   reviewedBySelect,
   serializeScheduleSwapRequest,
 } from "./requests-shared";
+import { notifyCoworkerOfSwapRequest } from "./requests-notifications";
 import type {
   ScheduleSwapRequestPayload,
   ScheduleSwapRequestRow,
@@ -200,6 +201,12 @@ export async function createScheduleSwapRequest(
     });
 
     revalidateRequestLayouts();
+    await notifyCoworkerOfSwapRequest({
+      actorUserId: session.userId ?? null,
+      coworkerEmployeeId: created.coworkerEmployee.employeeId,
+      requestId: created.id,
+      message: `${created.requesterEmployee.firstName} ${created.requesterEmployee.lastName} requested a schedule swap with you.`,
+    });
     return {
       success: true,
       data: serializeScheduleSwapRequest(created, requester.employeeId),

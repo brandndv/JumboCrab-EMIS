@@ -3,10 +3,14 @@
 import {
   EmployeeDeductionAssignmentStatus,
   EmployeeDeductionWorkflowStatus,
+  NotificationEventType,
+  NotificationModule,
+  NotificationSeverity,
   Prisma,
 } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { createAndDispatchNotification } from "@/lib/notifications";
 import { deductionAssignmentSchema } from "@/lib/validations/deductions";
 import {
   canCreateApprovedDeductionAssignments,
@@ -126,6 +130,21 @@ export async function createEmployeeDeductionAssignment(
     });
 
     revalidateDeductionLayouts();
+    await createAndDispatchNotification({
+      eventType: NotificationEventType.DEDUCTION_ASSIGNMENT_APPROVED,
+      module: NotificationModule.DEDUCTIONS,
+      title: "Deduction assigned",
+      message: "A deduction assignment was created for your account.",
+      severity: NotificationSeverity.INFO,
+      actorUserId: session.userId ?? null,
+      entityType: "EmployeeDeductionAssignment",
+      entityId: created.id,
+      linkHref: "/employee/deductions",
+      recipients: {
+        employeeIds: [created.employeeId],
+      },
+      emailEligible: true,
+    });
     return { success: true, data: serializeDeductionAssignment(created) };
   } catch (error) {
     if (

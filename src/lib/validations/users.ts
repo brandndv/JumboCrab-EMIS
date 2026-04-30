@@ -17,6 +17,7 @@ export const userSchema = z.object({
   email: z.string().email("Invalid email address"),
   role: z.enum(APP_ROLES).default("employee"),
   isDisabled: z.boolean().default(false),
+  mustChangePassword: z.boolean().default(false),
   emailVerified: z.date().nullable().optional(),
   image: z.string().nullable().optional(),
   createdAt: z.date().optional(),

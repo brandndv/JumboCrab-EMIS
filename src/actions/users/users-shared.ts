@@ -34,6 +34,7 @@ export const baseUserSelect = {
   email: true,
   role: true,
   isDisabled: true,
+  mustChangePassword: true,
   createdAt: true,
   updatedAt: true,
   employee: {
@@ -59,6 +60,7 @@ export const directoryUserSelect = {
   email: true,
   role: true,
   isDisabled: true,
+  mustChangePassword: true,
   createdAt: true,
   employee: {
     select: {

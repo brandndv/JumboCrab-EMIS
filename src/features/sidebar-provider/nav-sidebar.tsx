@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   Users,
   FileText,
+  Bell,
   Clock,
   BookMinus,
   HandCoins,
@@ -81,6 +82,20 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       href: `/${userRole}/dashboard`,
       hasSubmenu: false,
       // ========== DASHBOARD ACCESS ========= //
+      roles: [
+        "admin",
+        "generalManager",
+        "manager",
+        "supervisor",
+        "employee",
+      ],
+    },
+    {
+      id: "notifications",
+      label: "Notifications",
+      icon: Bell,
+      href: `/${userRole}/notifications`,
+      hasSubmenu: false,
       roles: [
         "admin",
         "generalManager",

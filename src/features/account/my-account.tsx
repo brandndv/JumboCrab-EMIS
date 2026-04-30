@@ -15,7 +15,7 @@ import {
   getGovernmentIdByEmployee,
   type GovernmentIdRecord,
 } from "@/actions/contributions/government-ids-action";
-import { updateUser } from "@/actions/users/users-action";
+import { changeCurrentUserPassword } from "@/actions/auth/auth-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -273,7 +273,7 @@ const MyAccountPage = () => {
     try {
       setPasswordSaving(true);
       setPasswordError(null);
-      const result = await updateUser({ userId, password: newPassword });
+      const result = await changeCurrentUserPassword({ password: newPassword });
       if (!result.success) {
         throw new Error(result.error || "Failed to update password.");
       }
