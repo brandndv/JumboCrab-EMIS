@@ -6,6 +6,7 @@ import {
   getEmployeeById as getEmployeeByIdImpl,
   getEmployeeByUserId as getEmployeeByUserIdImpl,
   getEmployeeCompensationHistory as getEmployeeCompensationHistoryImpl,
+  getEmployeesDirectory as getEmployeesDirectoryImpl,
   getEmployeePositionHistory as getEmployeePositionHistoryImpl,
   getEmployees as getEmployeesImpl,
   getEmployeesWithoutUser as getEmployeesWithoutUserImpl,
@@ -20,6 +21,12 @@ import {
 
 export async function getEmployees(...args: Parameters<typeof getEmployeesImpl>) {
   return getEmployeesImpl(...args);
+}
+
+export async function getEmployeesDirectory(
+  ...args: Parameters<typeof getEmployeesDirectoryImpl>
+) {
+  return getEmployeesDirectoryImpl(...args);
 }
 
 export async function getEmployeeById(
@@ -97,5 +104,6 @@ export async function getDepartments(
 export type {
   EmployeeActionRecord,
   EmployeeCompensationHistoryItem,
+  EmployeeDirectoryRecord,
   EmployeePositionHistoryItem,
 } from "./types";

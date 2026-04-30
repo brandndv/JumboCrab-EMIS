@@ -89,6 +89,7 @@ type EmployeeDeductionSummaryRow = {
   employeeId: string;
   employeeName: string;
   employeeCode: string;
+  avatarUrl?: string | null;
   departmentName: string;
   ongoingCount: number;
   installmentCount: number;
@@ -193,6 +194,7 @@ function EmployeeDeductionsDirectoryPageContent({
         employeeId: row.employeeId,
         employeeName: row.employeeName,
         employeeCode: row.employeeCode,
+        avatarUrl: row.avatarUrl,
         departmentName,
         ongoingCount: 1,
         installmentCount:
@@ -671,10 +673,28 @@ function EmployeeDeductionsDirectoryPageContent({
                         }}
                       >
                         <TableCell className="min-w-56">
-                          <div className="font-medium">{row.employeeName}</div>
-                          <p className="text-xs text-muted-foreground">
-                            {row.employeeCode}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10 shrink-0">
+                              {row.avatarUrl ? (
+                                <AvatarImage src={row.avatarUrl} alt={row.employeeName} />
+                              ) : null}
+                              <AvatarFallback>
+                                {row.employeeName
+                                  .split(" ")
+                                  .filter(Boolean)
+                                  .slice(0, 2)
+                                  .map((part) => part[0])
+                                  .join("")
+                                  .toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <div className="font-medium">{row.employeeName}</div>
+                              <p className="text-xs text-muted-foreground">
+                                {row.employeeCode}
+                              </p>
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell>{row.departmentName}</TableCell>
                         <TableCell className="text-right font-medium">
@@ -944,10 +964,28 @@ function EmployeeDeductionsDirectoryPageContent({
                     <TableRow key={row.id}>
                       {!selectedEmployee ? (
                         <TableCell className="min-w-48">
-                          <div className="font-medium">{row.employeeName}</div>
-                          <p className="text-xs text-muted-foreground">
-                            {row.employeeCode}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10 shrink-0">
+                              {row.avatarUrl ? (
+                                <AvatarImage src={row.avatarUrl} alt={row.employeeName} />
+                              ) : null}
+                              <AvatarFallback>
+                                {row.employeeName
+                                  .split(" ")
+                                  .filter(Boolean)
+                                  .slice(0, 2)
+                                  .map((part) => part[0])
+                                  .join("")
+                                  .toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <div className="font-medium">{row.employeeName}</div>
+                              <p className="text-xs text-muted-foreground">
+                                {row.employeeCode}
+                              </p>
+                            </div>
+                          </div>
                         </TableCell>
                       ) : null}
                       <TableCell className="min-w-52">

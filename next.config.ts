@@ -14,11 +14,23 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
+    config.resolve = config.resolve ?? {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      encoding: false,
+    };
+    config.plugins = config.plugins ?? [];
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^encoding$/,
+      }),
+    );
+
     if (!isServer) {
-      config.resolve = config.resolve ?? {};
       config.resolve.fallback = {
         ...config.resolve.fallback,
+        encoding: false,
         fs: false,
       };
     }

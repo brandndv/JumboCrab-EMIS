@@ -53,7 +53,28 @@ export const baseUserSelect = {
   },
 } as const satisfies Prisma.UserSelect;
 
+export const directoryUserSelect = {
+  userId: true,
+  username: true,
+  email: true,
+  role: true,
+  isDisabled: true,
+  createdAt: true,
+  employee: {
+    select: {
+      employeeId: true,
+      employeeCode: true,
+      firstName: true,
+      lastName: true,
+      position: { select: { name: true } },
+      department: { select: { name: true } },
+      img: true,
+    },
+  },
+} as const satisfies Prisma.UserSelect;
+
 type BaseUserRow = Prisma.UserGetPayload<{ select: typeof baseUserSelect }>;
+type DirectoryUserRow = Prisma.UserGetPayload<{ select: typeof directoryUserSelect }>;
 
 export const normalizeUsers = (users: BaseUserRow[]): UserWithEmployee[] =>
   users.map((user) => ({
@@ -70,3 +91,18 @@ export const normalizeUsers = (users: BaseUserRow[]): UserWithEmployee[] =>
 
 export const normalizeUser = (user: BaseUserRow): UserWithEmployee =>
   normalizeUsers([user])[0];
+
+export const normalizeDirectoryUsers = (
+  users: DirectoryUserRow[],
+): UserWithEmployee[] =>
+  users.map((user) => ({
+    ...user,
+    role: normalizeRole(user.role) ?? "employee",
+    employee: user.employee
+      ? {
+          ...user.employee,
+          position: user.employee.position?.name ?? null,
+          department: user.employee.department?.name ?? null,
+        }
+      : null,
+  }));

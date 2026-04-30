@@ -1,10 +1,8 @@
 "use client";
 
-import { listDepartmentOptions } from "@/actions/organization/departments-action";
 import {
   archivePosition,
   createPosition,
-  listPositions,
   unarchivePosition,
   updatePosition,
 } from "@/actions/organization/positions-action";
@@ -12,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Archive, Eye, EyeOff, Pencil, Plus, RefreshCcw, RotateCcw } from "lucide-react";
+import { Archive, ChevronDown, Eye, EyeOff, Pencil, Plus, RefreshCcw, RotateCcw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -26,6 +24,23 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { TableLoadingState } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  invalidateDepartmentData,
+  invalidatePositionData,
+  loadDepartmentOptionsData,
+  loadPositionsData,
+} from "@/features/manage-organization/organization-data-cache";
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 type PositionRow = {
   positionId: string;
@@ -61,15 +76,17 @@ export function PositionTable({
   const [formError, setFormError] = useState<string | null>(null);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
   const hasReportedInitialLoadRef = useRef(false);
 
-  const load = useCallback(async (includeArchived = showArchived) => {
+  const load = useCallback(async (includeArchived = showArchived, force = false) => {
     try {
       setLoading(true);
       setError(null);
       const [posResult, deptResult] = await Promise.all([
-        listPositions({ includeArchived }),
-        listDepartmentOptions(),
+        loadPositionsData({ includeArchived, force }),
+        loadDepartmentOptionsData({ force }),
       ]);
       if (!posResult.success) {
         throw new Error(posResult.error || "Failed to load positions");
@@ -106,6 +123,38 @@ export function PositionTable({
       );
     });
   }, [positions, filter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, showArchived]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = (safeCurrentPage - 1) * pageSize;
+  const paginatedPositions = filtered.slice(pageStart, pageStart + pageSize);
+  const showingFrom = filtered.length === 0 ? 0 : pageStart + 1;
+  const showingTo = filtered.length === 0 ? 0 : Math.min(pageStart + pageSize, filtered.length);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) {
+      setCurrentPage(safeCurrentPage);
+    }
+  }, [currentPage, safeCurrentPage]);
+
+  const visiblePageNumbers = useMemo(() => {
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const start = Math.max(1, safeCurrentPage - 1);
+    const end = Math.min(totalPages, start + 2);
+    const adjustedStart = Math.max(1, end - 2);
+
+    return Array.from(
+      { length: end - adjustedStart + 1 },
+      (_, index) => adjustedStart + index,
+    );
+  }, [safeCurrentPage, totalPages]);
 
   const formatCurrency = useCallback((value: number | null, currencyCode = "PHP") => {
     if (value == null) return "—";
@@ -154,6 +203,8 @@ export function PositionTable({
       if (!result.success) {
         throw new Error(result.error || "Failed to save position");
       }
+      invalidatePositionData();
+      invalidateDepartmentData();
       await load();
       setOpen(false);
       setEditingId(null);
@@ -210,6 +261,8 @@ export function PositionTable({
       if (!result.success) {
         throw new Error(result.error || "Failed to archive position");
       }
+      invalidatePositionData();
+      invalidateDepartmentData();
       await load();
       toast.success("Position archived successfully.");
     } catch (err) {
@@ -236,6 +289,8 @@ export function PositionTable({
       if (!result.success) {
         throw new Error(result.error || "Failed to unarchive position");
       }
+      invalidatePositionData();
+      invalidateDepartmentData();
       await load();
       toast.success("Position restored successfully.");
     } catch (err) {
@@ -270,7 +325,7 @@ export function PositionTable({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => void load()}
+            onClick={() => void load(showArchived, true)}
               aria-label="Reload positions"
             >
               <RefreshCcw className="h-4 w-4" />
@@ -408,7 +463,7 @@ export function PositionTable({
               )}
               {!loading &&
                 !error &&
-                filtered.map((pos) => (
+                paginatedPositions.map((pos) => (
                   <TableRow key={pos.positionId}>
                     <TableCell className="font-medium">{pos.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
@@ -476,6 +531,137 @@ export function PositionTable({
             </TableBody>
           </Table>
         </div>
+        {!loading && !error && filtered.length > 0 && (
+          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {showingFrom}-{showingTo} of {filtered.length} positions
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Rows per page
+                <span className="relative inline-flex items-center">
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="h-10 min-w-[72px] appearance-none rounded-md border border-border bg-background px-3 pr-9 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </span>
+              </label>
+
+              {totalPages > 1 && (
+                <Pagination className="m-0 w-auto justify-end">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (safeCurrentPage > 1) {
+                            setCurrentPage((page) => page - 1);
+                          }
+                        }}
+                        className={
+                          safeCurrentPage === 1
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+
+                    {visiblePageNumbers[0] > 1 && (
+                      <>
+                        <PaginationItem>
+                          <PaginationLink
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setCurrentPage(1);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            1
+                          </PaginationLink>
+                        </PaginationItem>
+                        {visiblePageNumbers[0] > 2 && (
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        )}
+                      </>
+                    )}
+
+                    {visiblePageNumbers.map((pageNumber) => (
+                      <PaginationItem key={pageNumber}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            setCurrentPage(pageNumber);
+                          }}
+                          isActive={safeCurrentPage === pageNumber}
+                          className="cursor-pointer"
+                        >
+                          {pageNumber}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+
+                    {visiblePageNumbers[visiblePageNumbers.length - 1] < totalPages && (
+                      <>
+                        {visiblePageNumbers[visiblePageNumbers.length - 1] <
+                          totalPages - 1 && (
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        )}
+                        <PaginationItem>
+                          <PaginationLink
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setCurrentPage(totalPages);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            {totalPages}
+                          </PaginationLink>
+                        </PaginationItem>
+                      </>
+                    )}
+
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (safeCurrentPage < totalPages) {
+                            setCurrentPage((page) => page + 1);
+                          }
+                        }}
+                        className={
+                          safeCurrentPage === totalPages
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

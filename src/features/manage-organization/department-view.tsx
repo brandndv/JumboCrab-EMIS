@@ -1,6 +1,7 @@
 "use client";
 
-import { listDepartments } from "@/actions/organization/departments-action";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
+import { loadDepartmentsData } from "@/features/manage-organization/organization-data-cache";
 
 type Dept = {
   departmentId: string;
@@ -69,11 +72,18 @@ function getEmployeeImageSrc(employee: DepartmentEmployee) {
   return image ? image : undefined;
 }
 
+function getRoleBasePath(pathname: string) {
+  const [roleSegment] = pathname.split("/").filter(Boolean);
+  return roleSegment ? `/${roleSegment}` : "/admin";
+}
+
 export function DepartmentView({
   onInitialLoadComplete,
 }: {
   onInitialLoadComplete?: () => void;
 }) {
+  const pathname = usePathname();
+  const roleBasePath = useMemo(() => getRoleBasePath(pathname), [pathname]);
   const [data, setData] = useState<Dept[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,13 +91,14 @@ export function DepartmentView({
   const [selected, setSelected] = useState<Dept | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [filter, setFilter] = useState("");
+  const [positionFilters, setPositionFilters] = useState<Record<string, string>>({});
   const hasReportedInitialLoadRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     try {
       setLoading(true);
       setError(null);
-      const result = await listDepartments();
+      const result = await loadDepartmentsData({ force });
       if (!result.success) {
         throw new Error(result.error || "Failed to load departments");
       }
@@ -162,7 +173,7 @@ export function DepartmentView({
                 className="pl-9"
               />
             </div>
-            <Button variant="ghost" size="icon" onClick={load} aria-label="Reload">
+            <Button variant="ghost" size="icon" onClick={() => void load(true)} aria-label="Reload">
               <RefreshCcw className="h-4 w-4" />
             </Button>
           </div>
@@ -204,10 +215,15 @@ export function DepartmentView({
             {filteredDepartments.map((dept) => {
               const isOpen = !!openIds[dept.departmentId];
               const previewEmployees = dept.employees.slice(0, 4);
-              const previewPositions = dept.positions.slice(0, 5);
               const filledRoles = dept.positions.filter(
                 (position) => position.employees.length > 0,
               ).length;
+              const activePositionFilter = positionFilters[dept.departmentId] ?? "";
+              const filteredEmployees = activePositionFilter
+                ? dept.employees.filter(
+                    (employee) => employee.position?.positionId === activePositionFilter,
+                  )
+                : dept.employees;
 
               return (
                 <Collapsible
@@ -224,38 +240,10 @@ export function DepartmentView({
                         <div className="min-w-0 space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-base font-semibold">{dept.name}</span>
-                            <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
-                              {formatCount(dept.positions.length, "role")}
-                            </Badge>
-                            <Badge variant="outline" className="rounded-full px-2.5 py-0.5">
-                              {formatCount(dept.employees.length, "employee")}
-                            </Badge>
                           </div>
                           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
                             {dept.description || "No description added for this department yet."}
                           </p>
-                          {previewPositions.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {previewPositions.map((position) => (
-                                <Badge
-                                  key={position.positionId}
-                                  variant="secondary"
-                                  className="rounded-full px-2.5 py-0.5"
-                                >
-                                  {position.name}
-                                </Badge>
-                              ))}
-                              {dept.positions.length > previewPositions.length ? (
-                                <Badge variant="outline" className="rounded-full px-2.5 py-0.5">
-                                  +{dept.positions.length - previewPositions.length} more
-                                </Badge>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              No roles are assigned to this department yet.
-                            </p>
-                          )}
                         </div>
 
                         <div className="flex flex-col gap-3 xl:min-w-[280px] xl:items-end">
@@ -298,40 +286,6 @@ export function DepartmentView({
                             </div>
                           </div>
 
-                          {previewEmployees.length > 0 ? (
-                            <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
-                              {previewEmployees.map((employee) => (
-                                <div
-                                  key={employee.employeeId}
-                                  className="inline-flex items-center gap-2 rounded-full bg-muted/50 px-2.5 py-1"
-                                >
-                                  <Avatar className="h-6 w-6">
-                                    {getEmployeeImageSrc(employee) ? (
-                                      <AvatarImage
-                                        src={getEmployeeImageSrc(employee)}
-                                        alt={`${employee.firstName} ${employee.lastName}`}
-                                      />
-                                    ) : null}
-                                    <AvatarFallback className="bg-primary/10 text-[10px] font-semibold uppercase text-primary">
-                                      {getEmployeeInitials(employee)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="max-w-[140px] truncate text-xs text-foreground">
-                                    {employee.firstName} {employee.lastName}
-                                  </span>
-                                </div>
-                              ))}
-                              {dept.employees.length > previewEmployees.length ? (
-                                <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
-                                  +{dept.employees.length - previewEmployees.length} more
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              No employees are currently assigned.
-                            </p>
-                          )}
                         </div>
                       </div>
 
@@ -365,55 +319,8 @@ export function DepartmentView({
                   </CollapsibleTrigger>
 
                   <CollapsibleContent className="border-t border-border/60 bg-muted/5 px-4 pb-4 pt-3">
-                    <div className="grid gap-3 xl:grid-cols-[320px_minmax(0,1fr)]">
-                      <section className="space-y-3 rounded-lg border bg-background p-4">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold">Roles in this department</p>
-                          <Badge variant="outline" className="rounded-full px-3">
-                            {formatCount(dept.positions.length, "role")}
-                          </Badge>
-                        </div>
-                        {dept.positions.length === 0 ? (
-                          <div className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
-                            No roles in this department yet.
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {dept.positions.map((pos) => (
-                              <div
-                                key={pos.positionId}
-                                className="rounded-lg border border-border/60 px-3 py-2.5"
-                              >
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                  <span className="text-sm font-medium">{pos.name}</span>
-                                  <Badge variant="outline" className="w-fit rounded-full px-3">
-                                    {formatCount(pos.employees.length, "assigned employee")}
-                                  </Badge>
-                                </div>
-                                {pos.employees.length > 0 ? (
-                                  <div className="mt-2 flex flex-wrap gap-1.5">
-                                    {pos.employees.slice(0, 4).map((emp) => (
-                                      <span
-                                        key={emp.employeeId}
-                                        className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"
-                                      >
-                                        {emp.firstName} {emp.lastName}
-                                      </span>
-                                    ))}
-                                    {pos.employees.length > 4 ? (
-                                      <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-                                        +{pos.employees.length - 4} more
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </section>
-
-                      <section className="space-y-3 rounded-lg border bg-background p-4">
+                    <div className="grid gap-3">
+                      <section className="space-y-4 rounded-lg border bg-background p-4">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-semibold">Employees</p>
                           <Button
@@ -427,13 +334,70 @@ export function DepartmentView({
                             Quick view
                           </Button>
                         </div>
-                        {dept.employees.length === 0 ? (
+
+                        {dept.positions.length > 0 ? (
+                          <div className="space-y-3">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                              Roles in this department
+                            </p>
+                            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPositionFilters((current) => ({
+                                    ...current,
+                                    [dept.departmentId]: "",
+                                  }))
+                                }
+                                className={cn(
+                                  "inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors",
+                                  activePositionFilter === ""
+                                    ? "border-primary/40 bg-primary/15 text-foreground"
+                                    : "border-border bg-background/70 text-muted-foreground hover:bg-muted/50",
+                                )}
+                              >
+                                <span>All roles</span>
+                                <span className="rounded-full bg-background/70 px-2 py-0.5 text-[11px]">
+                                  {dept.positions.length}
+                                </span>
+                              </button>
+
+                              {dept.positions.map((pos) => (
+                                <button
+                                  key={pos.positionId}
+                                  type="button"
+                                  onClick={() =>
+                                    setPositionFilters((current) => ({
+                                      ...current,
+                                      [dept.departmentId]: pos.positionId,
+                                    }))
+                                  }
+                                  className={cn(
+                                    "inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors",
+                                    activePositionFilter === pos.positionId
+                                      ? "border-primary/40 bg-primary/15 text-foreground"
+                                      : "border-border bg-background/70 text-muted-foreground hover:bg-muted/50",
+                                  )}
+                                >
+                                  <span>{pos.name}</span>
+                                  <span className="rounded-full bg-background/70 px-2 py-0.5 text-[11px]">
+                                    {pos.employees.length}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {filteredEmployees.length === 0 ? (
                           <div className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
-                            No employees in this department.
+                            {activePositionFilter
+                              ? "No employees assigned to this role yet."
+                              : "No employees in this department."}
                           </div>
                         ) : (
                           <div className="overflow-hidden rounded-lg border">
-                            {dept.employees.map((emp) => (
+                            {filteredEmployees.map((emp) => (
                               <div
                                 key={emp.employeeId}
                                 className="flex items-center gap-3 border-b bg-background px-3 py-3 last:border-b-0"
@@ -451,15 +415,19 @@ export function DepartmentView({
                                 </Avatar>
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate text-sm font-medium">
-                                    {emp.firstName} {emp.lastName}
+                                    {emp.firstName} {emp.lastName} · {emp.employeeCode}
                                   </p>
                                   <p className="text-xs text-muted-foreground">
-                                    {emp.employeeCode}
+                                    {emp.position?.name || "No position"}
                                   </p>
                                 </div>
-                                <span className="shrink-0 text-right text-xs text-muted-foreground">
-                                  {emp.position?.name || "No position"}
-                                </span>
+                                <div className="flex shrink-0 items-center gap-3">
+                                  <Button asChild variant="ghost" size="sm" className="h-8 px-2">
+                                    <Link href={`${roleBasePath}/employees/${emp.employeeId}/view`}>
+                                      View
+                                    </Link>
+                                  </Button>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -520,14 +488,23 @@ export function DepartmentView({
                   {selected.employees.map((e) => (
                     <li
                       key={e.employeeId}
-                      className="flex items-center justify-between rounded-lg border px-3 py-3"
+                      className="flex items-center justify-between gap-3 rounded-lg border px-3 py-3"
                     >
-                      <span>
-                        {e.firstName} {e.lastName} ({e.employeeCode})
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {e.position?.name || "No position"}
-                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate">
+                          {e.firstName} {e.lastName} · {e.employeeCode}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {e.position?.name || "No position"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <Button asChild variant="ghost" size="sm" className="h-8 px-2">
+                          <Link href={`${roleBasePath}/employees/${e.employeeId}/view`}>
+                            View
+                          </Link>
+                        </Button>
+                      </div>
                     </li>
                   ))}
                 </ul>

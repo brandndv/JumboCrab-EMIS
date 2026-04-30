@@ -36,6 +36,7 @@ export async function listPositions(input?: {
             employeeCode: true,
             firstName: true,
             lastName: true,
+            img: true,
             department: { select: { name: true } },
           },
         },

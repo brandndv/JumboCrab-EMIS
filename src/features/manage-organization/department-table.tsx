@@ -3,7 +3,6 @@
 import {
   archiveDepartment,
   createDepartment,
-  listDepartmentsWithOptions,
   unarchiveDepartment,
   updateDepartment,
 } from "@/actions/organization/departments-action";
@@ -25,6 +24,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { TableLoadingState } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
+import {
+  invalidateDepartmentData,
+  invalidatePositionData,
+  invalidateStructureData,
+  loadDepartmentsData,
+} from "@/features/manage-organization/organization-data-cache";
 
 type DepartmentRow = {
   departmentId: string;
@@ -52,11 +57,11 @@ export function DepartmentTable({
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const hasReportedInitialLoadRef = useRef(false);
 
-  const load = useCallback(async (includeArchived = showArchived) => {
+  const load = useCallback(async (includeArchived = showArchived, force = false) => {
     try {
       setLoading(true);
       setError(null);
-      const result = await listDepartmentsWithOptions({ includeArchived });
+      const result = await loadDepartmentsData({ includeArchived, force });
       if (!result.success) {
         throw new Error(result.error || "Failed to load departments");
       }
@@ -94,6 +99,9 @@ export function DepartmentTable({
       if (!result.success) {
         throw new Error(result.error || "Failed to save department");
       }
+      invalidateDepartmentData();
+      invalidatePositionData();
+      invalidateStructureData();
       await load();
       setOpen(false);
       setEditingId(null);
@@ -146,6 +154,9 @@ export function DepartmentTable({
       if (!result.success) {
         throw new Error(result.error || "Failed to archive department");
       }
+      invalidateDepartmentData();
+      invalidatePositionData();
+      invalidateStructureData();
       await load();
       toast.success("Department archived successfully.");
     } catch (err) {
@@ -172,6 +183,9 @@ export function DepartmentTable({
       if (!result.success) {
         throw new Error(result.error || "Failed to unarchive department");
       }
+      invalidateDepartmentData();
+      invalidatePositionData();
+      invalidateStructureData();
       await load();
       toast.success("Department restored successfully.");
     } catch (err) {
@@ -203,7 +217,7 @@ export function DepartmentTable({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => void load()}
+            onClick={() => void load(showArchived, true)}
             aria-label="Reload departments"
           >
             <RefreshCcw className="h-4 w-4" />

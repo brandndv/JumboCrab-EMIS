@@ -16,6 +16,7 @@ export type PositionDetail = {
     employeeCode: string;
     firstName: string;
     lastName: string;
+    img?: string | null;
     department?: { name: string | null } | null;
   }[];
 };

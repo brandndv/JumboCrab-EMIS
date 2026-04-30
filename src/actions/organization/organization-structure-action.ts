@@ -8,6 +8,7 @@ type SupervisorUser = {
   username: string;
   email: string;
   role: string;
+  img?: string | null;
 };
 
 type StructureEmployee = {
@@ -15,6 +16,7 @@ type StructureEmployee = {
   employeeCode: string;
   firstName: string;
   lastName: string;
+  img?: string | null;
   supervisorUserId?: string | null;
   role?: string | null;
   department?: { departmentId: string; name: string; isActive: boolean } | null;
@@ -48,6 +50,7 @@ export async function getOrganizationStructure(): Promise<{
           employeeCode: true,
           firstName: true,
           lastName: true,
+          img: true,
           supervisorUserId: true,
           user: { select: { userId: true, role: true, username: true, email: true } },
           department: { select: { departmentId: true, name: true, isActive: true } },
@@ -65,7 +68,13 @@ export async function getOrganizationStructure(): Promise<{
             ],
           },
         },
-        select: { userId: true, username: true, email: true, role: true },
+        select: {
+          userId: true,
+          username: true,
+          email: true,
+          role: true,
+          employee: { select: { img: true } },
+        },
         orderBy: { username: "asc" },
       }),
     ]);
@@ -75,6 +84,7 @@ export async function getOrganizationStructure(): Promise<{
       employeeCode: employee.employeeCode,
       firstName: employee.firstName,
       lastName: employee.lastName,
+      img: employee.img ?? null,
       supervisorUserId: employee.supervisorUserId,
       role: employee.user?.role ?? null,
       department: employee.department
@@ -93,7 +103,15 @@ export async function getOrganizationStructure(): Promise<{
         : null,
     }));
 
-    const supervisorGroups = supervisors.map((sup) => ({
+    const normalizedSupervisors = supervisors.map((supervisor) => ({
+      userId: supervisor.userId,
+      username: supervisor.username,
+      email: supervisor.email,
+      role: supervisor.role,
+      img: supervisor.employee?.img ?? null,
+    }));
+
+    const supervisorGroups = normalizedSupervisors.map((sup) => ({
       supervisor: sup,
       reports: [] as StructureEmployee[],
     }));
@@ -116,7 +134,7 @@ export async function getOrganizationStructure(): Promise<{
     return {
       success: true,
       data: payload,
-      supervisors,
+      supervisors: normalizedSupervisors,
       supervisorGroups,
       unassigned,
     };

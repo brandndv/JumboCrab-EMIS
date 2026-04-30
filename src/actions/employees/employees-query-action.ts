@@ -14,6 +14,7 @@ import {
 import type {
   EmployeeActionRecord,
   EmployeeCompensationHistoryItem,
+  EmployeeDirectoryRecord,
   EmployeePositionHistoryItem,
 } from "./types";
 
@@ -39,6 +40,61 @@ export async function getEmployees(): Promise<{
     return {
       success: false,
       error: "Failed to fetch employees. Check server logs for details.",
+    };
+  }
+}
+
+export async function getEmployeesDirectory(): Promise<{
+  success: boolean;
+  data?: EmployeeDirectoryRecord[];
+  error?: string;
+}> {
+  try {
+    const employees = await db.employee.findMany({
+      orderBy: { employeeCode: "asc" },
+      select: {
+        employeeId: true,
+        employeeCode: true,
+        firstName: true,
+        lastName: true,
+        img: true,
+        email: true,
+        startDate: true,
+        endDate: true,
+        currentStatus: true,
+        description: true,
+        isArchived: true,
+        department: { select: { name: true } },
+        position: { select: { name: true } },
+      },
+    });
+
+    return {
+      success: true,
+      data: employees.map((employee) => ({
+        employeeId: employee.employeeId,
+        employeeCode: employee.employeeCode,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        img: employee.img ?? null,
+        department: employee.department?.name ?? null,
+        position: employee.position?.name ?? null,
+        email: employee.email ?? null,
+        startDate: employee.startDate?.toISOString() ?? null,
+        endDate: employee.endDate?.toISOString() ?? null,
+        currentStatus: employee.currentStatus ?? null,
+        description: employee.description ?? null,
+        isArchived: Boolean(employee.isArchived),
+      })),
+    };
+  } catch (error) {
+    console.error("Error in getEmployeesDirectory:", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return {
+      success: false,
+      error: "Failed to fetch employees directory. Check server logs for details.",
     };
   }
 }

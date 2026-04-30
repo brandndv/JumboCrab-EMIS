@@ -1,7 +1,5 @@
 "use client";
 
-import * as faceapi from "face-api.js";
-
 export const FACE_API_MODEL_VERSION =
   "face-api.js@0.22.2/tiny-face-detector+face-landmark-68+face-recognition";
 
@@ -56,6 +54,10 @@ export type FaceApiVerificationPayload = {
 
 type PointLike = { x: number; y: number };
 type FaceInput = HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+type FaceApiModule = typeof import("face-api.js");
+type FaceApiDetectionResult = import("face-api.js").WithFaceDescriptor<
+  import("face-api.js").WithFaceLandmarks<import("face-api.js").WithFaceDetection<object>>
+>;
 
 export class FaceApiClientError extends Error {
   reason: string;
@@ -70,9 +72,25 @@ export class FaceApiClientError extends Error {
 }
 
 let modelsPromise: Promise<void> | null = null;
+let faceApiModulePromise: Promise<FaceApiModule> | null = null;
 
 const modelUrl = "/models/face-api";
-const detectorOptions = () =>
+const getFaceApi = async (): Promise<FaceApiModule> => {
+  if (typeof window === "undefined") {
+    throw new Error("face-api.js can only load in the browser.");
+  }
+
+  if (!faceApiModulePromise) {
+    faceApiModulePromise = import("face-api.js").catch((error) => {
+      faceApiModulePromise = null;
+      throw error;
+    });
+  }
+
+  return faceApiModulePromise;
+};
+
+const detectorOptions = (faceapi: FaceApiModule) =>
   new faceapi.TinyFaceDetectorOptions({
     inputSize: 320,
     scoreThreshold: 0.45,
@@ -143,7 +161,7 @@ const averageDescriptors = (descriptors: number[][]) => {
 };
 
 const summarizeLandmarks = (
-  landmarks: faceapi.FaceLandmarks68,
+  landmarks: import("face-api.js").FaceLandmarks68,
   input: FaceInput,
 ) => {
   const leftEye = landmarks.getLeftEye();
@@ -172,9 +190,7 @@ const summarizeLandmarks = (
 };
 
 const metadataFromDetection = (
-  result: faceapi.WithFaceDescriptor<
-    faceapi.WithFaceLandmarks<faceapi.WithFaceDetection<object>>
-  >,
+  result: FaceApiDetectionResult,
   input: FaceInput,
 ): FaceApiDescriptorMetadata => {
   const { width: inputWidth, height: inputHeight } = inputDimensions(input);
@@ -255,6 +271,8 @@ export const livenessInstructionText = (prompt: FaceApiLivenessPrompt) => {
 
 export const loadFaceApiModels = async () => {
   if (!modelsPromise) {
+    const faceapi = await getFaceApi();
+
     modelsPromise = Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl),
       faceapi.nets.faceLandmark68Net.loadFromUri(modelUrl),
@@ -276,9 +294,10 @@ export const captureFaceDescriptor = async (
   input: FaceInput,
 ): Promise<FaceApiDescriptorResult> => {
   await loadFaceApiModels();
+  const faceapi = await getFaceApi();
 
   const detections = await faceapi
-    .detectAllFaces(input, detectorOptions())
+    .detectAllFaces(input, detectorOptions(faceapi))
     .withFaceLandmarks()
     .withFaceDescriptors();
 

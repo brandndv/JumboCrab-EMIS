@@ -1,16 +1,33 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { UsersCards } from "@/features/manage-users/users-cards";
 import { useUsers } from "@/features/manage-users/users-provider";
 import { Button } from "@/components/ui/button";
 import { usePathname, useRouter } from "next/navigation"; // Note: Use 'next/navigation' instead of 'next/router'
 import { Search } from "lucide-react";
 import { useToast } from "@/components/ui/toast-provider";
-import { UnassignedEmployees } from "@/features/manage-users/unassigned-employees";
 import { deleteUser, updateUser } from "@/actions/users/users-action";
 import { UsersLoadingState } from "@/features/manage-users/users-loading-state";
 import type { UserWithEmployee } from "@/lib/validations/users";
+
+const UnassignedEmployees = dynamic(
+  () =>
+    import("@/features/manage-users/unassigned-employees").then((module) => ({
+      default: module.UnassignedEmployees,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <p className="text-sm text-muted-foreground">
+          Loading unassigned employees...
+        </p>
+      </div>
+    ),
+  },
+);
 
 export default function UsersPageContent() {
   const { users, loading, error, refreshUsers } = useUsers();

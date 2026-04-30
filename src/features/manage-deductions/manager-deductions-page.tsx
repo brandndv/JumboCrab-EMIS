@@ -17,6 +17,7 @@ import {
   workflowStatusLabel,
 } from "@/features/manage-deductions/deduction-ui-helpers";
 import { DeductionProgress } from "@/features/manage-deductions/deduction-progress";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -242,11 +243,29 @@ export default function ManagerDeductionsPage({
                 {!loading &&
                   drafts.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="font-medium">
-                        {row.employeeName}
-                        <p className="text-xs text-muted-foreground">
-                          {row.employeeCode}
-                        </p>
+                      <TableCell className="min-w-56">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10 shrink-0">
+                            {row.avatarUrl ? (
+                              <AvatarImage src={row.avatarUrl} alt={row.employeeName} />
+                            ) : null}
+                            <AvatarFallback>
+                              {row.employeeName
+                                .split(" ")
+                                .filter(Boolean)
+                                .slice(0, 2)
+                                .map((part) => part[0])
+                                .join("")
+                                .toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <div className="font-medium">{row.employeeName}</div>
+                            <p className="text-xs text-muted-foreground">
+                              {row.employeeCode}
+                            </p>
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         {row.deductionName}
@@ -346,11 +365,29 @@ export default function ManagerDeductionsPage({
                 ) : null}
                 {reviewed.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell>
-                      {row.employeeName}
-                      <p className="text-xs text-muted-foreground">
-                        {row.employeeCode}
-                      </p>
+                    <TableCell className="min-w-56">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10 shrink-0">
+                          {row.avatarUrl ? (
+                            <AvatarImage src={row.avatarUrl} alt={row.employeeName} />
+                          ) : null}
+                          <AvatarFallback>
+                            {row.employeeName
+                              .split(" ")
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((part) => part[0])
+                              .join("")
+                              .toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <div className="font-medium">{row.employeeName}</div>
+                          <p className="text-xs text-muted-foreground">
+                            {row.employeeCode}
+                          </p>
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       {row.deductionName}

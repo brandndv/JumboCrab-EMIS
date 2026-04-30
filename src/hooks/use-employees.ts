@@ -1,16 +1,13 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { getEmployees } from "@/actions/employees/employees-action";
-import { Employee, validateEmployee } from "@/lib/validations/employees";
+  getEmployeesDirectory,
+  type EmployeeDirectoryRecord,
+} from "@/actions/employees/employees-action";
 
 export function useEmployeesState() {
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employees, setEmployees] = useState<EmployeeDirectoryRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -25,26 +22,15 @@ export function useEmployeesState() {
     setLoading(true);
     setError(null);
     try {
-      const response = await getEmployees();
+      const response = await getEmployeesDirectory();
 
       if (!response.success || !response.data) {
         throw new Error(response.error || "Failed to fetch employees");
       }
-
-      const validatedEmployees: Employee[] = [];
-      for (const emp of response.data) {
-        const result = validateEmployee(emp);
-        if (result.success) {
-          validatedEmployees.push(result.data);
-        } else {
-          console.error("Invalid employee data:", result.error);
-        }
-      }
-
-      setEmployees(validatedEmployees);
+      setEmployees(response.data);
 
       const uniqueDepartments = Array.from(
-        new Set(validatedEmployees.map((emp) => emp.department).filter(Boolean))
+        new Set(response.data.map((emp) => emp.department).filter(Boolean))
       ) as string[];
       setDepartments(uniqueDepartments);
     } catch (err) {

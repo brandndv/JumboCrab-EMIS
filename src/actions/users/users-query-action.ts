@@ -6,9 +6,10 @@ import { prisma } from "@/lib/prisma";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import {
   baseUserSelect,
+  directoryUserSelect,
   isHiddenManagementRole,
+  normalizeDirectoryUsers,
   normalizeUser,
-  normalizeUsers,
 } from "./users-shared";
 
 export async function getUsers(): Promise<{
@@ -23,12 +24,12 @@ export async function getUsers(): Promise<{
           not: Roles.Admin,
         },
       },
-      select: baseUserSelect,
+      select: directoryUserSelect,
       orderBy: {
         createdAt: "desc",
       },
     });
-    return { success: true, data: normalizeUsers(users), error: null };
+    return { success: true, data: normalizeDirectoryUsers(users), error: null };
   } catch (error) {
     console.error("Error fetching users:", error);
     return {
@@ -89,14 +90,14 @@ export async function getUsersWithEmployeeAccount(): Promise<{
           not: Roles.Admin,
         },
       },
-      select: baseUserSelect,
+      select: directoryUserSelect,
       orderBy: {
         createdAt: "desc",
       },
     });
     return {
       success: true,
-      data: normalizeUsers(users),
+      data: normalizeDirectoryUsers(users),
       error: null,
     };
   } catch (error) {

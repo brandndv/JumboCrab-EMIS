@@ -228,6 +228,11 @@ export default function EmployeeForm({
 
     fetchEmployee();
 
+    // View mode only needs the already-provided names, not select lookups.
+    if (mode === "view") {
+      return;
+    }
+
     // Load departments/positions from API for selects
     const fetchLookups = async () => {
       try {
@@ -1144,7 +1149,7 @@ export default function EmployeeForm({
               </Label>
               {mode === "view" ? (
                 <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
-                  {departments.find(
+                  {formData.department || departments.find(
                     (d) => d.departmentId === formData.departmentId,
                   )?.name || "-"}
                 </div>
@@ -1183,7 +1188,7 @@ export default function EmployeeForm({
               </Label>
               {mode === "view" ? (
                 <div className="min-h-[46px] px-3 py-2 bg-muted/30 rounded-lg border border-border flex items-center text-sm text-foreground w-full">
-                  {positions.find((p) => p.positionId === formData.positionId)
+                  {formData.position || positions.find((p) => p.positionId === formData.positionId)
                     ?.name || "-"}
                 </div>
               ) : (

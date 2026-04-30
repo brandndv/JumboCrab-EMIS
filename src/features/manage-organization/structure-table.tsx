@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  getOrganizationStructure,
   updateEmployeesSupervisorBulk,
   updateEmployeeSupervisor,
 } from "@/actions/organization/organization-structure-action";
@@ -31,6 +30,10 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  invalidateStructureData,
+  loadStructureData,
+} from "@/features/manage-organization/organization-data-cache";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
@@ -75,11 +78,11 @@ export function StructureTable({
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
   const hasReportedInitialLoadRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     try {
       setLoading(true);
       setError(null);
-      const result = await getOrganizationStructure();
+      const result = await loadStructureData({ force });
       if (!result.success) {
         throw new Error(result.error || "Failed to load structure");
       }
@@ -225,7 +228,8 @@ export function StructureTable({
       if (!result.success) {
         throw new Error(result.error || "Failed to update supervisor");
       }
-      await load();
+      invalidateStructureData();
+      await load(true);
       setAssignOpen(false);
       toast.success("Supervisor updated successfully.");
     } catch (err) {
@@ -255,7 +259,8 @@ export function StructureTable({
       if (!result.success) {
         throw new Error(result.error || "Failed to update supervisors");
       }
-      await load();
+      invalidateStructureData();
+      await load(true);
       setSelectedEmployeeIds([]);
       setBulkAssignOpen(false);
       toast.success("Supervisors updated successfully.", {
@@ -335,7 +340,7 @@ export function StructureTable({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => void load()}
+                onClick={() => void load(true)}
                 aria-label="Reload structure"
                 className="h-10 w-10"
               >

@@ -9,6 +9,22 @@ export type EmployeeActionRecord = PrismaEmployee & {
   position?: string | null;
 };
 
+export type EmployeeDirectoryRecord = {
+  employeeId: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  img?: string | null;
+  department?: string | null;
+  position?: string | null;
+  email?: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  currentStatus: string | null;
+  description?: string | null;
+  isArchived: boolean;
+};
+
 export type EmployeeCompensationHistoryItem = {
   id: string;
   positionId: string;

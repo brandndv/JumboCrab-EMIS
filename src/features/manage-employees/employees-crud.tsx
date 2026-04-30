@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { MoreHorizontalIcon, Pencil, Archive, Trash2 } from "lucide-react";
-import { Employee } from "@/lib/validations/employees";
+import type { EmployeeDirectoryRecord } from "@/actions/employees/employees-action";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,11 +12,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface EmployeesActionsProps {
-  employee: Employee;
+  employee: EmployeeDirectoryRecord;
   onEdit: (employeeId: string) => void;
-  onArchive: (employee: Employee) => void;
-  onUnarchive?: (employee: Employee) => void;
-  onDelete?: (employee: Employee) => void;
+  onArchive: (employee: EmployeeDirectoryRecord) => void;
+  onUnarchive?: (employee: EmployeeDirectoryRecord) => void;
+  onDelete?: (employee: EmployeeDirectoryRecord) => void;
   isArchivedView?: boolean;
 }
 

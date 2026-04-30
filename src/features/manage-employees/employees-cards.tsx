@@ -3,12 +3,12 @@
 import {
   deleteEmployee,
   setEmployeeArchiveStatus,
+  type EmployeeDirectoryRecord,
 } from "@/actions/employees/employees-action";
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast-provider";
-import { Employee } from "@/lib/validations/employees";
 import { ChevronDown } from "lucide-react";
 import {
   Pagination,
@@ -26,7 +26,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const PAGE_SIZE_OPTIONS = [8, 12, 24] as const;
 
-const getEmployeeInitials = (employee: Employee) => {
+const getEmployeeInitials = (employee: EmployeeDirectoryRecord) => {
   const first = employee.firstName?.charAt(0) ?? "";
   const last = employee.lastName?.charAt(0) ?? "";
   const initials = `${first}${last}`.trim();
@@ -50,14 +50,14 @@ function getEntityName(value: unknown, fallback: string) {
   return fallback;
 }
 
-function getEmployeeDisplayName(employee: Employee) {
+function getEmployeeDisplayName(employee: EmployeeDirectoryRecord) {
   return `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim() || "Employee";
 }
 
 export default function EmployeesCards({
   employees,
 }: {
-  employees: Employee[];
+  employees: EmployeeDirectoryRecord[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -121,7 +121,7 @@ export default function EmployeesCards({
   };
 
   // Handle archive employee
-  const handleArchiveClick = async (employee: Employee) => {
+  const handleArchiveClick = async (employee: EmployeeDirectoryRecord) => {
     if (!employee.employeeId) return;
     const confirmed = window.confirm(
       `Archive ${employee.firstName ?? ""} ${employee.lastName ?? ""}?`,
@@ -146,7 +146,7 @@ export default function EmployeesCards({
     }
   };
 
-  const handleUnarchiveClick = async (employee: Employee) => {
+  const handleUnarchiveClick = async (employee: EmployeeDirectoryRecord) => {
     if (!employee.employeeId) return;
     try {
       const result = await setEmployeeArchiveStatus(employee.employeeId, false);
@@ -166,7 +166,7 @@ export default function EmployeesCards({
     }
   };
 
-  const handleDeleteClick = async (employee: Employee) => {
+  const handleDeleteClick = async (employee: EmployeeDirectoryRecord) => {
     if (!employee.employeeId) return;
     const confirmed = window.confirm(
       `Permanently delete ${employee.firstName ?? ""} ${
