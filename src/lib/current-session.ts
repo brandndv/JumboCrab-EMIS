@@ -50,6 +50,7 @@ export const getCurrentPlainSession = cache(
       email: user.email,
       role: user.role,
       isDisabled: user.isDisabled,
+      mustChangePassword: user.mustChangePassword,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       employee: user.employee

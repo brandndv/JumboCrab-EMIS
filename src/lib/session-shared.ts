@@ -7,6 +7,7 @@ export interface RawSessionData {
   employee?: unknown;
   isLoggedIn: boolean;
   isDisabled?: boolean;
+  mustChangePassword?: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }

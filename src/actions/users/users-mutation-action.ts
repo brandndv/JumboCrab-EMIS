@@ -1,7 +1,15 @@
 "use server";
 
-import { Roles } from "@prisma/client";
+import {
+  NotificationEventType,
+  NotificationModule,
+  NotificationSeverity,
+  Roles,
+} from "@prisma/client";
+import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { createAndDispatchNotification } from "@/lib/notifications";
+import { getForcedPasswordChangePath, normalizeRole } from "@/lib/rbac";
 import { hashPassword } from "@/lib/auth";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import {
@@ -24,6 +32,9 @@ export async function updateUser(input: {
   error?: string;
 }> {
   try {
+    const session = await getSession();
+    const actorUserId = session.userId ?? null;
+    const actorRole = normalizeRole(session.role);
     const userId =
       typeof input.userId === "string" ? input.userId.trim() : "";
     if (!userId) {
@@ -76,6 +87,8 @@ export async function updateUser(input: {
       const { salt, hash } = await hashPassword(input.password);
       updates.password = hash;
       updates.salt = salt;
+      updates.mustChangePassword = true;
+      updates.passwordChangedAt = null;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -118,6 +131,81 @@ export async function updateUser(input: {
       await db.employee.update({
         where: { employeeId: updatedUser.employee.employeeId },
         data: { isArchived: input.isDisabled },
+      });
+    }
+
+    const updatedRole = normalizeRole(updatedUser.role);
+    const actorLink =
+      actorRole != null ? `/${actorRole}/users/${updatedUser.userId}/view` : "/sign-in";
+
+    if (
+      typeof input.isDisabled === "boolean" &&
+      actorUserId &&
+      actorUserId !== updatedUser.userId
+    ) {
+      const targetLink = updatedRole ? `/${updatedRole}/account` : "/sign-in";
+
+      await createAndDispatchNotification({
+        eventType: input.isDisabled
+          ? NotificationEventType.ACCOUNT_DISABLED
+          : NotificationEventType.ACCOUNT_ENABLED,
+        module: NotificationModule.USERS,
+        title: input.isDisabled ? "Account disabled" : "Account enabled",
+        message: input.isDisabled
+          ? "A user account has been disabled."
+          : "A user account has been re-enabled.",
+        severity: input.isDisabled
+          ? NotificationSeverity.WARNING
+          : NotificationSeverity.SUCCESS,
+        actorUserId,
+        entityType: "User",
+        entityId: updatedUser.userId,
+        linkHref: actorLink,
+        recipients: {
+          userIds: [actorUserId],
+        },
+        emailEligible: false,
+      });
+
+      await createAndDispatchNotification({
+        eventType: input.isDisabled
+          ? NotificationEventType.ACCOUNT_DISABLED
+          : NotificationEventType.ACCOUNT_ENABLED,
+        module: NotificationModule.SECURITY,
+        title: input.isDisabled ? "Your account was disabled" : "Your account was enabled",
+        message: input.isDisabled
+          ? "Your JumboCrab EMIS account has been disabled. Contact an administrator for help."
+          : "Your JumboCrab EMIS account has been enabled again.",
+        severity: input.isDisabled
+          ? NotificationSeverity.WARNING
+          : NotificationSeverity.SUCCESS,
+        actorUserId,
+        entityType: "User",
+        entityId: updatedUser.userId,
+        linkHref: targetLink,
+        recipients: {
+          userIds: [updatedUser.userId],
+        },
+        emailEligible: true,
+      });
+    }
+
+    if (input.password && updatedRole) {
+      await createAndDispatchNotification({
+        eventType: NotificationEventType.PASSWORD_CHANGE_REQUIRED,
+        module: NotificationModule.SECURITY,
+        title: "Password reset required",
+        message:
+          "Your password was reset by an administrator. Change it after your next sign in.",
+        severity: NotificationSeverity.WARNING,
+        actorUserId,
+        entityType: "User",
+        entityId: updatedUser.userId,
+        linkHref: getForcedPasswordChangePath(updatedRole),
+        recipients: {
+          userIds: [updatedUser.userId],
+        },
+        emailEligible: true,
       });
     }
 

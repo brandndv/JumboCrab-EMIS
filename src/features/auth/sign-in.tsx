@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Eye, EyeOff, Lock, User } from "lucide-react";
 import { signInUser } from "@/actions/auth/auth-action";
-import { getHomePathForRole, normalizeRole } from "@/lib/rbac";
+import { normalizeRole } from "@/lib/rbac";
 import { withMinimumDelay } from "@/lib/min-loading-delay";
 import Image from "next/image";
 
@@ -49,10 +49,12 @@ const SignInForm = () => {
         }
 
         toast.success("Signed in successfully.", {
-          description: "Redirecting you to your dashboard.",
+          description: result.user.mustChangePassword
+            ? "Redirecting you to change your temporary password."
+            : "Redirecting you to your dashboard.",
         });
         shouldResetLoading = false;
-        router.replace(getHomePathForRole(role));
+        router.replace(result.user.redirectPath);
         return;
       } else {
         setError(

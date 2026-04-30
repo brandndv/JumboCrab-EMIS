@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { unsealData } from "iron-session";
 import {
   getAllowedRolesForPath,
+  getForcedPasswordChangePath,
   getHomePathForRole,
   getRoleFromPath,
   normalizeRole,
@@ -11,6 +12,7 @@ import {
 type SessionPayload = {
   isLoggedIn?: boolean;
   role?: string;
+  mustChangePassword?: boolean;
 };
 
 const SESSION_COOKIE_NAME = "jumbo-auth";
@@ -56,9 +58,10 @@ async function readSession(request: NextRequest) {
     return {
       isLoggedIn: Boolean(session?.isLoggedIn),
       role: normalizeRole(session?.role),
+      mustChangePassword: Boolean(session?.mustChangePassword),
     };
   } catch {
-    return { isLoggedIn: false, role: null };
+    return { isLoggedIn: false, role: null, mustChangePassword: false };
   }
 }
 
@@ -81,6 +84,15 @@ export async function runRouteGuard(request: NextRequest) {
 
   if (!session.isLoggedIn || !session.role) {
     return redirectToSignIn(request);
+  }
+
+  const forcedPasswordPath = getForcedPasswordChangePath(session.role);
+  if (session.mustChangePassword && pathname !== forcedPasswordPath) {
+    return createRedirect(request, forcedPasswordPath);
+  }
+
+  if (!session.mustChangePassword && pathname === forcedPasswordPath) {
+    return createRedirect(request, getHomePathForRole(session.role));
   }
 
   const roleFromPath = getRoleFromPath(pathname);

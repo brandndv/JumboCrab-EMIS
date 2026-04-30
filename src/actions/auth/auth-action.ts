@@ -1,10 +1,23 @@
 "use server";
 
-import { Roles } from "@prisma/client";
+import crypto from "crypto";
+import {
+  NotificationEventType,
+  NotificationModule,
+  NotificationSeverity,
+  Roles,
+} from "@prisma/client";
 import { getSession, hashPassword, sessionOptions, signIn } from "@/lib/auth";
+import {
+  buildAccountCreatedEmail,
+  getAppBaseUrl,
+  isEmailConfigured,
+  sendEmail,
+} from "@/lib/email";
 import { getRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
-import { normalizeRole } from "@/lib/rbac";
+import { createAndDispatchNotification } from "@/lib/notifications";
+import { getPostSignInPath, normalizeRole } from "@/lib/rbac";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 
@@ -38,6 +51,8 @@ export async function signInUser(input: {
     username: string;
     email: string;
     role: Roles;
+    mustChangePassword: boolean;
+    redirectPath: string;
   };
   error?: string;
 }> {
@@ -78,8 +93,17 @@ export async function signInUser(input: {
     session.username = result.user.username;
     session.email = result.user.email;
     session.role = result.user.role;
+    session.mustChangePassword = result.user.mustChangePassword;
     session.isLoggedIn = true;
     await session.save();
+
+    const normalizedRole = normalizeRole(result.user.role);
+    if (!normalizedRole) {
+      return {
+        success: false,
+        error: "This account role is no longer supported. Contact an administrator.",
+      };
+    }
 
     return {
       success: true,
@@ -88,6 +112,11 @@ export async function signInUser(input: {
         username: result.user.username,
         email: result.user.email,
         role: result.user.role,
+        mustChangePassword: result.user.mustChangePassword,
+        redirectPath: getPostSignInPath(
+          normalizedRole,
+          result.user.mustChangePassword,
+        ),
       },
     };
   } catch (error) {
@@ -124,10 +153,17 @@ export async function getAuthRole(): Promise<{
   }
 }
 
+function generateTemporaryPassword() {
+  return crypto.randomBytes(9).toString("base64url");
+}
+
+function formatRoleLabel(role: string) {
+  return role.replace(/([A-Z])/g, " $1").replace(/^./, (value) => value.toUpperCase());
+}
+
 export async function createAuthUser(input: {
   username: string;
   email: string;
-  password: string;
   role: Roles | string;
   employeeId?: string | null;
 }): Promise<{
@@ -138,6 +174,7 @@ export async function createAuthUser(input: {
     email: string;
     role: Roles;
     isDisabled: boolean;
+    mustChangePassword: boolean;
     createdAt: Date;
     updatedAt: Date;
     employee?: {
@@ -147,21 +184,26 @@ export async function createAuthUser(input: {
       lastName: string;
     } | null;
   };
+  emailSent?: boolean;
+  temporaryPassword?: string;
+  warning?: string;
   error?: string;
 }> {
   try {
+    const session = await getSession();
+    const actorRole = normalizeRole(session.role);
+    const actorUserId = session.userId ?? null;
     const username =
       typeof input.username === "string" ? input.username.trim() : "";
     const email = typeof input.email === "string" ? input.email.trim() : "";
-    const password = typeof input.password === "string" ? input.password : "";
     const role = input.role;
     const employeeId =
       typeof input.employeeId === "string" ? input.employeeId : null;
 
-    if (!username || !password || !email || !role) {
+    if (!username || !email || !role) {
       return {
         success: false,
-        error: "Username, email, password, and role are required",
+        error: "Username, email, and role are required",
       };
     }
 
@@ -184,13 +226,6 @@ export async function createAuthUser(input: {
       return {
         success: false,
         error: "Employee ID is required for employee role",
-      };
-    }
-
-    if (password.length < 6) {
-      return {
-        success: false,
-        error: "Password must be at least 6 characters",
       };
     }
 
@@ -235,7 +270,8 @@ export async function createAuthUser(input: {
       }
     }
 
-    const { salt, hash } = await hashPassword(password);
+    const temporaryPassword = generateTemporaryPassword();
+    const { salt, hash } = await hashPassword(temporaryPassword);
 
     const user = await db.user.create({
       data: {
@@ -245,6 +281,8 @@ export async function createAuthUser(input: {
         salt,
         role: dbRole,
         isDisabled: false,
+        mustChangePassword: true,
+        passwordChangedAt: null,
         ...(appRole === "employee" &&
           employeeId && {
             employee: { connect: { employeeId } },
@@ -256,6 +294,7 @@ export async function createAuthUser(input: {
         email: true,
         role: true,
         isDisabled: true,
+        mustChangePassword: true,
         createdAt: true,
         updatedAt: true,
         employee: {
@@ -269,9 +308,123 @@ export async function createAuthUser(input: {
       },
     });
 
-    return { success: true, user };
+    const appBaseUrl = getAppBaseUrl();
+    const signInUrl = new URL("/sign-in", appBaseUrl).toString();
+    let emailSent = false;
+    let warning: string | undefined;
+
+    if (isEmailConfigured()) {
+      try {
+        const payload = buildAccountCreatedEmail({
+          username,
+          tempPassword: temporaryPassword,
+          roleLabel: formatRoleLabel(appRole),
+          signInUrl,
+        });
+        await sendEmail({
+          to: email,
+          ...payload,
+        });
+        emailSent = true;
+      } catch (error) {
+        warning =
+          error instanceof Error
+            ? error.message
+            : "Failed to send credentials email.";
+      }
+    } else {
+      warning = "SMTP is not configured. Credentials email was not sent.";
+    }
+
+    await createAndDispatchNotification({
+      eventType: NotificationEventType.ACCOUNT_CREATED,
+      module: NotificationModule.USERS,
+      title: "Account created",
+      message: "Your JumboCrab EMIS account is ready. Change your temporary password on first sign in.",
+      severity: NotificationSeverity.SUCCESS,
+      actorUserId,
+      entityType: "User",
+      entityId: user.userId,
+      linkHref: `/${appRole}/account`,
+      recipients: {
+        userIds: [user.userId],
+      },
+      emailEligible: false,
+    });
+
+    if (!emailSent) {
+      await createAndDispatchNotification({
+        eventType: NotificationEventType.ACCOUNT_CREDENTIAL_EMAIL_FAILED,
+        module: NotificationModule.SECURITY,
+        title: "Credential email failed",
+        message: `Could not send account credentials for ${username}. Provide the temporary password manually.`,
+        severity: NotificationSeverity.WARNING,
+        actorUserId,
+        entityType: "User",
+        entityId: user.userId,
+        linkHref:
+          actorRole != null
+            ? `/${actorRole}/users/${user.userId}/view`
+            : "/sign-in",
+        recipients: {
+          userIds: actorUserId ? [actorUserId] : [],
+        },
+        emailEligible: false,
+      });
+    }
+
+    return {
+      success: true,
+      user,
+      emailSent,
+      temporaryPassword: emailSent ? undefined : temporaryPassword,
+      warning,
+    };
   } catch (error) {
     console.error("Create user error:", error);
     return { success: false, error: "Internal Server Error" };
+  }
+}
+
+export async function changeCurrentUserPassword(input: {
+  password: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getSession();
+    if (!session.isLoggedIn || !session.userId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const password =
+      typeof input.password === "string" ? input.password : "";
+
+    if (password.length < 6) {
+      return {
+        success: false,
+        error: "Password must be at least 6 characters.",
+      };
+    }
+
+    const { salt, hash } = await hashPassword(password);
+
+    await db.user.update({
+      where: {
+        userId: session.userId,
+      },
+      data: {
+        password: hash,
+        salt,
+        mustChangePassword: false,
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    session.mustChangePassword = false;
+    await session.save();
+
+    return { success: true };
+  } catch (error) {
+    console.error("Change current user password error:", error);
+    return { success: false, error: "Failed to update password." };
   }
 }

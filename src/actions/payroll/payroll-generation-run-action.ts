@@ -36,6 +36,7 @@ import {
   toPeriodDateKey,
   revalidatePayrollPages,
 } from "./payroll-shared";
+import { notifyPayrollReviewers } from "./payroll-notifications";
 import type { GeneratePayrollInput, PayrollRunDetail } from "@/types/payroll";
 
 export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
@@ -468,7 +469,17 @@ export async function generatePayrollRun(input: GeneratePayrollInput): Promise<{
     );
 
     revalidatePayrollPages();
-    return await getPayrollRunDetails(created);
+    const detail = await getPayrollRunDetails(created);
+    if (detail.success && detail.data) {
+      await notifyPayrollReviewers({
+        eventType: "PAYROLL_READY_FOR_REVIEW",
+        title: "Payroll ready for review",
+        message: "A payroll run is ready for General Manager review.",
+        actorUserId: session.userId ?? null,
+        payrollId: detail.data.payrollId,
+      });
+    }
+    return detail;
   } catch (error) {
     console.error("Error generating payroll run:", error);
     if (

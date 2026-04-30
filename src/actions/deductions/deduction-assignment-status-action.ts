@@ -3,9 +3,13 @@
 import {
   EmployeeDeductionAssignmentStatus,
   EmployeeDeductionWorkflowStatus,
+  NotificationEventType,
+  NotificationModule,
+  NotificationSeverity,
 } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { createAndDispatchNotification } from "@/lib/notifications";
 import {
   canCreateApprovedDeductionAssignments,
   employeeDeductionAssignmentInclude,
@@ -61,6 +65,23 @@ export async function setEmployeeDeductionAssignmentStatus(input: {
     });
 
     revalidateDeductionLayouts();
+    if (updated.status === EmployeeDeductionAssignmentStatus.COMPLETED) {
+      await createAndDispatchNotification({
+        eventType: NotificationEventType.DEDUCTION_ASSIGNMENT_COMPLETED,
+        module: NotificationModule.DEDUCTIONS,
+        title: "Deduction completed",
+        message: "A deduction assignment has been completed.",
+        severity: NotificationSeverity.SUCCESS,
+        actorUserId: session.userId ?? null,
+        entityType: "EmployeeDeductionAssignment",
+        entityId: updated.id,
+        linkHref: "/employee/deductions",
+        recipients: {
+          employeeIds: [updated.employeeId],
+        },
+        emailEligible: true,
+      });
+    }
     return { success: true, data: serializeDeductionAssignment(updated) };
   } catch (error) {
     console.error("Error updating deduction assignment status:", error);

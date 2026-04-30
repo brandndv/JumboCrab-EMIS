@@ -16,6 +16,7 @@ import {
   serializeDayOffRequest,
   toEmployeeName,
 } from "./requests-shared";
+import { notifyEmployeeOfRequestDecision } from "./requests-notifications";
 import type { DayOffRequestRow, RequestReviewPayload } from "./types";
 
 export async function reviewDayOffRequest(
@@ -84,6 +85,16 @@ export async function reviewDayOffRequest(
       });
 
       revalidateRequestLayouts();
+      await notifyEmployeeOfRequestDecision({
+        eventType: "DAY_OFF_REQUEST_REJECTED",
+        title: "Day off request rejected",
+        message: "Your day off request was rejected.",
+        actorUserId: session.userId ?? null,
+        employeeId: reviewed.employee.employeeId,
+        entityType: "DayOffRequest",
+        entityId: reviewed.id,
+        linkHref: "/employee/day-off",
+      });
       return { success: true, data: serializeDayOffRequest(reviewed) };
     }
 
@@ -178,6 +189,16 @@ export async function reviewDayOffRequest(
     });
 
     revalidateRequestLayouts();
+    await notifyEmployeeOfRequestDecision({
+      eventType: "DAY_OFF_REQUEST_APPROVED",
+      title: "Day off request approved",
+      message: "Your day off request was approved.",
+      actorUserId: session.userId ?? null,
+      employeeId: reviewed.employee.employeeId,
+      entityType: "DayOffRequest",
+      entityId: reviewed.id,
+      linkHref: "/employee/day-off",
+    });
     return { success: true, data: serializeDayOffRequest(reviewed) };
   } catch (error) {
     console.error("Error reviewing day off request:", error);

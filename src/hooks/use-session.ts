@@ -35,6 +35,7 @@ function toSessionData(rawSession: RawSessionData | null | undefined) {
     email: rawSession.email || "",
     role,
     isDisabled: false,
+    mustChangePassword: Boolean(rawSession.mustChangePassword),
   };
 
   return {

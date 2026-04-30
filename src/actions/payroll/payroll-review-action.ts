@@ -18,6 +18,11 @@ import {
   canReviewAsManager,
   revalidatePayrollPages,
 } from "./payroll-shared";
+import {
+  notifyPayrollManagers,
+  notifyPayrollReleased,
+  notifyPayrollReviewers,
+} from "./payroll-notifications";
 import type { PayrollRunDetail, ReviewPayrollInput } from "@/types/payroll";
 
 export async function reviewPayrollRun(input: ReviewPayrollInput): Promise<{
@@ -149,7 +154,45 @@ export async function reviewPayrollRun(input: ReviewPayrollInput): Promise<{
     });
 
     revalidatePayrollPages();
-    return await getPayrollRunDetails(input.payrollId);
+    const detail = await getPayrollRunDetails(input.payrollId);
+    if (detail.success && detail.data) {
+      if (input.level === "MANAGER") {
+        await notifyPayrollReviewers({
+          eventType:
+            input.decision === "APPROVED"
+              ? "PAYROLL_MANAGER_APPROVED"
+              : "PAYROLL_MANAGER_REJECTED",
+          title:
+            input.decision === "APPROVED"
+              ? "Payroll approved by manager"
+              : "Payroll rejected by manager",
+          message:
+            input.decision === "APPROVED"
+              ? "A payroll run is ready for General Manager review."
+              : "A payroll run was rejected by the manager.",
+          actorUserId: session.userId ?? null,
+          payrollId: detail.data.payrollId,
+        });
+      } else {
+        await notifyPayrollManagers({
+          eventType:
+            input.decision === "APPROVED"
+              ? "PAYROLL_GM_APPROVED"
+              : "PAYROLL_GM_REJECTED",
+          title:
+            input.decision === "APPROVED"
+              ? "Payroll approved by General Manager"
+              : "Payroll rejected by General Manager",
+          message:
+            input.decision === "APPROVED"
+              ? "Payroll passed General Manager review."
+              : "Payroll was rejected by the General Manager.",
+          actorUserId: session.userId ?? null,
+          payrollId: detail.data.payrollId,
+        });
+      }
+    }
+    return detail;
   } catch (error) {
     console.error("Error reviewing payroll run:", error);
     return {
@@ -320,7 +363,11 @@ export async function releasePayrollRun(payrollId: string): Promise<{
     });
 
     revalidatePayrollPages();
-    return await getPayrollRunDetails(payrollId);
+    const detail = await getPayrollRunDetails(payrollId);
+    if (detail.success && detail.data) {
+      await notifyPayrollReleased(detail.data, session.userId ?? null);
+    }
+    return detail;
   } catch (error) {
     console.error("Error releasing payroll run:", error);
     return {

@@ -17,6 +17,7 @@ import {
   syncEmployeeCurrentStatusFromApprovedLeave,
   toZonedDayKey,
 } from "./requests-shared";
+import { notifyEmployeeOfRequestDecision } from "./requests-notifications";
 import type { LeaveRequestRow, RequestReviewPayload } from "./types";
 
 export async function reviewLeaveRequest(
@@ -98,6 +99,16 @@ export async function reviewLeaveRequest(
       });
 
       revalidateRequestLayouts();
+      await notifyEmployeeOfRequestDecision({
+        eventType: "LEAVE_REQUEST_REJECTED",
+        title: "Leave request rejected",
+        message: "Your leave request was rejected.",
+        actorUserId: session.userId ?? null,
+        employeeId: reviewed.employee.employeeId,
+        entityType: "LeaveRequest",
+        entityId: reviewed.id,
+        linkHref: "/employee/leave",
+      });
       return { success: true, data: serializeLeaveRequest(reviewed) };
     }
 
@@ -294,6 +305,16 @@ export async function reviewLeaveRequest(
     });
 
     revalidateRequestLayouts();
+    await notifyEmployeeOfRequestDecision({
+      eventType: "LEAVE_REQUEST_APPROVED",
+      title: "Leave request approved",
+      message: "Your leave request was approved.",
+      actorUserId: session.userId ?? null,
+      employeeId: reviewed.employee.employeeId,
+      entityType: "LeaveRequest",
+      entityId: reviewed.id,
+      linkHref: "/employee/leave",
+    });
     return { success: true, data: serializeLeaveRequest(reviewed) };
   } catch (error) {
     console.error("Error reviewing leave request:", error);

@@ -1,8 +1,14 @@
 "use server";
 
-import { Roles } from "@prisma/client";
+import {
+  NotificationEventType,
+  NotificationModule,
+  NotificationSeverity,
+  Roles,
+} from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { createAndDispatchNotification } from "@/lib/notifications";
 import {
   EMPLOYEE_VIOLATION_STATUS,
   FIXED_STRIKE_POINTS_PER_VIOLATION,
@@ -177,6 +183,40 @@ export async function createEmployeeViolation(input: {
       include: employeeViolationInclude,
     });
 
+    if (createdStatus === EMPLOYEE_VIOLATION_STATUS.DRAFT) {
+      await createAndDispatchNotification({
+        eventType: NotificationEventType.VIOLATION_SUBMITTED,
+        module: NotificationModule.VIOLATIONS,
+        title: "Violation draft submitted",
+        message: "A supervisor submitted a violation draft for review.",
+        severity: NotificationSeverity.INFO,
+        actorUserId: session.userId ?? null,
+        entityType: "EmployeeViolation",
+        entityId: created.id,
+        linkHref: "/manager/violations",
+        recipients: {
+          roles: [Roles.Admin, Roles.Manager],
+        },
+        emailEligible: false,
+      });
+    } else {
+      await createAndDispatchNotification({
+        eventType: NotificationEventType.VIOLATION_ACKNOWLEDGEMENT_REQUIRED,
+        module: NotificationModule.VIOLATIONS,
+        title: "Violation acknowledgement required",
+        message: "A new violation record requires your acknowledgement.",
+        severity: NotificationSeverity.WARNING,
+        actorUserId: session.userId ?? null,
+        entityType: "EmployeeViolation",
+        entityId: created.id,
+        linkHref: "/employee/violations",
+        recipients: {
+          employeeIds: [created.employeeId],
+        },
+        emailEligible: true,
+      });
+    }
+
     return { success: true, data: serializeViolation(created) };
   } catch (error) {
     console.error("Error creating employee violation:", error);
@@ -233,6 +273,24 @@ export async function setEmployeeViolationAcknowledged(input: {
       },
       include: employeeViolationInclude,
     });
+
+    if (Boolean(input.isAcknowledged)) {
+      await createAndDispatchNotification({
+        eventType: NotificationEventType.VIOLATION_ACKNOWLEDGED,
+        module: NotificationModule.VIOLATIONS,
+        title: "Violation acknowledged",
+        message: "An employee acknowledged a violation record.",
+        severity: NotificationSeverity.SUCCESS,
+        actorUserId: session.userId ?? null,
+        entityType: "EmployeeViolation",
+        entityId: updated.id,
+        linkHref: "/manager/violations",
+        recipients: {
+          roles: [Roles.Admin, Roles.Manager],
+        },
+        emailEligible: false,
+      });
+    }
 
     return { success: true, data: serializeViolation(updated) };
   } catch (error) {
@@ -332,6 +390,40 @@ export async function reviewEmployeeViolation(input: {
       },
       include: employeeViolationInclude,
     });
+
+    if (decision === EMPLOYEE_VIOLATION_STATUS.APPROVED) {
+      await createAndDispatchNotification({
+        eventType: NotificationEventType.VIOLATION_APPROVED,
+        module: NotificationModule.VIOLATIONS,
+        title: "Violation approved",
+        message: "A violation record was approved and requires employee acknowledgement.",
+        severity: NotificationSeverity.WARNING,
+        actorUserId: session.userId ?? null,
+        entityType: "EmployeeViolation",
+        entityId: reviewed.id,
+        linkHref: "/employee/violations",
+        recipients: {
+          employeeIds: [reviewed.employeeId],
+        },
+        emailEligible: true,
+      });
+    } else {
+      await createAndDispatchNotification({
+        eventType: NotificationEventType.VIOLATION_REJECTED,
+        module: NotificationModule.VIOLATIONS,
+        title: "Violation rejected",
+        message: "A violation draft was rejected during review.",
+        severity: NotificationSeverity.WARNING,
+        actorUserId: session.userId ?? null,
+        entityType: "EmployeeViolation",
+        entityId: reviewed.id,
+        linkHref: "/manager/violations",
+        recipients: {
+          roles: [Roles.Admin, Roles.Manager, Roles.Supervisor],
+        },
+        emailEligible: false,
+      });
+    }
 
     return { success: true, data: serializeViolation(reviewed) };
   } catch (error) {

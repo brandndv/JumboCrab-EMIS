@@ -16,6 +16,7 @@ import {
   serializeScheduleChangeRequest,
   toEmployeeName,
 } from "./requests-shared";
+import { notifyEmployeeOfRequestDecision } from "./requests-notifications";
 import type {
   RequestReviewPayload,
   ScheduleChangeRequestRow,
@@ -87,6 +88,16 @@ export async function reviewScheduleChangeRequest(
       });
 
       revalidateRequestLayouts();
+      await notifyEmployeeOfRequestDecision({
+        eventType: "SCHEDULE_CHANGE_REQUEST_REJECTED",
+        title: "Schedule change request rejected",
+        message: "Your schedule change request was rejected.",
+        actorUserId: session.userId ?? null,
+        employeeId: reviewed.employee.employeeId,
+        entityType: "ScheduleChangeRequest",
+        entityId: reviewed.id,
+        linkHref: "/employee/requests",
+      });
       return { success: true, data: serializeScheduleChangeRequest(reviewed) };
     }
 
@@ -183,6 +194,16 @@ export async function reviewScheduleChangeRequest(
     });
 
     revalidateRequestLayouts();
+    await notifyEmployeeOfRequestDecision({
+      eventType: "SCHEDULE_CHANGE_REQUEST_APPROVED",
+      title: "Schedule change request approved",
+      message: "Your schedule change request was approved.",
+      actorUserId: session.userId ?? null,
+      employeeId: reviewed.employee.employeeId,
+      entityType: "ScheduleChangeRequest",
+      entityId: reviewed.id,
+      linkHref: "/employee/requests",
+    });
     return { success: true, data: serializeScheduleChangeRequest(reviewed) };
   } catch (error) {
     console.error("Error reviewing schedule change request:", error);
