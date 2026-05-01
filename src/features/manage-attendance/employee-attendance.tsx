@@ -19,6 +19,7 @@ import {
   TableLoadingState,
 } from "@/components/loading/loading-states";
 import type { AttendanceRow } from "@/hooks/use-attendance";
+import type { AttendanceLiveEvent } from "@/lib/attendance-live/types";
 import { Table2 } from "lucide-react";
 import { TZ } from "@/lib/timezone";
 
@@ -71,6 +72,28 @@ const toTzIsoDate = (date: Date) =>
 
 const toTzDateKey = (value: string | Date) =>
   new Date(value).toLocaleDateString("en-CA", { timeZone: TZ });
+
+const mergeAttendanceRow = (
+  current: AttendanceRow[],
+  incoming: AttendanceLiveEvent["attendance"],
+) => {
+  if (!incoming) return current;
+
+  const key = `${incoming.employeeId}:${toTzDateKey(incoming.workDate)}`;
+  const next = [...current];
+  const index = next.findIndex(
+    (row) => `${row.employeeId}:${toTzDateKey(row.workDate)}` === key,
+  );
+
+  if (index >= 0) {
+    next[index] = incoming;
+  } else {
+    next.push(incoming);
+  }
+
+  next.sort((left, right) => left.workDate.localeCompare(right.workDate));
+  return next;
+};
 
 const parseIsoDateAtNoonUtc = (isoDate: string) => {
   const [year, month, day] = isoDate.split("-").map((part) => Number(part));
@@ -131,6 +154,7 @@ const EmployeeAttendance = () => {
   const [rowsLoading, setRowsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [hasLoadedRows, setHasLoadedRows] = useState(false);
+  const [connected, setConnected] = useState(false);
 
   const { options: periodOptions, defaultPeriod } = useMemo(
     () => buildCurrentMonthBimonthlyOptions(),
@@ -145,14 +169,18 @@ const EmployeeAttendance = () => {
     periodOptions.find((opt) => opt.value === period) ?? periodOptions[0];
 
   useEffect(() => {
-    const loadBimonthlyAttendance = async () => {
+    const loadBimonthlyAttendance = async (options?: { silent?: boolean }) => {
+      const silent = Boolean(options?.silent);
+
       if (!employeeId || !selectedRange) {
         setRows([]);
         setHasLoadedRows(true);
         return;
       }
       try {
-        setRowsLoading(true);
+        if (!silent) {
+          setRowsLoading(true);
+        }
         setRowsError(null);
         const result = await listAttendance({
           employeeId,
@@ -168,13 +196,108 @@ const EmployeeAttendance = () => {
           err instanceof Error ? err.message : "Failed to load attendance",
         );
       } finally {
-        setRowsLoading(false);
+        if (!silent) {
+          setRowsLoading(false);
+        }
         setHasLoadedRows(true);
       }
     };
 
     void loadBimonthlyAttendance();
   }, [employeeId, selectedRange]);
+
+  useEffect(() => {
+    if (!employeeId || !selectedRange) {
+      return;
+    }
+
+    let disposed = false;
+    let reconnectTimer: number | null = null;
+    let source: EventSource | null = null;
+
+    const clearReconnect = () => {
+      if (reconnectTimer != null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+
+    const connect = () => {
+      clearReconnect();
+      source = new EventSource(
+        `/api/attendance/stream?employeeId=${encodeURIComponent(employeeId)}`,
+      );
+
+      source.addEventListener("open", () => {
+        setConnected(true);
+        void listAttendance({
+          employeeId,
+          start: selectedRange.start,
+          end: selectedRange.end,
+        }).then((result) => {
+          if (!disposed && result.success) {
+            setRows((result.data ?? []) as AttendanceRow[]);
+          }
+        });
+      });
+
+      source.addEventListener("attendance-update", (event) => {
+        const payload = JSON.parse((event as MessageEvent).data) as AttendanceLiveEvent;
+        const workDateKey = payload.workDate.slice(0, 10);
+        if (
+          workDateKey < selectedRange.start ||
+          workDateKey > selectedRange.end
+        ) {
+          return;
+        }
+        setRows((current) => mergeAttendanceRow(current, payload.attendance));
+      });
+
+      source.addEventListener("error", () => {
+        setConnected(false);
+        source?.close();
+        source = null;
+        if (!disposed) {
+          reconnectTimer = window.setTimeout(connect, 3_000);
+        }
+      });
+    };
+
+    connect();
+
+    return () => {
+      disposed = true;
+      setConnected(false);
+      clearReconnect();
+      source?.close();
+    };
+  }, [employeeId, selectedRange]);
+
+  useEffect(() => {
+    if (!employeeId || !selectedRange) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void listAttendance({
+        employeeId,
+        start: selectedRange.start,
+        end: selectedRange.end,
+      }).then((result) => {
+        if (result.success) {
+          setRows((result.data ?? []) as AttendanceRow[]);
+        }
+      });
+    }, connected ? 15_000 : 10_000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [connected, employeeId, selectedRange]);
 
   const rowsByDate = useMemo(() => {
     const map = new Map<string, AttendanceRow>();

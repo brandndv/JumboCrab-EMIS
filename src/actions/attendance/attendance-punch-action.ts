@@ -6,6 +6,7 @@ import {
   createPunchAndMaybeRecompute,
   recomputeAttendanceForDay,
 } from "@/lib/attendance";
+import { publishAttendanceUpdate } from "@/lib/attendance-live/service";
 import { endOfZonedDay, startOfZonedDay } from "@/lib/timezone";
 import {
   getAttendanceFreezeError,
@@ -15,9 +16,16 @@ import {
   toDayKey,
 } from "./attendance-shared";
 
-export async function listAttendancePunches(input: { start: string }) {
+export async function listAttendancePunches(input: {
+  start: string;
+  supervisorUserId?: string | null;
+}) {
   try {
     const start = typeof input.start === "string" ? input.start : "";
+    const supervisorUserId =
+      typeof input.supervisorUserId === "string"
+        ? input.supervisorUserId.trim()
+        : "";
     if (!start) {
       return { success: false, error: "start (yyyy-mm-dd) is required" };
     }
@@ -29,7 +37,12 @@ export async function listAttendancePunches(input: { start: string }) {
     const dayEnd = endOfZonedDay(parsed);
 
     const punches = await db.punch.findMany({
-      where: { punchTime: { gte: dayStart, lt: dayEnd } },
+      where: {
+        punchTime: { gte: dayStart, lt: dayEnd },
+        ...(supervisorUserId
+          ? { employee: { supervisorUserId, isArchived: false } }
+          : {}),
+      },
       orderBy: { punchTime: "asc" },
       include: {
         employee: {
@@ -147,9 +160,29 @@ export async function updatePunch(input: {
       },
     });
 
+    const originalWorkDate = startOfZonedDay(existing.punchTime);
+    const updatedWorkDate = startOfZonedDay(updated.punchTime);
+
     if (updated.employeeId && updated.punchTime) {
       await recomputeAttendanceForDay(updated.employeeId, updated.punchTime);
     }
+
+    if (
+      updated.employeeId &&
+      originalWorkDate.getTime() !== updatedWorkDate.getTime()
+    ) {
+      await recomputeAttendanceForDay(updated.employeeId, existing.punchTime);
+      await publishAttendanceUpdate({
+        employeeId: updated.employeeId,
+        workDate: originalWorkDate,
+      });
+    }
+
+    await publishAttendanceUpdate({
+      employeeId: updated.employeeId,
+      workDate: updatedWorkDate,
+      punchId: updated.id,
+    });
 
     return { success: true, data: serializePunch(updated) };
   } catch (error) {
@@ -194,6 +227,11 @@ export async function deletePunch(input: { id: string }) {
 
     await db.punch.delete({ where: { id } });
     await recomputeAttendanceForDay(existing.employeeId, existing.punchTime);
+    await publishAttendanceUpdate({
+      employeeId: existing.employeeId,
+      workDate: startOfZonedDay(existing.punchTime),
+      deletedPunchId: existing.id,
+    });
 
     return {
       success: true,
@@ -260,6 +298,12 @@ export async function recordAttendancePunch(input: {
       punchTime,
       source,
       recompute,
+    });
+
+    await publishAttendanceUpdate({
+      employeeId,
+      workDate: startOfZonedDay(punchTime),
+      punchId: punch.id,
     });
 
     return {

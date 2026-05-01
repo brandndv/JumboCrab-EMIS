@@ -288,13 +288,18 @@ export const buildSingleDayAttendanceList = async ({
   enriched,
   startDate,
   startLabel,
+  employeeWhere,
 }: {
   startDate: Date;
   startLabel: string;
   enriched: ReturnType<typeof enrichAttendanceRecords>;
+  employeeWhere?: Prisma.EmployeeWhereInput;
 }) => {
   const employees = await db.employee.findMany({
-    where: { isArchived: false },
+    where: {
+      isArchived: false,
+      ...(employeeWhere ?? {}),
+    },
     orderBy: { employeeCode: "asc" },
     select: {
       employeeId: true,

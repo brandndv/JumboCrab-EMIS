@@ -18,7 +18,6 @@ import {
   LayoutDashboard,
   Users,
   FileText,
-  Bell,
   Clock,
   BookMinus,
   HandCoins,
@@ -82,20 +81,6 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       href: `/${userRole}/dashboard`,
       hasSubmenu: false,
       // ========== DASHBOARD ACCESS ========= //
-      roles: [
-        "admin",
-        "generalManager",
-        "manager",
-        "supervisor",
-        "employee",
-      ],
-    },
-    {
-      id: "notifications",
-      label: "Notifications",
-      icon: Bell,
-      href: `/${userRole}/notifications`,
-      hasSubmenu: false,
       roles: [
         "admin",
         "generalManager",
@@ -248,6 +233,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         "admin",
         "generalManager",
         "manager",
+        "supervisor",
         "employee",
       ],
     },
@@ -597,7 +583,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                           <div
                             className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
                           >
-                            <item.icon className="h-5 w-5 shrink-0 transition-[width,height,transform] duration-300 ease-out" />
+                            <item.icon className="h-[1.1rem] w-[1.1rem] shrink-0 stroke-[1.6] transition-[width,height,transform] duration-300 ease-out" />
                             <span className="max-w-[12rem] overflow-hidden whitespace-nowrap font-medium opacity-100 transition-[max-width,opacity,transform] duration-300 ease-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
                               {item.label}
                             </span>
@@ -622,7 +608,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                           tabIndex={isSidebarCollapsed ? -1 : 0}
                         >
                           <ChevronRight
-                            className={`h-4 w-4 transition-transform duration-300 ease-out ${
+                            className={`h-[1rem] w-[1rem] stroke-[1.6] transition-transform duration-300 ease-out ${
                               openStates[item.id] && !isSidebarCollapsed
                                 ? "rotate-90"
                                 : "rotate-0"
@@ -693,7 +679,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                         <div
                           className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
                         >
-                          <item.icon className="h-5 w-5 shrink-0 transition-[width,height,transform] duration-300 ease-out" />
+                          <item.icon className="h-[1.1rem] w-[1.1rem] shrink-0 stroke-[1.6] transition-[width,height,transform] duration-300 ease-out" />
                           <span className="max-w-[12rem] overflow-hidden whitespace-nowrap font-medium opacity-100 transition-[max-width,opacity,transform] duration-300 ease-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
                             {item.label}
                           </span>

@@ -12,6 +12,7 @@ export async function listAttendance(input?: {
   start?: string | null;
   end?: string | null;
   employeeId?: string | null;
+  supervisorUserId?: string | null;
   status?: string | null;
   query?: string | null;
   departmentId?: string | null;
@@ -26,6 +27,10 @@ export async function listAttendance(input?: {
     const end = typeof input?.end === "string" ? input.end : null;
     const employeeId =
       typeof input?.employeeId === "string" ? input.employeeId.trim() : null;
+    const supervisorUserId =
+      typeof input?.supervisorUserId === "string"
+        ? input.supervisorUserId.trim()
+        : "";
     const status = typeof input?.status === "string" ? input.status : null;
     const query = typeof input?.query === "string" ? input.query.trim() : "";
     const queryTokens = query.split(/\s+/).filter(Boolean);
@@ -78,36 +83,44 @@ export async function listAttendance(input?: {
     if (variance === "OT") where.overtimeMinutesRaw = { gt: 0 };
     if (variance === "UT") where.undertimeMinutes = { gt: 0 };
     if (variance === "LATE") where.lateMinutes = { gt: 0 };
-    if (departmentId || positionId || queryTokens.length > 0) {
-      const employeeWhere: Prisma.EmployeeWhereInput = {
-        isArchived: false,
-      };
-      if (departmentId) {
-        employeeWhere.departmentId = departmentId;
-      }
-      if (positionId) {
-        employeeWhere.positionId = positionId;
-      }
-      if (queryTokens.length > 0) {
-        employeeWhere.AND = queryTokens.map((token) => ({
-          OR: [
-            { employeeCode: { contains: token, mode: "insensitive" } },
-            { firstName: { contains: token, mode: "insensitive" } },
-            { middleName: { contains: token, mode: "insensitive" } },
-            { lastName: { contains: token, mode: "insensitive" } },
-            {
-              department: {
-                is: { name: { contains: token, mode: "insensitive" } },
-              },
+    const employeeWhere: Prisma.EmployeeWhereInput = {
+      isArchived: false,
+    };
+    if (supervisorUserId) {
+      employeeWhere.supervisorUserId = supervisorUserId;
+    }
+    if (departmentId) {
+      employeeWhere.departmentId = departmentId;
+    }
+    if (positionId) {
+      employeeWhere.positionId = positionId;
+    }
+    if (queryTokens.length > 0) {
+      employeeWhere.AND = queryTokens.map((token) => ({
+        OR: [
+          { employeeCode: { contains: token, mode: "insensitive" } },
+          { firstName: { contains: token, mode: "insensitive" } },
+          { middleName: { contains: token, mode: "insensitive" } },
+          { lastName: { contains: token, mode: "insensitive" } },
+          {
+            department: {
+              is: { name: { contains: token, mode: "insensitive" } },
             },
-            {
-              position: {
-                is: { name: { contains: token, mode: "insensitive" } },
-              },
+          },
+          {
+            position: {
+              is: { name: { contains: token, mode: "insensitive" } },
             },
-          ],
-        }));
-      }
+          },
+        ],
+      }));
+    }
+    if (
+      supervisorUserId ||
+      departmentId ||
+      positionId ||
+      queryTokens.length > 0
+    ) {
       where.employee = { is: employeeWhere };
     }
 
@@ -140,6 +153,7 @@ export async function listAttendance(input?: {
         startDate: parsedStart,
         startLabel: start,
         enriched,
+        employeeWhere,
       });
     }
 

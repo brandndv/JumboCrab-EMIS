@@ -4,6 +4,7 @@ import { PUNCH_TYPE, Roles, type Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { publishAttendanceUpdate } from "@/lib/attendance-live/service";
 import {
   createPunchAndMaybeRecompute,
   getExpectedShiftForDate,
@@ -764,6 +765,12 @@ export async function verifyFaceAndRecordQrPunch(input: {
         contextLogId: securityResult?.contextLogId ?? null,
         breakStats: computeBreakStats([...punchesToday, punch.punch]),
       },
+    });
+
+    await publishAttendanceUpdate({
+      employeeId: employee.employeeId,
+      workDate: todayStart,
+      punchId: punch.punch.id,
     });
 
     return {

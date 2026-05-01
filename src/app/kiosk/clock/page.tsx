@@ -224,35 +224,7 @@ export default function KioskClockPage() {
     setQrVisibleUntil(null);
   }, []);
 
-  const handleQrScanSuccess = useCallback(
-    (ack: {
-      username: string;
-      employeeName: string;
-      employeeCode: string;
-      punchType: string;
-      punchTime: string;
-    }) => {
-      setQrVisibleUntil(null);
-      setQrScanNotice({
-        username: ack.username,
-        employeeName: ack.employeeName,
-        employeeCode: ack.employeeCode,
-        punchType: ack.punchType,
-        punchTime: ack.punchTime,
-      });
-      setInfo(null);
-      setError(null);
-      setStatusUser(ack.username);
-      toast.success("QR punch completed.", {
-        description: `${ack.employeeName} ${formatPunchLabel(
-          ack.punchType as Punch["punchType"],
-        )} recorded.`,
-      });
-    },
-    [toast],
-  );
-
-  const loadStatus = async (u: string) => {
+  const loadStatus = useCallback(async (u: string) => {
     const normalizedUsername = u.trim();
     if (!normalizedUsername) {
       setStatus(null);
@@ -277,6 +249,48 @@ export default function KioskClockPage() {
     } finally {
       setLoadingStatus(false);
     }
+  }, [currentDate]);
+
+  const handleQrScanSuccess = useCallback(
+    async (ack: {
+      username: string;
+      employeeName: string;
+      employeeCode: string;
+      punchType: string;
+      punchTime: string;
+    }) => {
+      setQrVisibleUntil(null);
+      setQrScanNotice({
+        username: ack.username,
+        employeeName: ack.employeeName,
+        employeeCode: ack.employeeCode,
+        punchType: ack.punchType,
+        punchTime: ack.punchTime,
+      });
+      setInfo(null);
+      setError(null);
+      setStatusUser(ack.username);
+      await loadStatus(ack.username);
+      toast.success("QR punch completed.", {
+        description: `${ack.employeeName} ${formatPunchLabel(
+          ack.punchType as Punch["punchType"],
+        )} recorded.`,
+      });
+    },
+    [loadStatus, toast],
+  );
+
+  const proceedFallbackLogin = async () => {
+    const normalizedUsername = username.trim();
+    if (!normalizedUsername || !password.trim()) {
+      setError("Username and password required");
+      return;
+    }
+
+    setError(null);
+    setInfo(null);
+    setStatusUser(normalizedUsername);
+    await loadStatus(normalizedUsername);
   };
 
   const loadSuggestions = async (term: string) => {
@@ -473,6 +487,7 @@ export default function KioskClockPage() {
       setPassword("");
       setSuggestions([]);
       setStatusUser(currentUsername);
+      await loadStatus(currentUsername);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to punch";
       setError(message);
@@ -751,6 +766,10 @@ export default function KioskClockPage() {
                       }}
                       title="Fallback employee login"
                       description="Enter a valid employee username with either the employee password or the kiosk fallback password."
+                      onSubmit={() => void proceedFallbackLogin()}
+                      submitLabel="Proceed to punch controls"
+                      submitDisabled={!username.trim() || !password.trim()}
+                      submitting={loadingStatus}
                     />
                   </div>
                 ) : null}

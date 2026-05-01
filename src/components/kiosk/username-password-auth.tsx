@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export type KioskAuthMode = "password" | "qr";
 
@@ -27,6 +28,10 @@ type UsernamePasswordAuthProps = {
   onSelectSuggestion: (username: string) => void;
   title?: string;
   description?: string;
+  onSubmit?: () => void;
+  submitLabel?: string;
+  submitDisabled?: boolean;
+  submitting?: boolean;
 };
 
 export function UsernamePasswordAuth({
@@ -41,9 +46,19 @@ export function UsernamePasswordAuth({
   onSelectSuggestion,
   title = "Manual fallback login",
   description = "Enter a valid employee username and password to punch from this kiosk.",
+  onSubmit,
+  submitLabel = "Proceed",
+  submitDisabled = false,
+  submitting = false,
 }: UsernamePasswordAuthProps) {
   return (
-    <div className="space-y-4">
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit?.();
+      }}
+    >
       <div className="space-y-1">
         <p className="text-sm font-semibold text-slate-100">{title}</p>
         <p className="text-sm text-slate-400">{description}</p>
@@ -96,6 +111,16 @@ export function UsernamePasswordAuth({
           ) : null}
         </div>
       ) : null}
-    </div>
+
+      <div className="flex flex-wrap gap-3">
+        <Button
+          type="submit"
+          disabled={submitDisabled || submitting}
+          className="h-11 rounded-2xl bg-orange-500 px-4 text-slate-950 hover:bg-orange-400"
+        >
+          {submitting ? "Working..." : submitLabel}
+        </Button>
+      </div>
+    </form>
   );
 }

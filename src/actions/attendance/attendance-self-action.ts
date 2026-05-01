@@ -7,6 +7,7 @@ import {
   createPunchAndMaybeRecompute,
   getExpectedShiftForDate,
 } from "@/lib/attendance";
+import { publishAttendanceUpdate } from "@/lib/attendance-live/service";
 import { startOfZonedDay, zonedNow } from "@/lib/timezone";
 import {
   computeBreakStats,
@@ -214,6 +215,12 @@ export async function recordSelfPunch(input: {
         },
       });
     }
+
+    await publishAttendanceUpdate({
+      employeeId: employee.employeeId,
+      workDate: todayStart,
+      punchId: punch.punch.id,
+    });
 
     return {
       success: true,

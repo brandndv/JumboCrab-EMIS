@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, Circle } from "lucide-react";
+import { Bell } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useSession } from "@/hooks/use-session";
 import { getNotificationsPathForRole } from "@/lib/rbac";
@@ -22,7 +22,7 @@ function formatTimestamp(value: string) {
 
 export function NotificationBell() {
   const { user } = useSession();
-  const { items, unreadCount, loading, connected, markRead } = useNotifications();
+  const { items, unreadCount, loading, markRead } = useNotifications();
 
   if (!user?.role) {
     return null;
@@ -52,14 +52,6 @@ export function NotificationBell() {
           <DropdownMenuLabel className="p-0 text-base font-semibold">
             Notifications
           </DropdownMenuLabel>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Circle
-              className={`h-2.5 w-2.5 fill-current ${
-                connected ? "text-success" : "text-muted-foreground"
-              }`}
-            />
-            {connected ? "Live" : "Reconnecting"}
-          </div>
         </div>
         <DropdownMenuSeparator />
         <div className="max-h-[24rem] overflow-y-auto p-2">

@@ -9,6 +9,7 @@ import {
   createPunchAndMaybeRecompute,
   getExpectedShiftForDate,
 } from "@/lib/attendance";
+import { publishAttendanceUpdate } from "@/lib/attendance-live/service";
 import { endOfZonedDay, startOfZonedDay, zonedNow } from "@/lib/timezone";
 import {
   isKioskPunchIpAllowed,
@@ -229,6 +230,12 @@ export async function recordKioskPunch(input: {
         payload: requestMetadata,
       });
     }
+
+    await publishAttendanceUpdate({
+      employeeId: user.employee.employeeId,
+      workDate: dayStart,
+      punchId: result.punch.id,
+    });
 
     return {
       success: true,

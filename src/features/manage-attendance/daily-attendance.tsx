@@ -15,7 +15,19 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, RefreshCcw, RotateCcw, Pencil, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  CircleHelp,
+  RefreshCcw,
+  RotateCcw,
+  Pencil,
+  Trash2,
+} from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { TZ } from "@/lib/timezone";
 import {
   deletePunch,
@@ -113,6 +125,9 @@ export function DailyAttendance() {
   } = useAttendance();
   const [filter, setFilter] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
+  const [positionFilter, setPositionFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [varianceFilter, setVarianceFilter] = useState("");
   const [punchSearch, setPunchSearch] = useState("");
   const [punchTypeFilter, setPunchTypeFilter] = useState("");
   const [punchEdit, setPunchEdit] = useState<PunchRow | null>(null);
@@ -143,7 +158,23 @@ export function DailyAttendance() {
       const deptMatch = deptFilter
         ? row.employee?.department?.name === deptFilter
         : true;
+      const positionMatch = positionFilter
+        ? row.employee?.position?.name === positionFilter
+        : true;
+      const statusMatch = statusFilter ? row.status === statusFilter : true;
+      const varianceMatch = varianceFilter
+        ? varianceFilter === "LATE"
+          ? (row.lateMinutes ?? 0) > 0
+          : varianceFilter === "UT"
+            ? (row.undertimeMinutes ?? 0) > 0
+            : varianceFilter === "OT"
+              ? (row.overtimeMinutesRaw ?? 0) > 0
+              : true
+        : true;
       if (!deptMatch) return false;
+      if (!positionMatch) return false;
+      if (!statusMatch) return false;
+      if (!varianceMatch) return false;
       if (!term) return true;
       return (
         empName.includes(term) ||
@@ -153,7 +184,7 @@ export function DailyAttendance() {
         row.status.toLowerCase().includes(term)
       );
     });
-  }, [rows, filter, deptFilter]);
+  }, [rows, filter, deptFilter, positionFilter, statusFilter, varianceFilter]);
 
   const deptOptions = useMemo(() => {
     const set = new Set<string>();
@@ -162,6 +193,30 @@ export function DailyAttendance() {
     });
     return Array.from(set).sort();
   }, [rows]);
+
+  const positionOptions = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => {
+      if (r.employee?.position?.name) set.add(r.employee.position.name);
+    });
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const statusOptions = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => {
+      if (r.status) set.add(r.status);
+    });
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const activeFilterCount = [
+    filter.trim(),
+    deptFilter,
+    positionFilter,
+    statusFilter,
+    varianceFilter,
+  ].filter(Boolean).length;
 
   const attendanceDatasetKey = useMemo(
     () =>
@@ -331,52 +386,131 @@ export function DailyAttendance() {
               onChange={(e) => setDate(e.target.value)}
               className="w-40"
             />
-            <Button onClick={load} size="sm" className="gap-2">
+            <Button onClick={() => void load()} size="sm" className="gap-2">
               <RefreshCcw className="h-4 w-4" /> Load
             </Button>
-            <Button
-              onClick={recomputeDay}
-              size="sm"
-              variant="outline"
-              className="gap-2"
-              disabled={recomputeLoading}
-            >
-              {recomputeLoading ? "Recomputing..." : "Recompute day"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={recomputeDay}
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                disabled={recomputeLoading}
+              >
+                {recomputeLoading ? "Rebuilding..." : "Rebuild day"}
+              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    aria-label="What does rebuild day do?"
+                  >
+                    <CircleHelp className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs text-sm">
+                  Rebuild day recalculates attendance for all unlocked employees
+                  on the selected date. Use this after manual punch edits,
+                  schedule changes, or to repair incorrect totals.
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4 p-4">
           {recomputeMessage && (
             <p className="text-sm text-muted-foreground">{recomputeMessage}</p>
           )}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <Input
-              placeholder="Search by name, code, department"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="w-full sm:w-72"
-            />
-            <div className="flex items-center gap-2">
-              <select
-                className="w-48 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                value={deptFilter}
-                onChange={(e) => setDeptFilter(e.target.value)}
-              >
-                <option value="">All departments</option>
-                {deptOptions.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-2"
-                onClick={() => setDate(todayISO())}
-              >
-                <RotateCcw className="h-4 w-4" /> Today
-              </Button>
+          <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">Filters</p>
+                  <Badge variant="outline" className="h-6 rounded-full px-2 text-xs">
+                    {activeFilterCount} active
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => setDate(todayISO())}
+                  >
+                    <RotateCcw className="h-4 w-4" /> Today
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => {
+                      setFilter("");
+                      setDeptFilter("");
+                      setPositionFilter("");
+                      setStatusFilter("");
+                      setVarianceFilter("");
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))]">
+                <Input
+                  placeholder="Search by name, code, department, position"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  className="w-full"
+                />
+                <select
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={deptFilter}
+                  onChange={(e) => setDeptFilter(e.target.value)}
+                >
+                  <option value="">All departments</option>
+                  {deptOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={positionFilter}
+                  onChange={(e) => setPositionFilter(e.target.value)}
+                >
+                  <option value="">All positions</option>
+                  {positionOptions.map((position) => (
+                    <option key={position} value={position}>
+                      {position}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="">All statuses</option>
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={varianceFilter}
+                  onChange={(e) => setVarianceFilter(e.target.value)}
+                >
+                  <option value="">All variance</option>
+                  <option value="LATE">Late only</option>
+                  <option value="UT">Undertime only</option>
+                  <option value="OT">Overtime only</option>
+                </select>
+              </div>
             </div>
           </div>
           {loading ? (

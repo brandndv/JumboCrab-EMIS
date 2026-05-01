@@ -11,11 +11,15 @@ const AttendanceContext = createContext<
 export function AttendanceProvider({
   children,
   initialDate,
+  supervisorUserId,
 }: {
   children: ReactNode;
   initialDate?: string;
+  supervisorUserId?: string;
 }) {
-  const contextValue = useAttendanceState(initialDate);
+  const contextValue = useAttendanceState(initialDate, {
+    supervisorUserId,
+  });
 
   return (
     <AttendanceContext.Provider value={contextValue}>
