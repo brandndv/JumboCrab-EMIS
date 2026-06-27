@@ -51,6 +51,7 @@ const AppSidebar = () => {
             email: user?.email || "",
             avatar: employee?.img || null,
             role,
+            switchAccount: user.switchAccount ?? null,
           }}
         />
       </SidebarFooter>

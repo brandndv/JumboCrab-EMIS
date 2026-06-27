@@ -9,6 +9,7 @@ import {
   getEmployeesDirectory as getEmployeesDirectoryImpl,
   getEmployeePositionHistory as getEmployeePositionHistoryImpl,
   getEmployees as getEmployeesImpl,
+  getEmployeesAvailableForTopAccountLink as getEmployeesAvailableForTopAccountLinkImpl,
   getEmployeesWithoutUser as getEmployeesWithoutUserImpl,
   getGeneratedEmployeeCode as getGeneratedEmployeeCodeImpl,
 } from "./employees-query-action";
@@ -93,6 +94,12 @@ export async function getEmployeesWithoutUser(
   ...args: Parameters<typeof getEmployeesWithoutUserImpl>
 ) {
   return getEmployeesWithoutUserImpl(...args);
+}
+
+export async function getEmployeesAvailableForTopAccountLink(
+  ...args: Parameters<typeof getEmployeesAvailableForTopAccountLinkImpl>
+) {
+  return getEmployeesAvailableForTopAccountLinkImpl(...args);
 }
 
 export async function getDepartments(

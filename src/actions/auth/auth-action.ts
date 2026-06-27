@@ -144,6 +144,96 @@ export async function signOutUser(): Promise<{
   }
 }
 
+export async function switchLinkedAccount(): Promise<{
+  success: boolean;
+  redirectPath?: string;
+  error?: string;
+}> {
+  try {
+    const session = await getSession();
+    if (!session.isLoggedIn || !session.userId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const currentUser = await db.user.findUnique({
+      where: { userId: session.userId },
+      select: {
+        userId: true,
+        role: true,
+        employeeProfile: {
+          select: {
+            user: {
+              select: {
+                userId: true,
+                username: true,
+                email: true,
+                role: true,
+                isDisabled: true,
+                mustChangePassword: true,
+              },
+            },
+          },
+        },
+        employee: {
+          select: {
+            topAccount: {
+              select: {
+                userId: true,
+                username: true,
+                email: true,
+                role: true,
+                isDisabled: true,
+                mustChangePassword: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!currentUser) {
+      return { success: false, error: "Current account not found" };
+    }
+
+    const currentRole = normalizeRole(currentUser.role);
+    const targetUser =
+      currentRole === "employee"
+        ? currentUser.employee?.topAccount
+        : currentRole === "manager" || currentRole === "supervisor"
+          ? currentUser.employeeProfile?.user
+          : null;
+
+    if (!targetUser) {
+      return { success: false, error: "No linked account available" };
+    }
+
+    if (targetUser.isDisabled) {
+      return { success: false, error: "Linked account is disabled" };
+    }
+
+    const targetRole = normalizeRole(targetUser.role);
+    if (!targetRole) {
+      return { success: false, error: "Linked account role is invalid" };
+    }
+
+    session.userId = targetUser.userId;
+    session.username = targetUser.username;
+    session.email = targetUser.email;
+    session.role = targetUser.role;
+    session.mustChangePassword = targetUser.mustChangePassword;
+    session.isLoggedIn = true;
+    await session.save();
+
+    return {
+      success: true,
+      redirectPath: getPostSignInPath(targetRole, targetUser.mustChangePassword),
+    };
+  } catch (error) {
+    console.error("Switch linked account error:", error);
+    return { success: false, error: "Failed to switch account" };
+  }
+}
+
 export async function getAuthRole(): Promise<{
   success: boolean;
   role: Roles | null;
@@ -171,6 +261,7 @@ export async function createAuthUser(input: {
   email: string;
   role: Roles | string;
   employeeId?: string | null;
+  employeeProfileId?: string | null;
 }): Promise<{
   success: boolean;
   user?: {
@@ -183,6 +274,12 @@ export async function createAuthUser(input: {
     createdAt: Date;
     updatedAt: Date;
     employee?: {
+      employeeId: string;
+      employeeCode: string;
+      firstName: string;
+      lastName: string;
+    } | null;
+    employeeProfile?: {
       employeeId: string;
       employeeCode: string;
       firstName: string;
@@ -204,6 +301,10 @@ export async function createAuthUser(input: {
     const role = input.role;
     const employeeId =
       typeof input.employeeId === "string" ? input.employeeId : null;
+    const employeeProfileId =
+      typeof input.employeeProfileId === "string"
+        ? input.employeeProfileId.trim()
+        : null;
 
     if (!username || !email || !role) {
       return {
@@ -235,6 +336,22 @@ export async function createAuthUser(input: {
       return {
         success: false,
         error: "Employee ID is required for employee role",
+      };
+    }
+
+    if (appRole !== "employee" && employeeId) {
+      return {
+        success: false,
+        error: "Only Employee role accounts can be linked as an employee login",
+      };
+    }
+
+    const canLinkEmployeeProfile =
+      appRole === "supervisor" || appRole === "manager";
+    if (employeeProfileId && !canLinkEmployeeProfile) {
+      return {
+        success: false,
+        error: "Only Supervisor or Manager accounts can link an employee profile",
       };
     }
 
@@ -279,6 +396,44 @@ export async function createAuthUser(input: {
       }
     }
 
+    if (employeeProfileId) {
+      const employeeProfile = await db.employee.findUnique({
+        where: { employeeId: employeeProfileId },
+        select: {
+          employeeId: true,
+          userId: true,
+          topAccount: {
+            select: {
+              userId: true,
+            },
+          },
+          user: {
+            select: {
+              role: true,
+            },
+          },
+        },
+      });
+
+      if (!employeeProfile) {
+        return { success: false, error: "Linked employee profile not found" };
+      }
+
+      if (!employeeProfile.userId || employeeProfile.user?.role !== Roles.Employee) {
+        return {
+          success: false,
+          error: "Linked employee profile must have an Employee role account",
+        };
+      }
+
+      if (employeeProfile.topAccount) {
+        return {
+          success: false,
+          error: "This employee profile is already linked to a top account",
+        };
+      }
+    }
+
     const temporaryPassword = generateTemporaryPassword();
     const { salt, hash } = await hashPassword(temporaryPassword);
 
@@ -296,6 +451,9 @@ export async function createAuthUser(input: {
           employeeId && {
             employee: { connect: { employeeId } },
           }),
+        ...(employeeProfileId && {
+          employeeProfile: { connect: { employeeId: employeeProfileId } },
+        }),
       },
       select: {
         userId: true,
@@ -307,6 +465,14 @@ export async function createAuthUser(input: {
         createdAt: true,
         updatedAt: true,
         employee: {
+          select: {
+            employeeId: true,
+            employeeCode: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        employeeProfile: {
           select: {
             employeeId: true,
             employeeCode: true,

@@ -33,6 +33,7 @@ export const baseUserSelect = {
   username: true,
   email: true,
   role: true,
+  employeeProfileId: true,
   isDisabled: true,
   mustChangePassword: true,
   createdAt: true,
@@ -52,6 +53,18 @@ export const baseUserSelect = {
       img: true,
     },
   },
+  employeeProfile: {
+    select: {
+      employeeId: true,
+      employeeCode: true,
+      firstName: true,
+      lastName: true,
+      position: { select: { name: true } },
+      department: { select: { name: true } },
+      img: true,
+      userId: true,
+    },
+  },
 } as const satisfies Prisma.UserSelect;
 
 export const directoryUserSelect = {
@@ -59,6 +72,7 @@ export const directoryUserSelect = {
   username: true,
   email: true,
   role: true,
+  employeeProfileId: true,
   isDisabled: true,
   mustChangePassword: true,
   createdAt: true,
@@ -71,6 +85,18 @@ export const directoryUserSelect = {
       position: { select: { name: true } },
       department: { select: { name: true } },
       img: true,
+    },
+  },
+  employeeProfile: {
+    select: {
+      employeeId: true,
+      employeeCode: true,
+      firstName: true,
+      lastName: true,
+      position: { select: { name: true } },
+      department: { select: { name: true } },
+      img: true,
+      userId: true,
     },
   },
 } as const satisfies Prisma.UserSelect;
@@ -89,6 +115,13 @@ export const normalizeUsers = (users: BaseUserRow[]): UserWithEmployee[] =>
           department: user.employee.department?.name ?? null,
         }
       : null,
+    employeeProfile: user.employeeProfile
+      ? {
+          ...user.employeeProfile,
+          position: user.employeeProfile.position?.name ?? null,
+          department: user.employeeProfile.department?.name ?? null,
+        }
+      : null,
   }));
 
 export const normalizeUser = (user: BaseUserRow): UserWithEmployee =>
@@ -105,6 +138,13 @@ export const normalizeDirectoryUsers = (
           ...user.employee,
           position: user.employee.position?.name ?? null,
           department: user.employee.department?.name ?? null,
+        }
+      : null,
+    employeeProfile: user.employeeProfile
+      ? {
+          ...user.employeeProfile,
+          position: user.employeeProfile.position?.name ?? null,
+          department: user.employeeProfile.department?.name ?? null,
         }
       : null,
   }));

@@ -29,6 +29,7 @@ export async function updateUser(input: {
   username?: string;
   email?: string;
   role?: string;
+  employeeProfileId?: string | null;
   password?: string;
   isDisabled?: boolean;
 }): Promise<{
@@ -48,7 +49,12 @@ export async function updateUser(input: {
 
     const existingUser = await db.user.findUnique({
       where: { userId },
-      select: { userId: true, role: true },
+      select: {
+        userId: true,
+        role: true,
+        employee: { select: { employeeId: true } },
+        employeeProfileId: true,
+      },
     });
     if (!existingUser) {
       return { success: false, error: "User not found" };
@@ -93,7 +99,73 @@ export async function updateUser(input: {
               : "You are not allowed to assign account roles",
         };
       }
+      if (dbRole !== Roles.Employee && existingUser.employee) {
+        return {
+          success: false,
+          error:
+            "Employee-linked accounts must keep Employee role. Create a separate supervisor/manager account for workforce management.",
+        };
+      }
       updates.role = dbRole;
+      if (dbRole !== Roles.Supervisor && dbRole !== Roles.Manager) {
+        updates.employeeProfileId = null;
+      }
+    }
+
+    if (input.employeeProfileId !== undefined) {
+      const normalizedEmployeeProfileId =
+        typeof input.employeeProfileId === "string"
+          ? input.employeeProfileId.trim()
+          : "";
+      const targetRole = (updates.role as Roles | undefined) ?? existingUser.role;
+      const canLinkEmployeeProfile =
+        targetRole === Roles.Supervisor || targetRole === Roles.Manager;
+
+      if (normalizedEmployeeProfileId && !canLinkEmployeeProfile) {
+        return {
+          success: false,
+          error:
+            "Only Supervisor or Manager accounts can link an employee profile",
+        };
+      }
+
+      if (normalizedEmployeeProfileId) {
+        const employeeProfile = await db.employee.findUnique({
+          where: { employeeId: normalizedEmployeeProfileId },
+          select: {
+            employeeId: true,
+            userId: true,
+            user: { select: { role: true } },
+            topAccount: { select: { userId: true } },
+          },
+        });
+
+        if (!employeeProfile) {
+          return { success: false, error: "Linked employee profile not found" };
+        }
+
+        if (
+          !employeeProfile.userId ||
+          employeeProfile.user?.role !== Roles.Employee
+        ) {
+          return {
+            success: false,
+            error: "Linked employee profile must have an Employee role account",
+          };
+        }
+
+        if (
+          employeeProfile.topAccount &&
+          employeeProfile.topAccount.userId !== userId
+        ) {
+          return {
+            success: false,
+            error: "This employee profile is already linked to a top account",
+          };
+        }
+      }
+
+      updates.employeeProfileId = normalizedEmployeeProfileId || null;
     }
 
     if (input.password) {

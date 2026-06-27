@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import type { Employee as PrismaEmployee, Prisma } from "@prisma/client";
+import { Roles, type Employee as PrismaEmployee, type Prisma } from "@prisma/client";
 import type { EmployeeActionRecord } from "./types";
 
 export const employeeLookupInclude = {
@@ -109,7 +109,7 @@ export const validateEmployeeRelationIds = async (
     input.userId
       ? db.user.findUnique({
           where: { userId: input.userId },
-          select: { userId: true },
+          select: { userId: true, role: true },
         })
       : Promise.resolve(null),
     input.supervisorUserId
@@ -134,6 +134,9 @@ export const validateEmployeeRelationIds = async (
 
   if (input.userId && !user) {
     return "Selected user not found";
+  }
+  if (input.userId && user?.role !== Roles.Employee) {
+    return "Selected user must be an Employee role account";
   }
   if (input.supervisorUserId && !supervisorUser) {
     return "Selected supervisor not found";

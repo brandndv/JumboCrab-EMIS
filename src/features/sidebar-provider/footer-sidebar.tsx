@@ -21,6 +21,7 @@ import {
 import { SignOutButton } from "@/components/ui/signout";
 import { ThemeMenuSub } from "@/components/theme-provider/theme-menu-sub";
 import Link from "next/link";
+import { AccountSwitchMenuItem } from "@/features/header-provider/account-switch-menu-item";
 
 const getUserInitials = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -39,6 +40,9 @@ export function FooterSidebar({
     email: string;
     avatar?: string | null;
     role: string | null;
+    switchAccount?: {
+      label: string;
+    } | null;
   };
 }) {
   const { isMobile } = useSidebar();
@@ -101,6 +105,9 @@ export function FooterSidebar({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              {user.switchAccount && (
+                <AccountSwitchMenuItem label={user.switchAccount.label} />
+              )}
               <DropdownMenuItem asChild>
                 <Link
                   href={user.role ? `/${user.role}/account` : "/sign-in"}

@@ -28,6 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AppHeaderLoadingState } from "@/components/loading/loading-states";
 import { CircleUserRound, LogOutIcon } from "lucide-react";
 import { NotificationBell } from "@/features/notifications/notification-bell";
+import { AccountSwitchMenuItem } from "./account-switch-menu-item";
 
 /**
  * NavHeader Component
@@ -207,6 +208,9 @@ const NavHeader = () => {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
+                {user.switchAccount && (
+                  <AccountSwitchMenuItem label={user.switchAccount.label} />
+                )}
                 <DropdownMenuItem asChild>
                   <Link
                     href={accountHref}

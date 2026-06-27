@@ -22,13 +22,23 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Search } from "lucide-react";
 import { useToast } from "@/components/ui/toast-provider";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import { getUserById, updateUser } from "@/actions/users/users-action";
+import { getEmployeesAvailableForTopAccountLink } from "@/actions/employees/employees-action";
 import { getManageableAccountRoles } from "@/lib/rbac";
 import { ModuleLoadingState } from "@/components/loading/loading-states";
 import { useSession } from "@/hooks/use-session";
+
+type LinkableEmployee = {
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  employeeCode: string;
+  email?: string | null;
+  img?: string | null;
+};
 
 const Field = ({
   label,
@@ -104,6 +114,11 @@ export default function UserEditPage({
   const [role, setRole] = useState<string>("");
   const [password, setPassword] = useState("");
   const [isDisabled, setIsDisabled] = useState(false);
+  const [linkableEmployees, setLinkableEmployees] = useState<LinkableEmployee[]>([]);
+  const [employeeProfileId, setEmployeeProfileId] = useState<string>("");
+  const [profileSearchTerm, setProfileSearchTerm] = useState("");
+  const [profileLoading, setProfileLoading] = useState(false);
+  const isTopAccountRole = role === "manager" || role === "supervisor";
   const generateTempPassword = () => {
     const chars =
       "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
@@ -150,6 +165,7 @@ export default function UserEditPage({
         setEmail(result.data.email ?? "");
         setRole(result.data.role ?? "");
         setIsDisabled(Boolean(result.data.isDisabled));
+        setEmployeeProfileId(result.data.employeeProfileId ?? "");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load user");
       } finally {
@@ -159,6 +175,28 @@ export default function UserEditPage({
 
     loadUser();
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId || !isTopAccountRole) {
+      setLinkableEmployees([]);
+      setEmployeeProfileId("");
+      return;
+    }
+
+    const loadLinkableEmployees = async () => {
+      setProfileLoading(true);
+      try {
+        const result = await getEmployeesAvailableForTopAccountLink(userId);
+        if (result.success && result.data) {
+          setLinkableEmployees(result.data);
+        }
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    loadLinkableEmployees();
+  }, [isTopAccountRole, userId]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -171,6 +209,7 @@ export default function UserEditPage({
         username: username.trim(),
         email: email.trim(),
         role,
+        employeeProfileId: isTopAccountRole ? employeeProfileId || null : null,
         isDisabled,
       };
       if (password.trim()) {
@@ -182,6 +221,7 @@ export default function UserEditPage({
         username: payload.username as string,
         email: payload.email as string,
         role: payload.role as string,
+        employeeProfileId: payload.employeeProfileId as string | null,
         password: payload.password as string | undefined,
         isDisabled: payload.isDisabled as boolean,
       });
@@ -295,6 +335,69 @@ export default function UserEditPage({
                     </SelectContent>
                   </Select>
                 </Field>
+                {isTopAccountRole && (
+                  <Field label="Linked Employee Profile">
+                    <Select
+                      value={employeeProfileId}
+                      onValueChange={setEmployeeProfileId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            profileLoading
+                              ? "Loading employee profiles..."
+                              : "Select employee profile"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72 overflow-y-auto">
+                        <div className="px-3 py-2">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Search profiles..."
+                              className="pl-8"
+                              value={profileSearchTerm}
+                              onChange={(e) =>
+                                setProfileSearchTerm(e.target.value)
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        </div>
+                        {linkableEmployees
+                          .filter((employee) =>
+                            `${employee.employeeCode} ${employee.firstName} ${employee.lastName}`
+                              .toLowerCase()
+                              .includes(profileSearchTerm.toLowerCase()),
+                          )
+                          .map((employee) => (
+                            <SelectItem
+                              key={employee.employeeId}
+                              value={employee.employeeId}
+                            >
+                              {employee.employeeCode} - {employee.firstName}{" "}
+                              {employee.lastName}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {employeeProfileId && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEmployeeProfileId("")}
+                      >
+                        Clear linked profile
+                      </Button>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Optional switch link for supervisor/manager who also has
+                      an Employee account.
+                    </p>
+                  </Field>
+                )}
                 <Field label="Status">
                   <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
                     <input

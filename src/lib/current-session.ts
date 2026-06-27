@@ -4,7 +4,7 @@ import { cache } from "react";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { RawSessionData } from "@/lib/session-shared";
-import { normalizeRole } from "@/lib/rbac";
+import { getHomePathForRole, normalizeRole } from "@/lib/rbac";
 
 const toRateNumber = (value: unknown): number | null => {
   if (value == null || value === "") return null;
@@ -35,14 +35,62 @@ export const getCurrentPlainSession = cache(
               },
             },
             department: { select: { name: true } },
+            topAccount: {
+              select: {
+                userId: true,
+                role: true,
+                isDisabled: true,
+              },
+            },
+          },
+        },
+        employeeProfile: {
+          select: {
+            employeeId: true,
+            user: {
+              select: {
+                userId: true,
+                role: true,
+                isDisabled: true,
+              },
+            },
           },
         },
       },
     });
 
-    if (!user || !normalizeRole(user.role)) {
+    const role = normalizeRole(user?.role);
+    if (!user || !role) {
       return null;
     }
+
+    const employeeTargetRole = normalizeRole(user.employee?.topAccount?.role);
+    const employeeSwitchTarget =
+      role === "employee" &&
+      user.employee?.topAccount &&
+      !user.employee.topAccount.isDisabled &&
+      employeeTargetRole
+        ? {
+            userId: user.employee.topAccount.userId,
+            role: employeeTargetRole,
+            label: `Switch to ${employeeTargetRole === "manager" ? "Manager" : "Supervisor"}`,
+            href: getHomePathForRole(employeeTargetRole),
+          }
+        : null;
+
+    const topTargetRole = normalizeRole(user.employeeProfile?.user?.role);
+    const topSwitchTarget =
+      (role === "manager" || role === "supervisor") &&
+      user.employeeProfile?.user &&
+      !user.employeeProfile.user.isDisabled &&
+      topTargetRole === "employee"
+        ? {
+            userId: user.employeeProfile.user.userId,
+            role: topTargetRole,
+            label: "Switch to Employee",
+            href: getHomePathForRole(topTargetRole),
+          }
+        : null;
 
     return {
       userId: user.userId,
@@ -59,8 +107,10 @@ export const getCurrentPlainSession = cache(
             dailyRate: toRateNumber(user.employee.position?.dailyRate),
             position: user.employee.position?.name ?? null,
             department: user.employee.department?.name ?? null,
+            topAccount: undefined,
           }
         : null,
+      switchAccount: employeeSwitchTarget ?? topSwitchTarget,
       isLoggedIn: true,
     };
   },

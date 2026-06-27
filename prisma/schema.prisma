@@ -19,7 +19,9 @@ model User {
   isDisabled                        Boolean                       @default(false)
   mustChangePassword                Boolean                       @default(false)
   passwordChangedAt                 DateTime?
+  employeeProfileId                 String?                       @unique
   employee                          Employee?
+  employeeProfile                   Employee?                     @relation("UserEmployeeProfile", fields: [employeeProfileId], references: [employeeId])
   // Users who supervise employees
   supervisedEmployees               Employee[]                    @relation("EmployeeSupervisorUser")
   draftedViolations                 EmployeeViolation[]           @relation("EmployeeViolationDraftedBy")
@@ -136,6 +138,7 @@ model Employee {
   updatedAt                    DateTime                  @updatedAt
   userId                       String?                   @unique
   user                         User?                     @relation(fields: [userId], references: [userId])
+  topAccount                   User?                     @relation("UserEmployeeProfile")
   departmentId                 String?
   positionId                   String?
   supervisorUserId             String?

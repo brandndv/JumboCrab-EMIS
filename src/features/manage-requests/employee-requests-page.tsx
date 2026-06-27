@@ -152,6 +152,21 @@ export default function EmployeeRequestsPage({
       ),
     [rows],
   );
+  const pendingCount = useMemo(
+    () => rows.filter((row) => row.status.startsWith("PENDING")).length,
+    [rows],
+  );
+  const approvedCount = useMemo(
+    () => rows.filter((row) => row.status === "APPROVED").length,
+    [rows],
+  );
+  const rejectedCount = useMemo(
+    () =>
+      rows.filter((row) =>
+        ["REJECTED", "DECLINED", "CANCELLED"].includes(row.status),
+      ).length,
+    [rows],
+  );
 
   const handleSwapResponse = async (
     row: Extract<RequestRow, { requestType: "SCHEDULE_SWAP" }>,
@@ -182,32 +197,73 @@ export default function EmployeeRequestsPage({
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <CardTitle>
-              {isLeaveView
-                ? "Leave Credits"
-                : isDayOffView
-                  ? "Change Day Off Requests"
-                  : "My Requests"}
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {isLeaveView
-                ? "Sick, SIL, and unpaid leave only. Legacy leave types stay hidden here."
-                : isDayOffView
-                  ? "Track upcoming day-off transfer requests."
-                  : "Track leave, change day off, change shift, shift swap, and cash advance requests."}
-            </p>
-          </div>
-          <Button asChild>
+    <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">
+            {isLeaveView
+              ? "Leave Credits"
+              : isDayOffView
+                ? "Change Day Off Requests"
+                : "My Requests"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {isLeaveView
+              ? "Sick, SIL, and unpaid leave only. Legacy leave types stay hidden here."
+              : isDayOffView
+                ? "Track upcoming day-off transfer requests."
+                : "Track leave, change day off, change shift, shift swap, and cash advance requests."}
+          </p>
+        </div>
+          <Button asChild className="w-full sm:w-auto">
             <Link href={isLeaveView ? "/employee/requests/leave" : "/employee/requests/add"}>
               {isLeaveView ? "New Leave Request" : "New Request"}
             </Link>
           </Button>
-        </CardHeader>
-      </Card>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Requests
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{rows.length}</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Pending
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{pendingCount}</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Approved
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{approvedCount}</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Closed
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{rejectedCount}</p>
+          </CardContent>
+        </Card>
+      </div>
 
       {isLeaveView && leaveSummary ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -245,7 +301,7 @@ export default function EmployeeRequestsPage({
       ) : null}
 
       {pendingIncomingSwaps.length > 0 ? (
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader>
             <CardTitle>Awaiting Your Swap Response</CardTitle>
           </CardHeader>
@@ -294,9 +350,9 @@ export default function EmployeeRequestsPage({
         </Card>
       ) : null}
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle>Request History</CardTitle>
+          <CardTitle className="text-lg">Request History</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -311,7 +367,10 @@ export default function EmployeeRequestsPage({
           ) : (
             <div className="space-y-4">
               {rows.map((row) => (
-                <div key={`${row.requestType}:${row.id}`} className="rounded-xl border border-border/70 p-4">
+                <div
+                  key={`${row.requestType}:${row.id}`}
+                  className="rounded-2xl border border-border/70 bg-background p-5"
+                >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="flex items-center gap-2">

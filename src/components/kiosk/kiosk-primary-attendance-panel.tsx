@@ -55,7 +55,7 @@ type PendingFacePunch = {
   employeeCode: string;
   username: string;
   nextPunch: string;
-  employeeQrToken?: string | null;
+  faceExpiresAt: number;
 };
 
 type KioskPrimaryAttendancePanelProps = {
@@ -91,6 +91,8 @@ const toErrorMessage = (err: unknown, fallback: string) =>
 
 const cameraUnavailableMessage =
   "Camera unavailable. Use HTTPS or kiosk fallback when camera access is blocked.";
+
+const FACE_VERIFICATION_WINDOW_MS = 30_000;
 
 const modeLabel = (mode: AttendancePunchMode) => {
   switch (mode) {
@@ -128,6 +130,7 @@ export function KioskPrimaryAttendancePanel({
   const [faceModelsReady, setFaceModelsReady] = useState(false);
   const [faceSubmitting, setFaceSubmitting] = useState(false);
   const [faceAutoStatus, setFaceAutoStatus] = useState("Starting camera");
+  const [faceNow, setFaceNow] = useState(Date.now());
   const [browserCameraAvailable, setBrowserCameraAvailable] = useState(true);
 
   const loadConfig = useCallback(async () => {
@@ -165,13 +168,28 @@ export function KioskPrimaryAttendancePanel({
     setFaceAutoStatus("Starting camera");
   };
 
-  const beginFaceStep = (input: PendingFacePunch) => {
+  const beginFaceStep = (input: Omit<PendingFacePunch, "faceExpiresAt">) => {
     faceAttemptSessionRef.current += 1;
-    setPendingFacePunch(input);
+    setPendingFacePunch({
+      ...input,
+      faceExpiresAt: Date.now() + FACE_VERIFICATION_WINDOW_MS,
+    });
     setStep("FACE");
     setError(null);
     setFaceAutoStatus("Starting camera");
   };
+
+  const expireFaceStep = useCallback(() => {
+    faceAttemptSessionRef.current += 1;
+    setStep("READY");
+    setPendingFacePunch(null);
+    setFaceSubmitting(false);
+    setFaceAutoStatus("Starting camera");
+    setError("Face verification expired. Please scan a fresh employee QR.");
+    toast.error("Face verification expired.", {
+      description: "Please scan a fresh employee QR.",
+    });
+  }, [toast]);
 
   const handlePunchSuccess = useCallback(
     async (data: PrimaryPunchNotice) => {
@@ -216,7 +234,6 @@ export function KioskPrimaryAttendancePanel({
         employeeCode: resolved.data.employeeCode,
         username: resolved.data.username,
         nextPunch: resolved.data.nextPunch,
-        employeeQrToken: token,
       });
     },
     [handlePunchSuccess, mode, toast],
@@ -343,7 +360,7 @@ export function KioskPrimaryAttendancePanel({
       if (video.videoWidth > 0 && video.videoHeight > 0) {
         setFaceCameraReady(true);
         setError(null);
-        setFaceAutoStatus("Hold still");
+        setFaceAutoStatus("Face camera directly");
       }
     };
 
@@ -364,6 +381,21 @@ export function KioskPrimaryAttendancePanel({
       video.removeEventListener("playing", markReady);
     };
   }, [faceStream, step]);
+
+  useEffect(() => {
+    if (step !== "FACE" || !pendingFacePunch) return;
+
+    setFaceNow(Date.now());
+    const interval = window.setInterval(() => {
+      const currentTime = Date.now();
+      setFaceNow(currentTime);
+      if (currentTime >= pendingFacePunch.faceExpiresAt) {
+        expireFaceStep();
+      }
+    }, 250);
+
+    return () => window.clearInterval(interval);
+  }, [expireFaceStep, pendingFacePunch, step]);
 
   const loadSuggestions = async (term: string) => {
     const normalizedTerm = term.trim();
@@ -423,6 +455,10 @@ export function KioskPrimaryAttendancePanel({
 
   const submitFaceVerification = async (sessionId: number) => {
     if (!pendingFacePunch) return;
+    if (Date.now() >= pendingFacePunch.faceExpiresAt) {
+      expireFaceStep();
+      return;
+    }
 
     const video = faceVideoRef.current;
     if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -433,16 +469,13 @@ export function KioskPrimaryAttendancePanel({
     try {
       setFaceSubmitting(true);
       setError(null);
-      setFaceAutoStatus("Looking for one face");
+      setFaceAutoStatus("Face camera directly");
       const facePayload = await captureFrontFaceVerificationPayload(video);
       if (faceAttemptSessionRef.current !== sessionId) return;
 
       setFaceAutoStatus("Verifying");
       const result = await verifyFaceAndRecordKioskPunch({
-        employeeQrToken: pendingFacePunch.employeeQrToken ?? undefined,
-        employeeId: pendingFacePunch.employeeQrToken
-          ? undefined
-          : pendingFacePunch.employeeId,
+        employeeId: pendingFacePunch.employeeId,
         kioskId:
           typeof window !== "undefined"
             ? process.env.NEXT_PUBLIC_KIOSK_ID || window.location.hostname
@@ -544,6 +577,10 @@ export function KioskPrimaryAttendancePanel({
     // submitFaceVerification reads current refs/state and controls its own retry status.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [faceCameraReady, faceModelsReady, pendingFacePunch, step]);
+
+  const faceSecondsLeft = pendingFacePunch
+    ? Math.max(0, Math.ceil((pendingFacePunch.faceExpiresAt - faceNow) / 1000))
+    : 0;
 
   return (
     <Card className={darkCardClass}>
@@ -689,7 +726,7 @@ export function KioskPrimaryAttendancePanel({
                   </p>
                 </div>
                 <Badge className="w-fit border border-orange-500/30 bg-orange-500/10 text-orange-200 hover:bg-orange-500/10">
-                  Auto verifying
+                  {faceSecondsLeft}s left
                 </Badge>
               </div>
             </div>
@@ -723,9 +760,14 @@ export function KioskPrimaryAttendancePanel({
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-medium text-slate-200">
-                {faceSubmitting ? "Verifying..." : faceAutoStatus}
-              </p>
+              <div>
+                <p className="text-sm font-medium text-slate-200">
+                  {faceSubmitting ? "Verifying..." : faceAutoStatus}
+                </p>
+                <p className="text-xs text-slate-400">
+                  Face verification expires in {faceSecondsLeft}s.
+                </p>
+              </div>
               <Button
                 variant="outline"
                 className="border-slate-700 text-slate-200 hover:bg-slate-900 hover:text-slate-50"

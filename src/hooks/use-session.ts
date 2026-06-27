@@ -42,6 +42,7 @@ function toSessionData(rawSession: RawSessionData | null | undefined) {
     user: {
       ...userData,
       employee: (rawSession.employee as Session["user"]["employee"]) ?? null,
+      switchAccount: rawSession.switchAccount ?? null,
     },
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
   } satisfies Session;

@@ -23,7 +23,7 @@ type EmployeeAttendanceQrPayload = {
   attendancePunchMode: AttendancePunchMode;
 };
 
-const QR_REFRESH_BUFFER_MS = 10_000;
+const QR_REFRESH_BUFFER_MS = 2_000;
 
 const modeCopy: Record<
   AttendancePunchMode,

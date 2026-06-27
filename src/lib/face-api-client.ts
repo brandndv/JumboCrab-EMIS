@@ -10,10 +10,13 @@ export const FACE_API_LIVENESS_PROMPTS = [
 ] as const;
 
 export const FRONT_FACE_LIVENESS_PROMPT = "Face camera directly" as const;
+export const FRONT_FACE_BLINK_LIVENESS_PROMPT =
+  "Face camera directly and blink" as const;
 
 export type FaceApiLivenessPrompt =
   | (typeof FACE_API_LIVENESS_PROMPTS)[number]
-  | typeof FRONT_FACE_LIVENESS_PROMPT;
+  | typeof FRONT_FACE_LIVENESS_PROMPT
+  | typeof FRONT_FACE_BLINK_LIVENESS_PROMPT;
 
 export type FaceApiDescriptorMetadata = {
   detectionScore: number;
@@ -54,6 +57,7 @@ export type FaceApiVerificationPayload = {
     yawRatioMin?: number;
     yawRatioMax?: number;
     frontFaceOnly?: boolean;
+    blinkRequired?: boolean;
   };
 };
 
@@ -105,6 +109,11 @@ const FRONT_FACE_MIN_DETECTION_SCORE = 0.55;
 const FRONT_FACE_MIN_BOX_RATIO = 0.16;
 const FRONT_FACE_MAX_BOX_RATIO = 0.72;
 const FRONT_FACE_MAX_ABS_YAW_RATIO = 0.1;
+const BLINK_MIN_SAMPLE_COUNT = 6;
+const BLINK_MIN_EYE_RATIO_DELTA = 0.025;
+const BLINK_MIN_RELATIVE_DROP = 0.12;
+const LIVE_FRONT_FACE_SAMPLE_COUNT = 18;
+const LIVE_FRONT_FACE_SAMPLE_DELAY_MS = 70;
 
 const delay = (ms: number) =>
   new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -276,6 +285,8 @@ export const livenessInstructionText = (prompt: FaceApiLivenessPrompt) => {
   switch (prompt) {
     case FRONT_FACE_LIVENESS_PROMPT:
       return "FACE CAMERA DIRECTLY";
+    case FRONT_FACE_BLINK_LIVENESS_PROMPT:
+      return "FACE CAMERA AND BLINK ONCE";
     case "Blink twice":
       return "BLINK TWICE NOW";
     case "Turn your head left":
@@ -317,6 +328,26 @@ const getFrontFaceSampleIssue = (sample: FaceApiDescriptorResult) => {
   }
 
   return null;
+};
+
+const hasBlinkMotion = (samples: FaceApiDescriptorResult[]) => {
+  const ears = samples
+    .map((sample) => sample.metadata.eyeAspectRatio)
+    .filter((value): value is number => typeof value === "number");
+
+  if (ears.length < BLINK_MIN_SAMPLE_COUNT) return false;
+
+  const earMin = Math.min(...ears);
+  const earMax = Math.max(...ears);
+  if (earMax <= 0) return false;
+
+  const delta = earMax - earMin;
+  const relativeDrop = delta / earMax;
+
+  return (
+    delta >= BLINK_MIN_EYE_RATIO_DELTA &&
+    relativeDrop >= BLINK_MIN_RELATIVE_DROP
+  );
 };
 
 export const loadFaceApiModels = async () => {
@@ -464,6 +495,65 @@ export const captureFrontFaceVerificationPayload = async (
       totalFrames: 3,
       elapsedMs: Math.round(performance.now() - startedAt),
       frontFaceOnly: true,
+      ...metadata,
+    },
+  };
+};
+
+export const captureLiveFrontFaceVerificationPayload = async (
+  video: HTMLVideoElement,
+): Promise<FaceApiVerificationPayload> => {
+  const startedAt = performance.now();
+  const samples: FaceApiDescriptorResult[] = [];
+  let faceCount = 0;
+
+  for (let index = 0; index < LIVE_FRONT_FACE_SAMPLE_COUNT; index += 1) {
+    const sample = await captureFaceDescriptor(video);
+    faceCount = sample.faceCount;
+
+    const issue = getFrontFaceSampleIssue(sample);
+    if (issue) {
+      throw new FaceApiClientError(issue.message, issue.reason, faceCount);
+    }
+
+    samples.push(sample);
+
+    if (index < LIVE_FRONT_FACE_SAMPLE_COUNT - 1) {
+      await delay(LIVE_FRONT_FACE_SAMPLE_DELAY_MS);
+    }
+  }
+
+  if (!hasBlinkMotion(samples)) {
+    throw new FaceApiClientError(
+      "Blink slowly once to verify live face.",
+      "blink_required",
+      faceCount,
+    );
+  }
+
+  const descriptor = averageDescriptors(samples.map((sample) => sample.descriptor));
+  if (!descriptor) {
+    throw new FaceApiClientError(
+      "Face descriptor is required before punching.",
+      "missing_face_descriptor",
+      faceCount,
+    );
+  }
+
+  const metadata = compactMetadata(samples);
+
+  return {
+    descriptor,
+    faceCount: 1,
+    livenessPassed: true,
+    livenessPrompt: FRONT_FACE_BLINK_LIVENESS_PROMPT,
+    modelVersion: FACE_API_MODEL_VERSION,
+    metadata: {
+      validFrames: samples.length,
+      totalFrames: LIVE_FRONT_FACE_SAMPLE_COUNT,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      frontFaceOnly: true,
+      blinkRequired: true,
       ...metadata,
     },
   };

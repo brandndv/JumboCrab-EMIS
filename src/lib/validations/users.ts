@@ -16,6 +16,7 @@ export const userSchema = z.object({
   username: z.string().min(1, "Username is required"),
   email: z.string().email("Invalid email address"),
   role: z.enum(APP_ROLES).default("employee"),
+  employeeProfileId: z.string().nullable().optional(),
   isDisabled: z.boolean().default(false),
   mustChangePassword: z.boolean().default(false),
   emailVerified: z.date().nullable().optional(),
@@ -40,6 +41,16 @@ export type UserWithEmployee = User & {
     startDate?: Date | string | null;
     endDate?: Date | string | null;
     img?: string | null;
+  } | null;
+  employeeProfile?: {
+    employeeId?: string | null;
+    employeeCode?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    position?: string | null;
+    department?: string | null;
+    img?: string | null;
+    userId?: string | null;
   } | null;
 };
 

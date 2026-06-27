@@ -26,7 +26,7 @@ import {
   serializeKioskPunch,
 } from "./kiosk-attendance-shared";
 
-const EMPLOYEE_QR_TTL_MS = 60_000;
+const EMPLOYEE_QR_TTL_MS = 10_000;
 
 export async function getKioskAttendanceConfig() {
   try {

@@ -1,5 +1,6 @@
 "use server";
 
+import { Roles } from "@prisma/client";
 import { db } from "@/lib/db";
 import { generateUniqueEmployeeCode } from "@/lib/employees/employee-code";
 import {
@@ -461,6 +462,56 @@ export async function getEmployeesWithoutUser() {
     return {
       success: false,
       error: "Failed to fetch employees without user accounts",
+    };
+  }
+}
+
+export async function getEmployeesAvailableForTopAccountLink(currentUserId?: string | null) {
+  try {
+    const employees = await db.employee.findMany({
+      where: {
+        user: {
+          is: {
+            role: Roles.Employee,
+          },
+        },
+        OR: [
+          { topAccount: null },
+          ...(currentUserId
+            ? [{ topAccount: { is: { userId: currentUserId } } }]
+            : []),
+        ],
+      },
+      select: {
+        employeeId: true,
+        firstName: true,
+        lastName: true,
+        employeeCode: true,
+        email: true,
+        img: true,
+        userId: true,
+        topAccount: {
+          select: {
+            userId: true,
+            username: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: {
+        employeeCode: "asc",
+      },
+    });
+
+    return {
+      success: true,
+      data: employees,
+    };
+  } catch (error) {
+    console.error("Error fetching employees available for top account link:", error);
+    return {
+      success: false,
+      error: "Failed to fetch employees available for top account link",
     };
   }
 }

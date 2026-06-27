@@ -21,7 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search } from "lucide-react";
-import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
+import {
+  getEmployeesAvailableForTopAccountLink,
+  getEmployeesWithoutUser,
+} from "@/actions/employees/employees-action";
 import { usePathname, useRouter } from "next/navigation";
 import { createAuthUser } from "@/actions/auth/auth-action";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -73,8 +76,14 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null,
   );
+  const [linkableEmployees, setLinkableEmployees] = useState<Employee[]>([]);
+  const [selectedEmployeeProfile, setSelectedEmployeeProfile] =
+    useState<Employee | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [profileSearchTerm, setProfileSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const isTopAccountRole = role === "manager" || role === "supervisor";
 
   useEffect(() => {
     router.prefetch(usersBasePath);
@@ -122,6 +131,35 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
   }, [role, selectedEmployee]);
 
   useEffect(() => {
+    if (!isTopAccountRole) {
+      setSelectedEmployeeProfile(null);
+      setProfileSearchTerm("");
+      return;
+    }
+
+    const fetchEmployees = async () => {
+      setIsProfileLoading(true);
+      try {
+        const response = await getEmployeesAvailableForTopAccountLink();
+        if (response.success && response.data) {
+          setLinkableEmployees(response.data);
+        } else {
+          console.error(
+            "Failed to fetch linkable employees:",
+            response.error,
+          );
+        }
+      } catch (error) {
+        console.error("Error fetching linkable employees:", error);
+      } finally {
+        setIsProfileLoading(false);
+      }
+    };
+
+    fetchEmployees();
+  }, [isTopAccountRole]);
+
+  useEffect(() => {
     if (selectedEmployee) {
       setRole("employee");
       setEmail(selectedEmployee.email ?? "");
@@ -153,6 +191,7 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
         email,
         role,
         employeeId: selectedEmployee?.employeeId || null,
+        employeeProfileId: selectedEmployeeProfile?.employeeId || null,
       });
 
       if (!result.success) {
@@ -163,7 +202,9 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
       setEmail("");
       setRole("");
       setSelectedEmployee(null);
+      setSelectedEmployeeProfile(null);
       setSearchTerm("");
+      setProfileSearchTerm("");
 
       if (result.emailSent) {
         toast.success("User created successfully.", {
@@ -395,6 +436,85 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
                         </p>
                       </div>
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isTopAccountRole && (
+              <div className="space-y-3 rounded-2xl border border-border/70 bg-muted/10 p-4 md:p-5">
+                <label className="text-sm font-medium leading-none">
+                  Linked Employee Profile
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Optional. Use when this {role} account belongs to an employee
+                  who also has an Employee login.
+                </p>
+                <Select
+                  value={selectedEmployeeProfile?.employeeId || ""}
+                  onValueChange={(value) => {
+                    const employee = linkableEmployees.find(
+                      (emp) => emp.employeeId === value,
+                    );
+                    setSelectedEmployeeProfile(employee || null);
+                  }}
+                >
+                  <SelectTrigger className="h-11 rounded-lg w-full bg-background text-foreground">
+                    <SelectValue
+                      placeholder={
+                        isProfileLoading
+                          ? "Loading employee profiles..."
+                          : "Select linked employee profile"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60 overflow-y-auto bg-card text-foreground">
+                    <div className="px-3 py-2">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search employee profiles..."
+                          className="pl-8"
+                          value={profileSearchTerm}
+                          onChange={(e) => setProfileSearchTerm(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    </div>
+                    {linkableEmployees
+                      .filter((emp) =>
+                        `${emp.firstName} ${emp.lastName} ${emp.employeeCode}`
+                          .toLowerCase()
+                          .includes(profileSearchTerm.toLowerCase()),
+                      )
+                      .map((employee) => (
+                        <SelectItem
+                          key={employee.employeeId}
+                          value={employee.employeeId}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">
+                              {employee.employeeCode}
+                            </span>
+                            <span>
+                              {employee.firstName} {employee.lastName}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
+                {selectedEmployeeProfile && (
+                  <div className="rounded-md border border-border bg-background p-3">
+                    <p className="text-sm text-foreground">
+                      <span className="font-medium">Switch link:</span>{" "}
+                      {selectedEmployeeProfile.firstName}{" "}
+                      {selectedEmployeeProfile.lastName}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Employee ID: {selectedEmployeeProfile.employeeCode}
+                    </p>
                   </div>
                 )}
               </div>
