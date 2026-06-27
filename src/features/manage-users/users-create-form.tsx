@@ -25,7 +25,8 @@ import { getEmployeesWithoutUser } from "@/actions/employees/employees-action";
 import { usePathname, useRouter } from "next/navigation";
 import { createAuthUser } from "@/actions/auth/auth-action";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MANAGEABLE_APP_ROLES, type AppRole } from "@/lib/rbac";
+import { getManageableAccountRoles, type AppRole } from "@/lib/rbac";
+import { useSession } from "@/hooks/use-session";
 
 type Employee = {
   employeeId: string;
@@ -55,7 +56,12 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
   const router = useRouter();
   const toast = useToast();
   const pathname = usePathname();
+  const { user: sessionUser } = useSession();
   const usersBasePath = useMemo(() => getUsersBasePath(pathname), [pathname]);
+  const allowedRoles = useMemo(
+    () => getManageableAccountRoles(sessionUser?.role),
+    [sessionUser?.role],
+  );
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<AppRole | "">(
@@ -127,6 +133,10 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
 
     if (!role) {
       setRoleError("Please select a role");
+      return;
+    }
+    if (!allowedRoles.includes(role)) {
+      setRoleError("You are not allowed to create this role");
       return;
     }
     if (role === "employee" && !selectedEmployee) {
@@ -271,7 +281,7 @@ const CreateUserForm = ({ defaultEmployeeId }: CreateUserFormProps) => {
                         <SelectValue placeholder="Select a role" />
                       </SelectTrigger>
                       <SelectContent className="bg-card text-foreground">
-                        {MANAGEABLE_APP_ROLES.map((roleValue) => (
+                        {allowedRoles.map((roleValue) => (
                           <SelectItem key={roleValue} value={roleValue}>
                             {roleValue.charAt(0).toUpperCase() +
                               roleValue

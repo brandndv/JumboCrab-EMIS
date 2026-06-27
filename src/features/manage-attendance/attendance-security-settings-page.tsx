@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getAttendanceSecuritySettings,
   updateAttendanceSecuritySettings,
@@ -11,10 +11,14 @@ import { Input } from "@/components/ui/input";
 import { ModuleLoadingState } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
 
+type AttendancePunchMode =
+  | "QR_ONLY"
+  | "EMPLOYEE_QR_KIOSK_FACE"
+  | "SEARCH_EMPLOYEE_KIOSK_FACE";
+
 type AttendanceSecuritySettingsForm = {
   gpsValidationEnabled: boolean;
-  faceRecognitionEnabled: boolean;
-  faceRequiredForQrPunch: boolean;
+  attendancePunchMode: AttendancePunchMode;
   faceLivenessRequired: boolean;
   faceMatchMaxDistance: number;
   faceFailureMode: string;
@@ -22,18 +26,14 @@ type AttendanceSecuritySettingsForm = {
 
 const defaultForm: AttendanceSecuritySettingsForm = {
   gpsValidationEnabled: false,
-  faceRecognitionEnabled: false,
-  faceRequiredForQrPunch: false,
+  attendancePunchMode: "QR_ONLY",
   faceLivenessRequired: true,
   faceMatchMaxDistance: 0.5,
   faceFailureMode: "BLOCK",
 };
 
-const settingRows: Array<{
-  key: Exclude<
-    keyof AttendanceSecuritySettingsForm,
-    "faceMatchMaxDistance" | "faceFailureMode"
-  >;
+const toggleRows: Array<{
+  key: "gpsValidationEnabled" | "faceLivenessRequired";
   title: string;
   description: string;
 }> = [
@@ -44,22 +44,35 @@ const settingRows: Array<{
       "Attach optional location coordinates to attendance punch context.",
   },
   {
-    key: "faceRecognitionEnabled",
-    title: "Enable face recognition",
-    description:
-      "Allow QR punches to require employee face verification before the punch is recorded.",
-  },
-  {
-    key: "faceRequiredForQrPunch",
-    title: "Require face for QR punch",
-    description:
-      "When enabled, employee QR scan opens camera and records punch only after face match passes.",
-  },
-  {
     key: "faceLivenessRequired",
     title: "Require liveness challenge",
     description:
-      "Ask employees to blink or turn their head and reject obvious photo-only attempts.",
+      "Ask employee to blink or turn head before face verification passes.",
+  },
+];
+
+const modeOptions: Array<{
+  value: AttendancePunchMode;
+  title: string;
+  description: string;
+}> = [
+  {
+    value: "QR_ONLY",
+    title: "QR only",
+    description:
+      "Employee shows personal QR. Kiosk scans it and records the next punch.",
+  },
+  {
+    value: "EMPLOYEE_QR_KIOSK_FACE",
+    title: "Employee QR then kiosk face",
+    description:
+      "Kiosk scans employee QR first, then kiosk camera verifies face before punch.",
+  },
+  {
+    value: "SEARCH_EMPLOYEE_KIOSK_FACE",
+    title: "Search employee then kiosk face",
+    description:
+      "Kiosk searches employee by name or username, then kiosk camera verifies face.",
   },
 ];
 
@@ -70,7 +83,7 @@ export function AttendanceSecuritySettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -83,15 +96,15 @@ export function AttendanceSecuritySettingsPage() {
 
       setForm({
         gpsValidationEnabled: result.data.gpsValidationEnabled,
-        faceRecognitionEnabled:
-          result.data.faceRecognitionEnabled ?? defaultForm.faceRecognitionEnabled,
-        faceRequiredForQrPunch:
-          result.data.faceRequiredForQrPunch ?? defaultForm.faceRequiredForQrPunch,
+        attendancePunchMode:
+          (result.data.attendancePunchMode as AttendancePunchMode) ??
+          defaultForm.attendancePunchMode,
         faceLivenessRequired:
           result.data.faceLivenessRequired ?? defaultForm.faceLivenessRequired,
         faceMatchMaxDistance:
           result.data.faceMatchMaxDistance ?? defaultForm.faceMatchMaxDistance,
-        faceFailureMode: result.data.faceFailureMode ?? defaultForm.faceFailureMode,
+        faceFailureMode:
+          result.data.faceFailureMode ?? defaultForm.faceFailureMode,
       });
     } catch (err) {
       setError(
@@ -102,7 +115,7 @@ export function AttendanceSecuritySettingsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleSave = async () => {
     try {
@@ -139,7 +152,7 @@ export function AttendanceSecuritySettingsPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   if (loading) {
     return (
@@ -155,14 +168,51 @@ export function AttendanceSecuritySettingsPage() {
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">Attendance Settings</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Configure location context and face verification for attendance punches.
+          Choose kiosk punch mode, then tune face and location validation.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
+        <div className="rounded-xl border border-border/70 bg-muted/10 p-4">
+          <div className="space-y-3">
+            <p className="font-medium">Primary kiosk punch mode</p>
+            <p className="text-sm text-muted-foreground">
+              New attendance flow now starts from the kiosk. Pick exactly one
+              primary mode.
+            </p>
+            <div className="space-y-3">
+              {modeOptions.map((option) => (
+                <label
+                  key={option.value}
+                  className="flex cursor-pointer items-start justify-between gap-4 rounded-xl border border-border/70 bg-background/80 p-4"
+                >
+                  <div className="space-y-1">
+                    <p className="font-medium">{option.title}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {option.description}
+                    </p>
+                  </div>
+                  <input
+                    type="radio"
+                    name="attendancePunchMode"
+                    checked={form.attendancePunchMode === option.value}
+                    onChange={() =>
+                      setForm((current) => ({
+                        ...current,
+                        attendancePunchMode: option.value,
+                      }))
+                    }
+                    className="mt-1 h-4 w-4"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-3">
-          {settingRows.map((setting) => (
+          {toggleRows.map((setting) => (
             <label
               key={setting.key}
               className="flex items-start justify-between gap-4 rounded-xl border border-border/70 bg-muted/10 p-4"
@@ -216,8 +266,8 @@ export function AttendanceSecuritySettingsPage() {
           <div className="space-y-2">
             <p className="font-medium">Face failure mode</p>
             <p className="text-sm text-muted-foreground">
-              Block is safest. Fallback allows QR punch when face camera is
-              unavailable, useful for LAN HTTP development on phones.
+              Block is safest. Fallback allows punch flow to continue when
+              camera is unavailable.
             </p>
             <select
               value={form.faceFailureMode}

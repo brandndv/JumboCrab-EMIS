@@ -24,6 +24,10 @@ export type ViolationRow = {
   reviewRemarks?: string | null;
   isAcknowledged: boolean;
   acknowledgedAt?: string | null;
+  appealPaperSecuredAt?: string | null;
+  appealPaperFilledAt?: string | null;
+  appealPaperSubmittedToManagerAt?: string | null;
+  appealSubmittedAt?: string | null;
   isCountedForStrike: boolean;
   voidedAt?: string | null;
   voidReason?: string | null;

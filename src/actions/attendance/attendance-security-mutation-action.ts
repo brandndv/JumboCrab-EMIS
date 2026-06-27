@@ -5,7 +5,10 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   ATTENDANCE_SECURITY_SETTINGS_ID,
+  ATTENDANCE_PUNCH_MODES,
   canManageAttendanceSecuritySettings,
+  deriveLegacyFaceFlags,
+  hasAttendancePunchModeColumn,
   serializeAttendanceSecuritySettings,
 } from "./attendance-security-shared";
 
@@ -21,6 +24,7 @@ const revalidateAttendanceSecurityPaths = () => {
 
 export async function updateAttendanceSecuritySettings(input: {
   gpsValidationEnabled: boolean;
+  attendancePunchMode?: string;
   faceRecognitionEnabled?: boolean;
   faceRequiredForQrPunch?: boolean;
   faceLivenessRequired?: boolean;
@@ -33,10 +37,21 @@ export async function updateAttendanceSecuritySettings(input: {
       return { success: false, error: "Unauthorized" };
     }
 
+    const hasModeColumn = await hasAttendancePunchModeColumn();
+    const attendancePunchMode =
+      input.attendancePunchMode ===
+        ATTENDANCE_PUNCH_MODES.EMPLOYEE_QR_KIOSK_FACE ||
+      input.attendancePunchMode ===
+        ATTENDANCE_PUNCH_MODES.SEARCH_EMPLOYEE_KIOSK_FACE
+        ? input.attendancePunchMode
+        : ATTENDANCE_PUNCH_MODES.QR_ONLY;
+    const legacyFlags = deriveLegacyFaceFlags(attendancePunchMode);
+
     const data = {
       gpsValidationEnabled: Boolean(input.gpsValidationEnabled),
-      faceRecognitionEnabled: Boolean(input.faceRecognitionEnabled),
-      faceRequiredForQrPunch: Boolean(input.faceRequiredForQrPunch),
+      ...(hasModeColumn ? { attendancePunchMode } : {}),
+      faceRecognitionEnabled: legacyFlags.faceRecognitionEnabled,
+      faceRequiredForQrPunch: legacyFlags.faceRequiredForQrPunch,
       faceLivenessRequired: input.faceLivenessRequired !== false,
       faceMatchMaxDistance: Math.max(
         0.45,
@@ -57,13 +72,38 @@ export async function updateAttendanceSecuritySettings(input: {
         id: ATTENDANCE_SECURITY_SETTINGS_ID,
         ...data,
       },
+      select: {
+        id: true,
+        gpsValidationEnabled: true,
+        ...(hasModeColumn ? { attendancePunchMode: true } : {}),
+        faceRecognitionEnabled: true,
+        faceRequiredForQrPunch: true,
+        faceLivenessRequired: true,
+        faceMatchMaxDistance: true,
+        faceFailureMode: true,
+        updatedByUserId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     revalidateAttendanceSecurityPaths();
 
     return {
       success: true,
-      data: serializeAttendanceSecuritySettings(row),
+      data: serializeAttendanceSecuritySettings({
+        id: row.id,
+        gpsValidationEnabled: row.gpsValidationEnabled,
+        attendancePunchMode,
+        faceRecognitionEnabled: legacyFlags.faceRecognitionEnabled,
+        faceRequiredForQrPunch: legacyFlags.faceRequiredForQrPunch,
+        faceLivenessRequired: row.faceLivenessRequired,
+        faceMatchMaxDistance: Number(row.faceMatchMaxDistance),
+        faceFailureMode: row.faceFailureMode,
+        updatedByUserId: row.updatedByUserId ?? null,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      }),
     };
   } catch (error) {
     console.error("Failed to update attendance security settings", error);

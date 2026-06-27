@@ -49,6 +49,11 @@ export const serializeViolation = (
     reviewRemarks: violation.reviewRemarks ?? null,
     isAcknowledged: Boolean(violation.isAcknowledged),
     acknowledgedAt: toIsoString(violation.acknowledgedAt) || null,
+    appealPaperSecuredAt: toIsoString(violation.appealPaperSecuredAt) || null,
+    appealPaperFilledAt: toIsoString(violation.appealPaperFilledAt) || null,
+    appealPaperSubmittedToManagerAt:
+      toIsoString(violation.appealPaperSubmittedToManagerAt) || null,
+    appealSubmittedAt: toIsoString(violation.appealSubmittedAt) || null,
     isCountedForStrike: Boolean(violation.isCountedForStrike),
     voidedAt: toIsoString(violation.voidedAt) || null,
     voidReason: violation.voidReason ?? null,

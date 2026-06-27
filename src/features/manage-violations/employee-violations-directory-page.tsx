@@ -63,6 +63,7 @@ type EmployeeViolationsDirectoryPageProps = {
 };
 
 const ALL_TYPES_VALUE = "__ALL_TYPES__";
+const ALL_STATUSES_VALUE = "__ALL_STATUSES__";
 type AutoResetFrequency = ViolationAutoResetPolicyRow["frequency"];
 
 const getTodayDateInput = () => {
@@ -83,10 +84,28 @@ const formatDate = (value: string) =>
     year: "numeric",
   });
 
+const formatDateTime = (value: string) =>
+  new Date(value).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
 const statusClass = (status: ViolationRow["status"]) => {
   if (status === "APPROVED") return "border-emerald-600 text-emerald-700";
   if (status === "REJECTED") return "border-destructive text-destructive";
+  if (status === "PENDING_MANAGER_REVIEW") return "border-blue-600 text-blue-700";
   return "border-orange-600 text-orange-700";
+};
+
+const formatStatus = (status: ViolationRow["status"]) => {
+  if (status === "PENDING_EMPLOYEE") return "Pending Employee";
+  if (status === "PENDING_MANAGER_REVIEW") return "Ready for Review";
+  if (status === "APPROVED") return "Approved";
+  if (status === "REJECTED") return "Rejected";
+  return "Draft";
 };
 
 const toDateInputValue = (value: string | null | undefined) => {
@@ -114,6 +133,15 @@ const EmployeeViolationsDirectoryPage = ({
   );
   const [hasLoadedDefinitions, setHasLoadedDefinitions] =
     useState<boolean>(false);
+  const [allRows, setAllRows] = useState<ViolationRow[]>([]);
+  const [loadingAllRows, setLoadingAllRows] = useState<boolean>(false);
+  const [allRowsError, setAllRowsError] = useState<string | null>(null);
+  const [boardSearch, setBoardSearch] = useState<string>("");
+  const [boardStatus, setBoardStatus] = useState<string>(ALL_STATUSES_VALUE);
+  const [boardViolationType, setBoardViolationType] =
+    useState<string>(ALL_TYPES_VALUE);
+  const [boardSelectedRow, setBoardSelectedRow] =
+    useState<ViolationRow | null>(null);
   const [rows, setRows] = useState<ViolationRow[]>([]);
   const [loadingViolations, setLoadingViolations] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -244,6 +272,25 @@ const EmployeeViolationsDirectoryPage = ({
       );
     } finally {
       setLoadingViolations(false);
+    }
+  };
+
+  const loadAllViolations = async () => {
+    try {
+      setLoadingAllRows(true);
+      setAllRowsError(null);
+      const result = await getViolations();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load violations board");
+      }
+      setAllRows(result.data ?? []);
+    } catch (err) {
+      setAllRows([]);
+      setAllRowsError(
+        err instanceof Error ? err.message : "Failed to load violations board",
+      );
+    } finally {
+      setLoadingAllRows(false);
     }
   };
 
@@ -381,6 +428,47 @@ const EmployeeViolationsDirectoryPage = ({
     () => rows.filter((row) => row.status === "APPROVED").length,
     [rows],
   );
+  const boardCounts = useMemo(
+    () => ({
+      pendingEmployee: allRows.filter((row) => row.status === "PENDING_EMPLOYEE")
+        .length,
+      readyForReview: allRows.filter(
+        (row) => row.status === "PENDING_MANAGER_REVIEW",
+      ).length,
+      approved: allRows.filter((row) => row.status === "APPROVED").length,
+      rejected: allRows.filter((row) => row.status === "REJECTED").length,
+    }),
+    [allRows],
+  );
+  const boardViolationTypes = useMemo(
+    () =>
+      Array.from(new Set(allRows.map((row) => row.violationName))).sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    [allRows],
+  );
+  const filteredBoardRows = useMemo(() => {
+    const term = boardSearch.trim().toLowerCase();
+    return allRows.filter((row) => {
+      const haystack = [
+        row.employeeName,
+        row.employeeCode,
+        row.violationName,
+        row.remarks ?? "",
+        row.reviewRemarks ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      const matchesSearch = !term || haystack.includes(term);
+      const matchesStatus =
+        boardStatus === ALL_STATUSES_VALUE || row.status === boardStatus;
+      const matchesType =
+        boardViolationType === ALL_TYPES_VALUE ||
+        row.violationName === boardViolationType;
+
+      return matchesSearch && matchesStatus && matchesType;
+    });
+  }, [allRows, boardSearch, boardStatus, boardViolationType]);
   const countedStrikes = useMemo(
     () =>
       rows
@@ -760,14 +848,24 @@ const EmployeeViolationsDirectoryPage = ({
 
   const refresh = async () => {
     setError(null);
-    await Promise.all([loadEmployees(employeeQuery), loadDefinitions(), loadPolicies()]);
+    await Promise.all([
+      loadAllViolations(),
+      loadEmployees(employeeQuery),
+      loadDefinitions(),
+      loadPolicies(),
+    ]);
     if (selectedEmployeeId) {
       await refreshSelectedEmployeeData(selectedEmployeeId);
     }
   };
 
   useEffect(() => {
-    void Promise.all([loadEmployees(""), loadDefinitions(), loadPolicies()]);
+    void Promise.all([
+      loadAllViolations(),
+      loadEmployees(""),
+      loadDefinitions(),
+      loadPolicies(),
+    ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -803,13 +901,300 @@ const EmployeeViolationsDirectoryPage = ({
         <div>
           <h1 className="text-2xl font-semibold">Employee Violations</h1>
           <p className="text-sm text-muted-foreground">
-            Search an employee, review violations, and manage strike resets.
+            Review all violations first, then select an employee for strike resets.
           </p>
         </div>
         <Button type="button" variant="outline" onClick={() => void refresh()}>
           Refresh
         </Button>
       </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Pending Employee
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{boardCounts.pendingEmployee}</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Ready for Review
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{boardCounts.readyForReview}</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Approved
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{boardCounts.approved}</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Rejected
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{boardCounts.rejected}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="shadow-sm">
+        <CardHeader className="space-y-3">
+          <div>
+            <CardTitle className="text-lg">All Employee Violations</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Rows load by default. Search and filters only narrow the board.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="space-y-2">
+              <Label htmlFor="board-search">Search</Label>
+              <Input
+                id="board-search"
+                value={boardSearch}
+                onChange={(event) => setBoardSearch(event.target.value)}
+                placeholder="Employee, code, violation, remarks"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={boardStatus} onValueChange={setBoardStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_STATUSES_VALUE}>All statuses</SelectItem>
+                  <SelectItem value="PENDING_EMPLOYEE">
+                    Pending Employee
+                  </SelectItem>
+                  <SelectItem value="PENDING_MANAGER_REVIEW">
+                    Ready for Review
+                  </SelectItem>
+                  <SelectItem value="APPROVED">Approved</SelectItem>
+                  <SelectItem value="REJECTED">Rejected</SelectItem>
+                  <SelectItem value="DRAFT">Draft</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Violation Type</Label>
+              <Select
+                value={boardViolationType}
+                onValueChange={setBoardViolationType}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_TYPES_VALUE}>All types</SelectItem>
+                  {boardViolationTypes.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Violation</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Acknowledged</TableHead>
+                  <TableHead>Appeal Paper</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingAllRows ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="p-3">
+                      <TableLoadingState
+                        label="Loading violations board"
+                        columns={7}
+                        rows={5}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {!loadingAllRows && allRowsError ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-destructive">
+                      {allRowsError}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {!loadingAllRows && !allRowsError && filteredBoardRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-muted-foreground">
+                      No violations match current filters.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {!loadingAllRows &&
+                  !allRowsError &&
+                  filteredBoardRows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="font-medium">
+                        {row.employeeName}
+                        <p className="text-xs text-muted-foreground">
+                          {row.employeeCode}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <p>{row.violationName}</p>
+                        <p className="line-clamp-1 max-w-72 text-xs text-muted-foreground">
+                          {row.remarks || "No remarks"}
+                        </p>
+                      </TableCell>
+                      <TableCell>{formatDate(row.violationDate)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={statusClass(row.status)}>
+                          {formatStatus(row.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {row.isAcknowledged ? (
+                          <span className="text-sm text-emerald-700">Yes</span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">No</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.appealSubmittedAt ? (
+                          <span className="text-sm text-emerald-700">
+                            {formatDate(row.appealSubmittedAt)}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            Pending
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setBoardSelectedRow(row)}
+                        >
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={Boolean(boardSelectedRow)}
+        onOpenChange={(open) => {
+          if (!open) setBoardSelectedRow(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {boardSelectedRow?.employeeName ?? "Violation"} -{" "}
+              {boardSelectedRow?.violationName ?? ""}
+            </DialogTitle>
+            <DialogDescription>
+              Violation details, acknowledgement, and appeal paper state.
+            </DialogDescription>
+          </DialogHeader>
+          {boardSelectedRow ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase text-muted-foreground">Status</p>
+                  <Badge
+                    variant="outline"
+                    className={statusClass(boardSelectedRow.status)}
+                  >
+                    {formatStatus(boardSelectedRow.status)}
+                  </Badge>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase text-muted-foreground">
+                    Employee Code
+                  </p>
+                  <p className="font-medium">{boardSelectedRow.employeeCode}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase text-muted-foreground">
+                    Acknowledged
+                  </p>
+                  <p className="font-medium">
+                    {boardSelectedRow.isAcknowledged
+                      ? boardSelectedRow.acknowledgedAt
+                        ? formatDateTime(boardSelectedRow.acknowledgedAt)
+                        : "Yes"
+                      : "No"}
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase text-muted-foreground">
+                    Appeal Paper
+                  </p>
+                  <p className="font-medium">
+                    {boardSelectedRow.appealSubmittedAt
+                      ? formatDateTime(boardSelectedRow.appealSubmittedAt)
+                      : "Not submitted"}
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs uppercase text-muted-foreground">
+                  Supervisor Remarks
+                </p>
+                <p className="mt-1 text-sm">
+                  {boardSelectedRow.remarks || "No remarks"}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs uppercase text-muted-foreground">
+                  Review Remarks
+                </p>
+                <p className="mt-1 text-sm">
+                  {boardSelectedRow.reviewRemarks || "No review remarks"}
+                </p>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBoardSelectedRow(null)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card className="shadow-sm">
         <CardHeader className="space-y-3">
@@ -1554,16 +1939,17 @@ const EmployeeViolationsDirectoryPage = ({
                   <TableHead>Violation</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Strike</TableHead>
+                  <TableHead>Appeal Submitted</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loadingViolations ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="p-3">
+                    <TableCell colSpan={6} className="p-3">
                       <TableLoadingState
                         label="Loading employee violations"
-                        columns={5}
+                        columns={6}
                         rows={4}
                       />
                     </TableCell>
@@ -1571,21 +1957,21 @@ const EmployeeViolationsDirectoryPage = ({
                 ) : null}
                 {!loadingViolations && error ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-destructive">
+                    <TableCell colSpan={6} className="text-destructive">
                       {error}
                     </TableCell>
                   </TableRow>
                 ) : null}
                 {!loadingViolations && !error && !selectedEmployeeId ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
+                    <TableCell colSpan={6} className="text-muted-foreground">
                       Select an employee first.
                     </TableCell>
                   </TableRow>
                 ) : null}
                 {!loadingViolations && !error && selectedEmployeeId && rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
+                    <TableCell colSpan={6} className="text-muted-foreground">
                       No records found.
                     </TableCell>
                   </TableRow>
@@ -1598,13 +1984,33 @@ const EmployeeViolationsDirectoryPage = ({
                       <TableCell>{row.violationName}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusClass(row.status)}>
-                          {row.status}
+                          {formatStatus(row.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         {row.isCountedForStrike
                           ? `${row.strikePointsSnapshot} counted`
                           : "Not counted"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {row.appealSubmittedAt ? (
+                          <div className="text-emerald-700">
+                            <p className="font-medium">Submitted</p>
+                            <p className="text-xs">
+                              {formatDateTime(row.appealSubmittedAt)}
+                            </p>
+                          </div>
+                        ) : row.status === "PENDING_EMPLOYEE" ? (
+                          <span className="text-muted-foreground">
+                            Pending employee
+                          </span>
+                        ) : row.status === "PENDING_MANAGER_REVIEW" ? (
+                          <span className="text-muted-foreground">
+                            Pending manager review
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button asChild variant="ghost" size="sm">

@@ -202,13 +202,13 @@ export default function ViolationCreateForm({
       }
 
       setMessage(
-        result.data?.status === "DRAFT"
-          ? "Violation draft submitted for manager approval."
+        result.data?.status === "PENDING_EMPLOYEE"
+          ? "Violation sent to employee for acknowledgement and appeal paper submission."
           : "Violation assigned successfully.",
       );
       toast.success(
-        result.data?.status === "DRAFT"
-          ? "Violation draft submitted successfully."
+        result.data?.status === "PENDING_EMPLOYEE"
+          ? "Violation sent to employee successfully."
           : "Violation assigned successfully.",
       );
       setRemarks("");

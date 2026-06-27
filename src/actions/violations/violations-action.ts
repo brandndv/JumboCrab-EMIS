@@ -14,6 +14,8 @@ import {
 } from "./violation-definitions-action";
 import {
   createEmployeeViolation as createEmployeeViolationImpl,
+  setEmployeeViolationAppealSubmitted as setEmployeeViolationAppealSubmittedImpl,
+  setEmployeeViolationAppealStep as setEmployeeViolationAppealStepImpl,
   reviewEmployeeViolation as reviewEmployeeViolationImpl,
   setEmployeeViolationAcknowledged as setEmployeeViolationAcknowledgedImpl,
 } from "./employee-violations-action";
@@ -67,6 +69,18 @@ export async function setEmployeeViolationAcknowledged(
   ...args: Parameters<typeof setEmployeeViolationAcknowledgedImpl>
 ) {
   return setEmployeeViolationAcknowledgedImpl(...args);
+}
+
+export async function setEmployeeViolationAppealSubmitted(
+  ...args: Parameters<typeof setEmployeeViolationAppealSubmittedImpl>
+) {
+  return setEmployeeViolationAppealSubmittedImpl(...args);
+}
+
+export async function setEmployeeViolationAppealStep(
+  ...args: Parameters<typeof setEmployeeViolationAppealStepImpl>
+) {
+  return setEmployeeViolationAppealStepImpl(...args);
 }
 
 export async function reviewEmployeeViolation(

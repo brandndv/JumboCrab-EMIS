@@ -17,6 +17,12 @@ export const ADMIN_PANEL_ROLES: AppRole[] = ["admin", "generalManager"];
 
 export const EMPLOYEE_PANEL_ROLES: AppRole[] = ["employee"];
 
+const ACCOUNT_ROLE_MANAGEMENT: Partial<Record<AppRole, AppRole[]>> = {
+  admin: [...APP_ROLES],
+  generalManager: ["generalManager", "manager", "supervisor", "employee"],
+  manager: ["employee"],
+};
+
 type AccessRule = {
   path: string;
   allowedRoles: AppRole[];
@@ -139,6 +145,21 @@ export function normalizeRole(role: unknown): AppRole | null {
   if (typeof role !== "string") return null;
   const normalizedKey = role.replace(/[\s_-]/g, "").toLowerCase();
   return ROLE_NORMALIZATION[normalizedKey] ?? null;
+}
+
+export function getManageableAccountRoles(actorRole: unknown): AppRole[] {
+  const role = normalizeRole(actorRole);
+  return role ? (ACCOUNT_ROLE_MANAGEMENT[role] ?? []) : [];
+}
+
+export function canManageAccountRole(
+  actorRole: unknown,
+  targetRole: unknown,
+): boolean {
+  const target = normalizeRole(targetRole);
+  if (!target) return false;
+
+  return getManageableAccountRoles(actorRole).includes(target);
 }
 
 export function getHomePathForRole(role: AppRole): string {

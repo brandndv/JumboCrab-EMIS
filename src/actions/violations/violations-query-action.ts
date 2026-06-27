@@ -1,6 +1,6 @@
 "use server";
 
-import { Roles, type Prisma } from "@prisma/client";
+import { EmployeeViolationStatus, Roles, type Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -31,6 +31,8 @@ import type {
 
 export async function getViolations(input?: {
   employeeId?: string | null;
+  status?: EmployeeViolationStatus | string | null;
+  statuses?: (EmployeeViolationStatus | string)[] | null;
   start?: string | null;
   end?: string | null;
 }): Promise<{
@@ -66,6 +68,19 @@ export async function getViolations(input?: {
       typeof input?.end === "string" && input.end.trim()
         ? parseDateInput(input.end)
         : null;
+    const statusValues = [
+      ...(typeof input?.status === "string" && input.status.trim()
+        ? [input.status.trim()]
+        : []),
+      ...((input?.statuses ?? [])
+        .filter((status): status is string => typeof status === "string")
+        .map((status) => status.trim())
+        .filter(Boolean)),
+    ].filter((status): status is EmployeeViolationStatus =>
+      Object.values(EmployeeViolationStatus).includes(
+        status as EmployeeViolationStatus,
+      ),
+    );
 
     if (input?.start && !start) {
       return { success: false, error: "Invalid start date" };
@@ -94,6 +109,11 @@ export async function getViolations(input?: {
     }
 
     if (employeeId) where.employeeId = employeeId;
+    if (statusValues.length === 1) {
+      where.status = statusValues[0];
+    } else if (statusValues.length > 1) {
+      where.status = { in: statusValues };
+    }
     if (start || end) {
       where.violationDate = {
         ...(start ? { gte: start } : {}),
@@ -204,6 +224,7 @@ export async function listEmployeesForViolation(input?: {
     const limit = Math.max(1, Math.min(limitRaw, 200));
 
     const where: Prisma.EmployeeWhereInput = { isArchived: false };
+    where.user = { role: Roles.Employee };
     if (session.role === Roles.Supervisor && session.userId) {
       where.supervisorUserId = session.userId;
     }
@@ -227,6 +248,11 @@ export async function listEmployeesForViolation(input?: {
         employeeCode: true,
         firstName: true,
         lastName: true,
+        user: {
+          select: {
+            role: true,
+          },
+        },
       },
     });
 
@@ -246,9 +272,17 @@ export async function listEmployeesForViolation(input?: {
         lastName: true,
         isArchived: true,
         supervisorUserId: true,
+        user: {
+          select: {
+            role: true,
+          },
+        },
       },
     });
     if (!requestedEmployee || requestedEmployee.isArchived) {
+      return { success: true, data: employees };
+    }
+    if (requestedEmployee.user?.role !== Roles.Employee) {
       return { success: true, data: employees };
     }
     if (
@@ -267,7 +301,12 @@ export async function listEmployeesForViolation(input?: {
           firstName: requestedEmployee.firstName,
           lastName: requestedEmployee.lastName,
         },
-        ...employees,
+        ...employees.map(({ employeeId, employeeCode, firstName, lastName }) => ({
+          employeeId,
+          employeeCode,
+          firstName,
+          lastName,
+        })),
       ],
     };
   } catch (error) {

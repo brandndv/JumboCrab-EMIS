@@ -9,7 +9,12 @@ import {
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createAndDispatchNotification } from "@/lib/notifications";
-import { getForcedPasswordChangePath, normalizeRole } from "@/lib/rbac";
+import {
+  canManageAccountRole,
+  getManageableAccountRoles,
+  getForcedPasswordChangePath,
+  normalizeRole,
+} from "@/lib/rbac";
 import { hashPassword } from "@/lib/auth";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import {
@@ -45,8 +50,18 @@ export async function updateUser(input: {
       where: { userId },
       select: { userId: true, role: true },
     });
-    if (!existingUser || isHiddenManagementRole(existingUser.role)) {
+    if (!existingUser) {
       return { success: false, error: "User not found" };
+    }
+    if (!canManageAccountRole(actorRole, existingUser.role)) {
+      const allowedRoles = getManageableAccountRoles(actorRole);
+      return {
+        success: false,
+        error:
+          allowedRoles.length > 0
+            ? `You can only update these roles: ${allowedRoles.join(", ")}`
+            : "You are not allowed to update user accounts",
+      };
     }
 
     const updates: Record<string, unknown> = {};
@@ -68,10 +83,14 @@ export async function updateUser(input: {
           error: `Invalid role. Must be one of: ${Object.values(Roles).join(", ")}`,
         };
       }
-      if (dbRole === Roles.Admin) {
+      if (!canManageAccountRole(actorRole, dbRole)) {
+        const allowedRoles = getManageableAccountRoles(actorRole);
         return {
           success: false,
-          error: "Admin accounts cannot be created or managed from this screen",
+          error:
+            allowedRoles.length > 0
+              ? `You can only assign these roles: ${allowedRoles.join(", ")}`
+              : "You are not allowed to assign account roles",
         };
       }
       updates.role = dbRole;

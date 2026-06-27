@@ -1,11 +1,21 @@
 import { headers } from "next/headers";
-import { Prisma, Roles, type AttendanceSecuritySetting } from "@prisma/client";
+import { Roles, type Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 export const ATTENDANCE_SECURITY_SETTINGS_ID = "default";
 
+export const ATTENDANCE_PUNCH_MODES = {
+  QR_ONLY: "QR_ONLY",
+  EMPLOYEE_QR_KIOSK_FACE: "EMPLOYEE_QR_KIOSK_FACE",
+  SEARCH_EMPLOYEE_KIOSK_FACE: "SEARCH_EMPLOYEE_KIOSK_FACE",
+} as const;
+
+export type AttendancePunchModeValue =
+  (typeof ATTENDANCE_PUNCH_MODES)[keyof typeof ATTENDANCE_PUNCH_MODES];
+
 export const DEFAULT_ATTENDANCE_SECURITY_SETTINGS = {
   gpsValidationEnabled: false,
+  attendancePunchMode: ATTENDANCE_PUNCH_MODES.QR_ONLY,
   faceRecognitionEnabled: false,
   faceRequiredForQrPunch: false,
   faceLivenessRequired: true,
@@ -22,8 +32,42 @@ export type AttendanceSecurityPayload = {
   longitude?: number | null;
 };
 
+export type ResolvedAttendanceSecuritySettings = {
+  id: string;
+  gpsValidationEnabled: boolean;
+  attendancePunchMode: AttendancePunchModeValue;
+  faceRecognitionEnabled: boolean;
+  faceRequiredForQrPunch: boolean;
+  faceLivenessRequired: boolean;
+  faceMatchMaxDistance: number;
+  faceFailureMode: string;
+  updatedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+let cachedHasAttendancePunchModeColumn: boolean | null = null;
+
 export const canManageAttendanceSecuritySettings = (role?: Roles) =>
   role === Roles.Admin;
+
+export const normalizeAttendancePunchMode = (
+  value: unknown,
+): AttendancePunchModeValue => {
+  switch (value) {
+    case ATTENDANCE_PUNCH_MODES.EMPLOYEE_QR_KIOSK_FACE:
+      return ATTENDANCE_PUNCH_MODES.EMPLOYEE_QR_KIOSK_FACE;
+    case ATTENDANCE_PUNCH_MODES.SEARCH_EMPLOYEE_KIOSK_FACE:
+      return ATTENDANCE_PUNCH_MODES.SEARCH_EMPLOYEE_KIOSK_FACE;
+    default:
+      return ATTENDANCE_PUNCH_MODES.QR_ONLY;
+  }
+};
+
+export const deriveLegacyFaceFlags = (mode: AttendancePunchModeValue) => ({
+  faceRecognitionEnabled: mode !== ATTENDANCE_PUNCH_MODES.QR_ONLY,
+  faceRequiredForQrPunch: mode !== ATTENDANCE_PUNCH_MODES.QR_ONLY,
+});
 
 const normalizeCoordinate = (
   value: number | null | undefined,
@@ -53,27 +97,128 @@ export const resolveAttendanceRequestMetadata = async () => {
   };
 };
 
+export const hasAttendancePunchModeColumn = async () => {
+  if (cachedHasAttendancePunchModeColumn != null) {
+    return cachedHasAttendancePunchModeColumn;
+  }
+
+  try {
+    const rows = await db.$queryRaw<Array<{ exists: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'AttendanceSecuritySetting'
+          AND column_name = 'attendancePunchMode'
+      ) AS "exists"
+    `;
+    cachedHasAttendancePunchModeColumn = Boolean(rows[0]?.exists);
+    return cachedHasAttendancePunchModeColumn;
+  } catch (error) {
+    console.error("Could not check attendancePunchMode column existence:", error);
+    cachedHasAttendancePunchModeColumn = false;
+    return cachedHasAttendancePunchModeColumn;
+  }
+};
+
+const buildAttendanceSecuritySelect = (hasModeColumn: boolean) =>
+  ({
+    id: true,
+    gpsValidationEnabled: true,
+    ...(hasModeColumn ? { attendancePunchMode: true } : {}),
+    faceRecognitionEnabled: true,
+    faceRequiredForQrPunch: true,
+    faceLivenessRequired: true,
+    faceMatchMaxDistance: true,
+    faceFailureMode: true,
+    updatedByUserId: true,
+    createdAt: true,
+    updatedAt: true,
+  }) as const;
+
+const hydrateAttendanceSecuritySettings = (
+  row: {
+    id: string;
+    gpsValidationEnabled: boolean;
+    faceRecognitionEnabled: boolean;
+    faceRequiredForQrPunch: boolean;
+    faceLivenessRequired: boolean;
+    faceMatchMaxDistance: Prisma.Decimal | number;
+    faceFailureMode: string;
+    updatedByUserId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    attendancePunchMode?: string | null;
+  },
+  hasModeColumn: boolean,
+): ResolvedAttendanceSecuritySettings => {
+  const legacyMode =
+    row.faceRecognitionEnabled && row.faceRequiredForQrPunch
+      ? ATTENDANCE_PUNCH_MODES.EMPLOYEE_QR_KIOSK_FACE
+      : ATTENDANCE_PUNCH_MODES.QR_ONLY;
+  const attendancePunchMode = hasModeColumn
+    ? normalizeAttendancePunchMode(row.attendancePunchMode)
+    : legacyMode;
+  const legacyFlags = deriveLegacyFaceFlags(attendancePunchMode);
+
+  return {
+    id: row.id,
+    gpsValidationEnabled: Boolean(row.gpsValidationEnabled),
+    attendancePunchMode,
+    faceRecognitionEnabled: legacyFlags.faceRecognitionEnabled,
+    faceRequiredForQrPunch: legacyFlags.faceRequiredForQrPunch,
+    faceLivenessRequired: Boolean(row.faceLivenessRequired),
+    faceMatchMaxDistance: Number(row.faceMatchMaxDistance),
+    faceFailureMode: row.faceFailureMode,
+    updatedByUserId: row.updatedByUserId ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+};
+
 export const ensureAttendanceSecuritySettings = async (
   client: AttendanceSecurityClient = db,
-) =>
-  client.attendanceSecuritySetting.upsert({
+) => {
+  const hasModeColumn = await hasAttendancePunchModeColumn();
+  const select = buildAttendanceSecuritySelect(hasModeColumn);
+  const row = await client.attendanceSecuritySetting.upsert({
     where: { id: ATTENDANCE_SECURITY_SETTINGS_ID },
     update: {},
     create: {
       id: ATTENDANCE_SECURITY_SETTINGS_ID,
-      ...DEFAULT_ATTENDANCE_SECURITY_SETTINGS,
+      gpsValidationEnabled: DEFAULT_ATTENDANCE_SECURITY_SETTINGS.gpsValidationEnabled,
+      ...(hasModeColumn
+        ? {
+            attendancePunchMode:
+              DEFAULT_ATTENDANCE_SECURITY_SETTINGS.attendancePunchMode,
+          }
+        : {}),
+      faceRecognitionEnabled:
+        DEFAULT_ATTENDANCE_SECURITY_SETTINGS.faceRecognitionEnabled,
+      faceRequiredForQrPunch:
+        DEFAULT_ATTENDANCE_SECURITY_SETTINGS.faceRequiredForQrPunch,
+      faceLivenessRequired:
+        DEFAULT_ATTENDANCE_SECURITY_SETTINGS.faceLivenessRequired,
+      faceMatchMaxDistance:
+        DEFAULT_ATTENDANCE_SECURITY_SETTINGS.faceMatchMaxDistance,
+      faceFailureMode: DEFAULT_ATTENDANCE_SECURITY_SETTINGS.faceFailureMode,
     },
+    select,
   });
 
+  return hydrateAttendanceSecuritySettings(row, hasModeColumn);
+};
+
 export const serializeAttendanceSecuritySettings = (
-  row: AttendanceSecuritySetting,
+  row: ResolvedAttendanceSecuritySettings,
 ) => ({
   id: row.id,
   gpsValidationEnabled: row.gpsValidationEnabled,
+  attendancePunchMode: row.attendancePunchMode,
   faceRecognitionEnabled: row.faceRecognitionEnabled,
   faceRequiredForQrPunch: row.faceRequiredForQrPunch,
   faceLivenessRequired: row.faceLivenessRequired,
-  faceMatchMaxDistance: Number(row.faceMatchMaxDistance),
+  faceMatchMaxDistance: row.faceMatchMaxDistance,
   faceFailureMode: row.faceFailureMode,
   updatedByUserId: row.updatedByUserId ?? null,
   createdAt: row.createdAt.toISOString(),
@@ -81,12 +226,13 @@ export const serializeAttendanceSecuritySettings = (
 });
 
 export const serializeAttendanceSecurityClientConfig = (
-  row: AttendanceSecuritySetting,
+  row: ResolvedAttendanceSecuritySettings,
 ) => ({
   gpsValidationEnabled: row.gpsValidationEnabled,
+  attendancePunchMode: row.attendancePunchMode,
   faceRecognitionEnabled: row.faceRecognitionEnabled,
   faceRequiredForQrPunch: row.faceRequiredForQrPunch,
   faceLivenessRequired: row.faceLivenessRequired,
-  faceMatchMaxDistance: Number(row.faceMatchMaxDistance),
+  faceMatchMaxDistance: row.faceMatchMaxDistance,
   faceFailureMode: row.faceFailureMode,
 });

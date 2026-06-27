@@ -21,11 +21,22 @@ import {
   isSelfPunchIpAllowed,
   serializePunch,
 } from "./attendance-shared";
+import { isKioskPunchIpAllowed } from "./kiosk-attendance-shared";
 import { captureAttendanceSecurityEvent } from "./attendance-security-service";
 import {
   ensureAttendanceSecuritySettings,
   resolveAttendanceRequestMetadata,
 } from "./attendance-security-shared";
+import {
+  ATTENDANCE_PUNCH_MODES,
+} from "./attendance-security-shared";
+import {
+  buildPunchSuccessPayload,
+  ensureEmployeeQrIdentity,
+  loadActiveEmployeeIdentityByEmployeeId,
+  prepareKioskPunchContext,
+  toActiveEmployeeIdentity,
+} from "./attendance-kiosk-flow-shared";
 
 const MIN_ENROLLMENT_SAMPLES = 3;
 const MAX_ENROLLMENT_SAMPLES = 5;
@@ -431,6 +442,302 @@ const logFaceAttempt = async (input: {
     },
   });
 };
+
+export async function verifyFaceAndRecordKioskPunch(input: {
+  employeeQrToken?: string | null;
+  employeeId?: string | null;
+  kioskId?: string | null;
+  descriptor?: number[] | null;
+  livenessPassed?: boolean | null;
+  livenessPrompt?: string | null;
+  faceCount?: number | null;
+  modelVersion?: string | null;
+  faceMetadata?: unknown;
+  latitude?: number | null;
+  longitude?: number | null;
+}) {
+  let employeeIdForAudit: string | null = null;
+  let punchTypeForAudit: PUNCH_TYPE | null = null;
+
+  try {
+    const requestMetadata = await resolveAttendanceRequestMetadata();
+    const clientIp = requestMetadata.ipAddress;
+    if (!isKioskPunchIpAllowed(clientIp)) {
+      return {
+        success: false,
+        error: "Punching not allowed from this device",
+        reason: "ip_not_allowed",
+      };
+    }
+
+    const settings = await ensureAttendanceSecuritySettings();
+    if (settings.attendancePunchMode === ATTENDANCE_PUNCH_MODES.QR_ONLY) {
+      return {
+        success: false,
+        error: "Face verification is not enabled for current attendance mode.",
+        reason: "face_not_enabled",
+      };
+    }
+
+    const employeeQrToken =
+      typeof input.employeeQrToken === "string"
+        ? input.employeeQrToken.trim()
+        : "";
+    const employeeId =
+      typeof input.employeeId === "string" ? input.employeeId.trim() : "";
+
+    if (!employeeQrToken && !employeeId) {
+      return {
+        success: false,
+        error: "Employee QR token or employee ID is required.",
+        reason: "missing_employee_target",
+      };
+    }
+
+    let resolvedEmployee:
+      | Awaited<ReturnType<typeof ensureEmployeeQrIdentity>>
+      | { success: true; data: NonNullable<ReturnType<typeof toActiveEmployeeIdentity>> };
+
+    if (employeeQrToken.length > 0) {
+      resolvedEmployee = await ensureEmployeeQrIdentity(employeeQrToken);
+    } else {
+      const loaded = toActiveEmployeeIdentity(
+        await loadActiveEmployeeIdentityByEmployeeId(employeeId),
+      );
+      if (!loaded || loaded.isDisabled || loaded.isArchived) {
+        return {
+          success: false,
+          error: "User not eligible",
+          reason: "user_not_eligible",
+        };
+      }
+      resolvedEmployee = {
+        success: true as const,
+        data: loaded,
+      };
+    }
+
+    if (!resolvedEmployee.success) {
+      return resolvedEmployee;
+    }
+
+    const context = await prepareKioskPunchContext(resolvedEmployee.data);
+    if (!context.success) {
+      return context;
+    }
+    employeeIdForAudit = context.data.employee.employeeId;
+    punchTypeForAudit = context.data.nextPunch;
+
+    const descriptor = normalizeDescriptor(input.descriptor);
+    const faceCount =
+      typeof input.faceCount === "number" && Number.isFinite(input.faceCount)
+        ? Math.max(0, Math.round(input.faceCount))
+        : descriptor
+          ? 1
+          : 0;
+    const modelVersion = normalizeModelVersion(input.modelVersion);
+    const livenessPrompt =
+      typeof input.livenessPrompt === "string" && input.livenessPrompt.trim()
+        ? input.livenessPrompt.trim().slice(0, 191)
+        : null;
+    const faceMetadata = {
+      source: "browser-face-api",
+      ...(typeof input.faceMetadata === "object" && input.faceMetadata
+        ? (input.faceMetadata as Record<string, unknown>)
+        : {}),
+    };
+
+    const activeEnrollments = await db.employeeFaceEnrollment.findMany({
+      where: { employeeId: context.data.employee.employeeId, isActive: true },
+      orderBy: { createdAt: "desc" },
+      select: { embedding: true },
+      take: 3,
+    });
+    if (activeEnrollments.length === 0) {
+      await logFaceAttempt({
+        employeeId: context.data.employee.employeeId,
+        kioskId: input.kioskId ?? null,
+        punchType: context.data.nextPunch,
+        status: "FAILED",
+        reason: "no_active_face_enrollment",
+      });
+      return {
+        success: false,
+        error: "No active face enrollment found. Ask a manager to enroll your face.",
+        reason: "no_face_enrollment",
+      };
+    }
+
+    if (faceCount !== 1) {
+      await logFaceAttempt({
+        employeeId: context.data.employee.employeeId,
+        kioskId: input.kioskId ?? null,
+        punchType: context.data.nextPunch,
+        status: "FAILED",
+        reason: faceCount === 0 ? "no_face_detected" : "multiple_faces",
+        livenessPassed: Boolean(input.livenessPassed),
+        livenessPrompt,
+        faceCount,
+        modelVersion,
+        details: faceMetadata,
+      });
+      return {
+        success: false,
+        error:
+          faceCount === 0
+            ? "No face detected. Please retry."
+            : "Multiple faces detected. Only one employee may be in frame.",
+        reason: faceCount === 0 ? "no_face_detected" : "multiple_faces",
+      };
+    }
+
+    if (!descriptor) {
+      await logFaceAttempt({
+        employeeId: context.data.employee.employeeId,
+        kioskId: input.kioskId ?? null,
+        punchType: context.data.nextPunch,
+        status: "FAILED",
+        reason: "missing_face_descriptor",
+        livenessPassed: Boolean(input.livenessPassed),
+        livenessPrompt,
+        faceCount,
+        modelVersion,
+        details: faceMetadata,
+      });
+      return {
+        success: false,
+        error: "Face descriptor is required before punching.",
+        reason: "missing_face_descriptor",
+      };
+    }
+
+    if (settings.faceLivenessRequired && input.livenessPassed !== true) {
+      await logFaceAttempt({
+        employeeId: context.data.employee.employeeId,
+        kioskId: input.kioskId ?? null,
+        punchType: context.data.nextPunch,
+        status: "FAILED",
+        reason: "liveness_failed",
+        livenessPassed: false,
+        livenessPrompt,
+        faceCount,
+        modelVersion,
+        details: faceMetadata,
+      });
+      return {
+        success: false,
+        error: "Face liveness check failed. Please retry with your face centered.",
+        reason: "liveness_failed",
+      };
+    }
+
+    const threshold = Number(settings.faceMatchMaxDistance);
+    const distances = activeEnrollments.map((enrollment) =>
+      faceDistance(decryptFaceEmbedding(enrollment.embedding), descriptor),
+    );
+    const bestDistance = Math.min(...distances);
+
+    if (!Number.isFinite(bestDistance) || bestDistance > threshold) {
+      await logFaceAttempt({
+        employeeId: context.data.employee.employeeId,
+        kioskId: input.kioskId ?? null,
+        punchType: context.data.nextPunch,
+        status: "FAILED",
+        reason: "face_mismatch",
+        distance: Number.isFinite(bestDistance) ? bestDistance : null,
+        threshold,
+        livenessPassed: Boolean(input.livenessPassed),
+        livenessPrompt,
+        faceCount,
+        modelVersion,
+        details: faceMetadata,
+      });
+      return {
+        success: false,
+        error: "Face did not match enrolled employee.",
+        reason: "face_mismatch",
+      };
+    }
+
+    const punch = await createPunchAndMaybeRecompute({
+      employeeId: context.data.employee.employeeId,
+      punchType: context.data.nextPunch,
+      punchTime: context.data.now,
+      source: "KIOSK_FACE",
+      recompute: true,
+    });
+
+    const securityResult = punch.attendance?.id
+      ? await captureAttendanceSecurityEvent({
+          attendanceId: punch.attendance.id,
+          employeeId: context.data.employee.employeeId,
+          punchTime: context.data.now,
+          payload: {
+            ...requestMetadata,
+            latitude: input.latitude ?? null,
+            longitude: input.longitude ?? null,
+          },
+        })
+      : null;
+
+    await logFaceAttempt({
+      employeeId: context.data.employee.employeeId,
+      attendanceId: punch.attendance?.id ?? null,
+      punchId: punch.punch.id,
+      kioskId: input.kioskId ?? null,
+      punchType: context.data.nextPunch,
+      status: "PASSED",
+      reason: "face_match",
+      distance: bestDistance,
+      threshold,
+      livenessPassed: Boolean(input.livenessPassed),
+      livenessPrompt,
+      faceCount,
+      modelVersion,
+      details: {
+        ...faceMetadata,
+        contextLogId: securityResult?.contextLogId ?? null,
+      },
+    });
+
+    await publishAttendanceUpdate({
+      employeeId: context.data.employee.employeeId,
+      workDate: context.data.dayStart,
+      punchId: punch.punch.id,
+    });
+
+    return {
+      success: true,
+      data: {
+        ...buildPunchSuccessPayload(context.data, punch.punch),
+        ...serializePunch(punch.punch),
+        faceVerified: true,
+        faceDistance: bestDistance,
+        faceThreshold: threshold,
+        livenessPassed: Boolean(input.livenessPassed),
+      },
+    };
+  } catch (error) {
+    console.error("Failed to verify face and record kiosk punch", error);
+    if (employeeIdForAudit) {
+      await logFaceAttempt({
+        employeeId: employeeIdForAudit,
+        kioskId: input.kioskId ?? null,
+        punchType: punchTypeForAudit,
+        status: "ERROR",
+        reason: error instanceof Error ? error.message : "face_verification_error",
+      }).catch(() => null);
+    }
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Face verification failed. Use supervisor fallback if needed.",
+      reason: "face_verification_error",
+    };
+  }
+}
 
 export async function verifyFaceAndRecordQrPunch(input: {
   punchType: string;

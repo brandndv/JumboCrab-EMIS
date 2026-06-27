@@ -22,6 +22,13 @@ import {
   recomputeAttendanceForDate as recomputeAttendanceForDateImpl,
 } from "./attendance-recompute-action";
 import {
+  getEmployeeAttendanceQr as getEmployeeAttendanceQrImpl,
+  getKioskAttendanceConfig as getKioskAttendanceConfigImpl,
+  getSearchEmployeeFacePreview as getSearchEmployeeFacePreviewImpl,
+  recordKioskResolvedPunch as recordKioskResolvedPunchImpl,
+  resolveEmployeeAttendanceQr as resolveEmployeeAttendanceQrImpl,
+} from "./attendance-kiosk-flow-action";
+import {
   getAttendancePunchClientConfig as getAttendancePunchClientConfigImpl,
   getAttendanceSecuritySettings as getAttendanceSecuritySettingsImpl,
 } from "./attendance-security-query-action";
@@ -33,6 +40,7 @@ import {
   listEmployeeFaceEnrollments as listEmployeeFaceEnrollmentsImpl,
   listEmployeeFaceVerificationAttempts as listEmployeeFaceVerificationAttemptsImpl,
   revokeEmployeeFaceEnrollment as revokeEmployeeFaceEnrollmentImpl,
+  verifyFaceAndRecordKioskPunch as verifyFaceAndRecordKioskPunchImpl,
   verifyFaceAndRecordQrPunch as verifyFaceAndRecordQrPunchImpl,
 } from "./face-recognition-action";
 
@@ -132,6 +140,36 @@ export async function recomputeAttendanceForDate(
   return recomputeAttendanceForDateImpl(...args);
 }
 
+export async function getEmployeeAttendanceQr(
+  ...args: Parameters<typeof getEmployeeAttendanceQrImpl>
+) {
+  return getEmployeeAttendanceQrImpl(...args);
+}
+
+export async function getKioskAttendanceConfig(
+  ...args: Parameters<typeof getKioskAttendanceConfigImpl>
+) {
+  return getKioskAttendanceConfigImpl(...args);
+}
+
+export async function resolveEmployeeAttendanceQr(
+  ...args: Parameters<typeof resolveEmployeeAttendanceQrImpl>
+) {
+  return resolveEmployeeAttendanceQrImpl(...args);
+}
+
+export async function recordKioskResolvedPunch(
+  ...args: Parameters<typeof recordKioskResolvedPunchImpl>
+) {
+  return recordKioskResolvedPunchImpl(...args);
+}
+
+export async function getSearchEmployeeFacePreview(
+  ...args: Parameters<typeof getSearchEmployeeFacePreviewImpl>
+) {
+  return getSearchEmployeeFacePreviewImpl(...args);
+}
+
 export async function listEmployeeFaceEnrollments(
   ...args: Parameters<typeof listEmployeeFaceEnrollmentsImpl>
 ) {
@@ -160,4 +198,10 @@ export async function verifyFaceAndRecordQrPunch(
   ...args: Parameters<typeof verifyFaceAndRecordQrPunchImpl>
 ) {
   return verifyFaceAndRecordQrPunchImpl(...args);
+}
+
+export async function verifyFaceAndRecordKioskPunch(
+  ...args: Parameters<typeof verifyFaceAndRecordKioskPunchImpl>
+) {
+  return verifyFaceAndRecordKioskPunchImpl(...args);
 }

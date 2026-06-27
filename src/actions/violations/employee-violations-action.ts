@@ -17,12 +17,21 @@ import {
   canReviewViolations,
   countApprovedCountedStrikesForType,
   employeeViolationInclude,
+  hasAppealSubmittedAtColumn,
   getViolationMaxStrikesPerEmployee,
   normalizeMaxStrikesPerEmployee,
   parseDateInput,
   serializeViolation,
 } from "./violations-shared";
 import type { ViolationRow } from "./types";
+
+const APPEAL_STEP = {
+  SECURED: "SECURED",
+  FILLED: "FILLED",
+  SUBMITTED_TO_MANAGER: "SUBMITTED_TO_MANAGER",
+} as const;
+
+type AppealStep = (typeof APPEAL_STEP)[keyof typeof APPEAL_STEP];
 
 export async function createEmployeeViolation(input: {
   employeeId: string;
@@ -68,7 +77,7 @@ export async function createEmployeeViolation(input: {
     const acknowledgedAt = isAcknowledged ? new Date() : null;
     const createdStatus =
       session.role === Roles.Supervisor
-        ? EMPLOYEE_VIOLATION_STATUS.DRAFT
+        ? EMPLOYEE_VIOLATION_STATUS.PENDING_EMPLOYEE
         : EMPLOYEE_VIOLATION_STATUS.APPROVED;
     const createdAtNow = new Date();
 
@@ -91,6 +100,11 @@ export async function createEmployeeViolation(input: {
           employeeId: true,
           isArchived: true,
           supervisorUserId: true,
+          user: {
+            select: {
+              role: true,
+            },
+          },
         },
       }),
       db.violation.findUnique({
@@ -105,6 +119,12 @@ export async function createEmployeeViolation(input: {
 
     if (!employee || employee.isArchived) {
       return { success: false, error: "Employee not found" };
+    }
+    if (employee.user?.role !== Roles.Employee) {
+      return {
+        success: false,
+        error: "Violations can only be assigned to employee accounts.",
+      };
     }
     if (
       session.role === Roles.Supervisor &&
@@ -183,21 +203,22 @@ export async function createEmployeeViolation(input: {
       include: employeeViolationInclude,
     });
 
-    if (createdStatus === EMPLOYEE_VIOLATION_STATUS.DRAFT) {
+    if (createdStatus === EMPLOYEE_VIOLATION_STATUS.PENDING_EMPLOYEE) {
       await createAndDispatchNotification({
-        eventType: NotificationEventType.VIOLATION_SUBMITTED,
+        eventType: NotificationEventType.VIOLATION_ACKNOWLEDGEMENT_REQUIRED,
         module: NotificationModule.VIOLATIONS,
-        title: "Violation draft submitted",
-        message: "A supervisor submitted a violation draft for review.",
-        severity: NotificationSeverity.INFO,
+        title: "Violation acknowledgement required",
+        message:
+          "A supervisor submitted a violation record that requires your acknowledgement and appeal paper submission.",
+        severity: NotificationSeverity.WARNING,
         actorUserId: session.userId ?? null,
         entityType: "EmployeeViolation",
         entityId: created.id,
-        linkHref: "/manager/violations",
+        linkHref: "/employee/violations",
         recipients: {
-          roles: [Roles.Admin, Roles.Manager],
+          employeeIds: [created.employeeId],
         },
-        emailEligible: false,
+        emailEligible: true,
       });
     } else {
       await createAndDispatchNotification({
@@ -245,7 +266,11 @@ export async function setEmployeeViolationAcknowledged(input: {
 
     const target = await db.employeeViolation.findUnique({
       where: { id },
-      select: { id: true, employee: { select: { userId: true } } },
+      select: {
+        id: true,
+        status: true,
+        employee: { select: { userId: true } },
+      },
     });
     if (!target) {
       return { success: false, error: "Violation not found" };
@@ -256,6 +281,12 @@ export async function setEmployeeViolationAcknowledged(input: {
         return {
           success: false,
           error: "You can only acknowledge your own records.",
+        };
+      }
+      if (target.status !== EMPLOYEE_VIOLATION_STATUS.PENDING_EMPLOYEE) {
+        return {
+          success: false,
+          error: "Only pending employee violations can be acknowledged.",
         };
       }
     } else if (!canReviewViolations(session.role)) {
@@ -299,6 +330,289 @@ export async function setEmployeeViolationAcknowledged(input: {
   }
 }
 
+export async function setEmployeeViolationAppealStep(input: {
+  id: string;
+  step: AppealStep;
+  completed: boolean;
+}): Promise<{
+  success: boolean;
+  data?: ViolationRow;
+  error?: string;
+}> {
+  try {
+    const session = await getSession();
+    if (!session?.isLoggedIn || session.role !== Roles.Employee) {
+      return {
+        success: false,
+        error: "You are not allowed to update appeal paper steps.",
+      };
+    }
+
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    const step =
+      typeof input.step === "string" ? input.step.trim().toUpperCase() : "";
+    const completed = Boolean(input.completed);
+    if (!id) return { success: false, error: "id is required" };
+    if (
+      step !== APPEAL_STEP.SECURED &&
+      step !== APPEAL_STEP.FILLED &&
+      step !== APPEAL_STEP.SUBMITTED_TO_MANAGER
+    ) {
+      return { success: false, error: "Invalid appeal paper step." };
+    }
+
+    const target = await db.employeeViolation.findUnique({
+      where: { id },
+      include: {
+        ...employeeViolationInclude,
+        employee: {
+          select: {
+            employeeId: true,
+            employeeCode: true,
+            firstName: true,
+            lastName: true,
+            img: true,
+            userId: true,
+          },
+        },
+      },
+    });
+    if (!target) return { success: false, error: "Violation not found" };
+    if (!session.userId || target.employee.userId !== session.userId) {
+      return {
+        success: false,
+        error: "You can only update your own appeal paper steps.",
+      };
+    }
+    if (target.status !== EMPLOYEE_VIOLATION_STATUS.PENDING_EMPLOYEE) {
+      return {
+        success: false,
+        error: "Only pending employee violations can update appeal paper steps.",
+      };
+    }
+    if (!target.isAcknowledged) {
+      return {
+        success: false,
+        error: "Acknowledge the violation before updating appeal paper steps.",
+      };
+    }
+
+    const now = new Date();
+    const data: {
+      appealPaperSecuredAt?: Date | null;
+      appealPaperFilledAt?: Date | null;
+      appealPaperSubmittedToManagerAt?: Date | null;
+    } = {};
+
+    if (step === APPEAL_STEP.SECURED) {
+      data.appealPaperSecuredAt = completed
+        ? (target.appealPaperSecuredAt ?? now)
+        : null;
+      if (!completed) {
+        data.appealPaperFilledAt = null;
+        data.appealPaperSubmittedToManagerAt = null;
+      }
+    }
+
+    if (step === APPEAL_STEP.FILLED) {
+      if (completed && !target.appealPaperSecuredAt) {
+        return {
+          success: false,
+          error: "Secure the appeal paper before marking it filled.",
+        };
+      }
+      data.appealPaperFilledAt = completed
+        ? (target.appealPaperFilledAt ?? now)
+        : null;
+      if (!completed) {
+        data.appealPaperSubmittedToManagerAt = null;
+      }
+    }
+
+    if (step === APPEAL_STEP.SUBMITTED_TO_MANAGER) {
+      if (
+        completed &&
+        (!target.appealPaperSecuredAt || !target.appealPaperFilledAt)
+      ) {
+        return {
+          success: false,
+          error: "Fill the appeal paper before marking it submitted to manager.",
+        };
+      }
+      data.appealPaperSubmittedToManagerAt = completed
+        ? (target.appealPaperSubmittedToManagerAt ?? now)
+        : null;
+    }
+
+    const updated = await db.employeeViolation.update({
+      where: { id },
+      data,
+      include: employeeViolationInclude,
+    });
+
+    return { success: true, data: serializeViolation(updated) };
+  } catch (error) {
+    console.error("Error updating violation appeal paper step:", error);
+    return {
+      success: false,
+      error: "Failed to update appeal paper step.",
+    };
+  }
+}
+
+export async function setEmployeeViolationAppealSubmitted(input: {
+  id: string;
+}): Promise<{
+  success: boolean;
+  data?: ViolationRow;
+  error?: string;
+}> {
+  try {
+    const session = await getSession();
+    if (!session?.isLoggedIn || session.role !== Roles.Employee) {
+      return {
+        success: false,
+        error: "You are not allowed to submit an appeal marker.",
+      };
+    }
+
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    if (!id) {
+      return { success: false, error: "id is required" };
+    }
+    if (!(await hasAppealSubmittedAtColumn())) {
+      return {
+        success: false,
+        error:
+          "Violation appeal tracking is not ready yet. Run Prisma migration, regenerate client, then restart dev server.",
+      };
+    }
+
+    const target = await db.employeeViolation.findUnique({
+      where: { id },
+      include: {
+        ...employeeViolationInclude,
+        employee: {
+          select: {
+            employeeId: true,
+            employeeCode: true,
+            firstName: true,
+            lastName: true,
+            img: true,
+            userId: true,
+          },
+        },
+      },
+    });
+    if (!target) {
+      return { success: false, error: "Violation not found" };
+    }
+    if (!session.userId || target.employee.userId !== session.userId) {
+      return {
+        success: false,
+        error: "You can only submit an appeal marker for your own record.",
+      };
+    }
+    if (target.status !== EMPLOYEE_VIOLATION_STATUS.PENDING_EMPLOYEE) {
+      return {
+        success: false,
+        error: "Only pending employee violations can be marked as appealed.",
+      };
+    }
+    if (!target.isAcknowledged) {
+      return {
+        success: false,
+        error: "Acknowledge the violation before marking appeal paper submitted.",
+      };
+    }
+    if (
+      !target.appealPaperSecuredAt ||
+      !target.appealPaperFilledAt ||
+      !target.appealPaperSubmittedToManagerAt
+    ) {
+      return {
+        success: false,
+        error: "Complete all appeal paper steps before sending to manager review.",
+      };
+    }
+
+    const existingAppealRows = await db.$queryRaw<
+      Array<{ appealSubmittedAt: Date | null }>
+    >`
+      SELECT "appealSubmittedAt"
+      FROM "EmployeeViolation"
+      WHERE "id" = ${id}
+      LIMIT 1
+    `;
+    const existingAppealSubmittedAt =
+      existingAppealRows[0]?.appealSubmittedAt ?? null;
+
+    if (existingAppealSubmittedAt) {
+      const updated = await db.employeeViolation.update({
+        where: { id },
+        data: {
+          status: EMPLOYEE_VIOLATION_STATUS.PENDING_MANAGER_REVIEW,
+          submittedAt: target.submittedAt ?? new Date(),
+        },
+        include: employeeViolationInclude,
+      });
+      return {
+        success: true,
+        data: serializeViolation(updated),
+      };
+    }
+
+    const submittedAt = new Date();
+    await db.$executeRaw`
+      UPDATE "EmployeeViolation"
+      SET
+        "appealSubmittedAt" = ${submittedAt},
+        "submittedAt" = ${submittedAt},
+        "status" = ${EMPLOYEE_VIOLATION_STATUS.PENDING_MANAGER_REVIEW}::"EmployeeViolationStatus"
+      WHERE "id" = ${id}
+    `;
+
+    const updated = await db.employeeViolation.findUnique({
+      where: { id },
+      include: employeeViolationInclude,
+    });
+    if (!updated) {
+      return { success: false, error: "Violation not found" };
+    }
+
+    await createAndDispatchNotification({
+      eventType: NotificationEventType.VIOLATION_APPEAL_PAPER_SUBMITTED,
+      module: NotificationModule.VIOLATIONS,
+      title: "Violation appeal paper submitted",
+      message:
+        "An employee marked a physical violation appeal paper as submitted.",
+      severity: NotificationSeverity.INFO,
+      actorUserId: session.userId ?? null,
+      entityType: "EmployeeViolation",
+      entityId: updated.id,
+      linkHref: "/manager/violations",
+      recipients: {
+        roles: [Roles.Admin, Roles.Manager, Roles.GeneralManager],
+      },
+      emailEligible: false,
+    });
+
+    return {
+      success: true,
+      data: {
+        ...serializeViolation(updated),
+        appealSubmittedAt: submittedAt.toISOString(),
+      },
+    };
+  } catch (error) {
+    console.error("Error submitting violation appeal marker:", error);
+    return {
+      success: false,
+      error: "Failed to submit violation appeal marker.",
+    };
+  }
+}
+
 export async function reviewEmployeeViolation(input: {
   id: string;
   decision: "APPROVED" | "REJECTED";
@@ -337,10 +651,13 @@ export async function reviewEmployeeViolation(input: {
       select: { id: true, status: true, employeeId: true, violationId: true },
     });
     if (!existing) {
-      return { success: false, error: "Violation draft not found" };
+      return { success: false, error: "Violation record not found" };
     }
-    if (existing.status !== EMPLOYEE_VIOLATION_STATUS.DRAFT) {
-      return { success: false, error: "Only drafts can be reviewed" };
+    if (existing.status !== EMPLOYEE_VIOLATION_STATUS.PENDING_MANAGER_REVIEW) {
+      return {
+        success: false,
+        error: "Only violations with submitted appeal papers can be reviewed",
+      };
     }
 
     let isCountedForStrike = false;
@@ -355,7 +672,7 @@ export async function reviewEmployeeViolation(input: {
       if (!definition) {
         return {
           success: false,
-          error: "Violation definition not found for this draft.",
+          error: "Violation definition not found for this record.",
         };
       }
 
@@ -408,20 +725,24 @@ export async function reviewEmployeeViolation(input: {
         emailEligible: true,
       });
     } else {
+      const rejectionMessage = normalizedReviewRemarks
+        ? `A violation record was rejected during review. Remarks: ${normalizedReviewRemarks}`
+        : "A violation record was rejected during review.";
+
       await createAndDispatchNotification({
         eventType: NotificationEventType.VIOLATION_REJECTED,
         module: NotificationModule.VIOLATIONS,
         title: "Violation rejected",
-        message: "A violation draft was rejected during review.",
+        message: rejectionMessage,
         severity: NotificationSeverity.WARNING,
         actorUserId: session.userId ?? null,
         entityType: "EmployeeViolation",
         entityId: reviewed.id,
-        linkHref: "/manager/violations",
+        linkHref: "/employee/violations",
         recipients: {
-          roles: [Roles.Admin, Roles.Manager, Roles.Supervisor],
+          employeeIds: [reviewed.employeeId],
         },
-        emailEligible: false,
+        emailEligible: true,
       });
     }
 

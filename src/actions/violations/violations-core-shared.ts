@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import type { ViolationResetFrequencyValue } from "./types";
 
 export const EMPLOYEE_VIOLATION_STATUS = {
+  PENDING_EMPLOYEE: "PENDING_EMPLOYEE",
+  PENDING_MANAGER_REVIEW: "PENDING_MANAGER_REVIEW",
   DRAFT: "DRAFT",
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
@@ -20,6 +22,7 @@ export const MAX_STRIKES_REACHED_NOTE =
   "Max strikes reached for this violation type; kept for history only.";
 
 let cachedHasViolationMaxStrikeColumn: boolean | null = null;
+let cachedHasAppealSubmittedAtColumn: boolean | null = null;
 
 export const employeeViolationInclude = {
   employee: {
@@ -192,6 +195,30 @@ export const hasViolationMaxStrikeColumn = async () => {
     console.error("Could not check max strike column existence:", error);
     cachedHasViolationMaxStrikeColumn = false;
     return cachedHasViolationMaxStrikeColumn;
+  }
+};
+
+export const hasAppealSubmittedAtColumn = async () => {
+  if (cachedHasAppealSubmittedAtColumn != null) {
+    return cachedHasAppealSubmittedAtColumn;
+  }
+
+  try {
+    const rows = await db.$queryRaw<Array<{ exists: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'EmployeeViolation'
+          AND column_name = 'appealSubmittedAt'
+      ) AS "exists"
+    `;
+    cachedHasAppealSubmittedAtColumn = Boolean(rows[0]?.exists);
+    return cachedHasAppealSubmittedAtColumn;
+  } catch (error) {
+    console.error("Could not check appealSubmittedAt column existence:", error);
+    cachedHasAppealSubmittedAtColumn = false;
+    return cachedHasAppealSubmittedAtColumn;
   }
 };
 

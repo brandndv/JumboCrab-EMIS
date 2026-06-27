@@ -11,10 +11,8 @@ import {
   LockKeyhole,
   LogIn,
   LogOut,
-  QrCode,
   RefreshCcw,
   Shield,
-  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -23,7 +21,7 @@ import {
   startOfZonedDay,
   zonedNow,
 } from "@/lib/timezone";
-import { KioskQrPanel } from "@/components/kiosk/kiosk-qr-panel";
+import { KioskPrimaryAttendancePanel } from "@/components/kiosk/kiosk-primary-attendance-panel";
 import {
   type KioskAuthMode,
   type KioskUserSuggestion,
@@ -64,7 +62,7 @@ type StatusPayload = {
   breakMinutes: number;
 };
 
-type KioskQrScanNotice = {
+type PrimaryPunchNotice = {
   username: string;
   employeeName: string;
   employeeCode: string;
@@ -118,13 +116,6 @@ const formatPunchLabel = (punchType: Punch["punchType"]) => {
 };
 
 const PASSWORD_MODE_UNLOCK_WINDOW_MS = 60_000;
-const QR_VISIBLE_WINDOW_SECONDS = (() => {
-  const raw = Number(process.env.NEXT_PUBLIC_KIOSK_QR_VISIBLE_SECONDS ?? "30");
-  if (!Number.isFinite(raw) || raw <= 0) {
-    return 30;
-  }
-  return Math.max(5, Math.floor(raw));
-})();
 const darkCardClass =
   "rounded-[30px] border border-slate-800 bg-[#0b1120]/92 text-slate-100 shadow-[0_28px_80px_-48px_rgba(0,0,0,0.85)]";
 const punchButtonClass =
@@ -152,10 +143,10 @@ export default function KioskClockPage() {
   const [passwordModeUnlockedUntil, setPasswordModeUnlockedUntil] = useState<
     number | null
   >(null);
-  const [qrVisibleUntil, setQrVisibleUntil] = useState<number | null>(null);
-  const [qrScanNotice, setQrScanNotice] = useState<KioskQrScanNotice | null>(
-    null,
-  );
+  const [primaryPunchNotice, setPrimaryPunchNotice] =
+    useState<PrimaryPunchNotice | null>(
+      null,
+    );
 
   useEffect(() => {
     const t = setInterval(() => setNow(zonedNow()), 1000);
@@ -167,10 +158,6 @@ export default function KioskClockPage() {
   );
   const unlockSecondsLeft = passwordModeUnlockedUntil
     ? Math.max(0, Math.ceil((passwordModeUnlockedUntil - now.getTime()) / 1000))
-    : 0;
-  const qrVisible = Boolean(qrVisibleUntil && qrVisibleUntil > now.getTime());
-  const qrSecondsLeft = qrVisibleUntil
-    ? Math.max(0, Math.ceil((qrVisibleUntil - now.getTime()) / 1000))
     : 0;
   const activeStatusUsername = statusUser || username;
   const currentDate = useMemo(
@@ -216,14 +203,6 @@ export default function KioskClockPage() {
     setStatus(null);
   }, []);
 
-  const showQrPanel = useCallback(() => {
-    setQrVisibleUntil(Date.now() + QR_VISIBLE_WINDOW_SECONDS * 1000);
-  }, []);
-
-  const hideQrPanel = useCallback(() => {
-    setQrVisibleUntil(null);
-  }, []);
-
   const loadStatus = useCallback(async (u: string) => {
     const normalizedUsername = u.trim();
     if (!normalizedUsername) {
@@ -251,22 +230,9 @@ export default function KioskClockPage() {
     }
   }, [currentDate]);
 
-  const handleQrScanSuccess = useCallback(
-    async (ack: {
-      username: string;
-      employeeName: string;
-      employeeCode: string;
-      punchType: string;
-      punchTime: string;
-    }) => {
-      setQrVisibleUntil(null);
-      setQrScanNotice({
-        username: ack.username,
-        employeeName: ack.employeeName,
-        employeeCode: ack.employeeCode,
-        punchType: ack.punchType,
-        punchTime: ack.punchTime,
-      });
+  const handlePrimaryPunchSuccess = useCallback(
+    async (ack: PrimaryPunchNotice) => {
+      setPrimaryPunchNotice(ack);
       setInfo(null);
       setError(null);
       setStatusUser(ack.username);
@@ -366,21 +332,14 @@ export default function KioskClockPage() {
   }, [lockPasswordMode, now, passwordModeUnlockedUntil]);
 
   useEffect(() => {
-    if (!qrVisibleUntil) return;
-    if (qrVisibleUntil > now.getTime()) return;
-
-    setQrVisibleUntil(null);
-  }, [now, qrVisibleUntil]);
-
-  useEffect(() => {
-    if (!qrScanNotice) return;
+    if (!primaryPunchNotice) return;
 
     const timeout = window.setTimeout(() => {
-      setQrScanNotice(null);
+      setPrimaryPunchNotice(null);
     }, 8000);
 
     return () => clearTimeout(timeout);
-  }, [qrScanNotice]);
+  }, [primaryPunchNotice]);
 
   const nextActions = useMemo(() => {
     const last = status?.lastPunch?.punchType;
@@ -513,8 +472,9 @@ export default function KioskClockPage() {
                 Clock Station
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                QR is the default punch path. Manual username and password
-                fallback stays locked behind supervisor access.
+                Kiosk handles QR and face flow based on attendance mode.
+                Manual username and password fallback stays locked behind
+                supervisor access.
               </p>
             </div>
           </div>
@@ -536,97 +496,38 @@ export default function KioskClockPage() {
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.9fr)]">
-          <Card className={darkCardClass}>
-            <CardHeader className="border-b border-slate-800/80 pb-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-2">
-                  <CardTitle className="text-2xl text-slate-50">
-                    Scan to punch
-                  </CardTitle>
-                  <p className="max-w-2xl text-sm leading-6 text-slate-400">
-                    Employees use their own phone to authenticate. Shared kiosk
-                    credentials stay out of the normal flow.
-                  </p>
-                </div>
-                <Badge
-                  className={cn(
-                    "w-fit border hover:bg-transparent",
-                    qrVisible
-                      ? "border-orange-500/20 bg-orange-500/10 text-orange-200"
-                      : "border-slate-700 bg-slate-900 text-slate-300",
-                  )}
-                >
-                  {qrVisible ? "QR Active" : "QR Hidden"}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-5 p-6">
-              {qrScanNotice ? (
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
-                  <p className="text-sm font-semibold text-emerald-200">
-                    QR scan completed
-                  </p>
-                  <p className="mt-1 text-sm text-emerald-100/80">
-                    {qrScanNotice.employeeName} ({qrScanNotice.employeeCode}){" "}
-                    recorded{" "}
-                    {formatPunchLabel(
-                      qrScanNotice.punchType as Punch["punchType"],
-                    )}{" "}
-                    at{" "}
-                    {formatZonedTime(qrScanNotice.punchTime, {
-                      hour12: true,
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })}
-                    .
-                  </p>
-                </div>
-              ) : null}
+          <div className="space-y-6">
+            <KioskPrimaryAttendancePanel
+              onPunchSuccess={handlePrimaryPunchSuccess}
+            />
 
-              <div className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-950/45 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-slate-100">
-                    QR visibility window
-                  </p>
-                  <p className="text-sm text-slate-400">
-                    {qrVisible
-                      ? `QR is live and will auto-close in ${qrSecondsLeft}s.`
-                      : `QR stays hidden until started, then closes after ${QR_VISIBLE_WINDOW_SECONDS}s.`}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  {qrVisible ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-11 rounded-2xl border border-slate-700 px-4 text-slate-200 hover:bg-slate-900 hover:text-slate-50"
-                      onClick={hideQrPanel}
-                    >
-                      <X className="mr-2 h-4 w-4" />
-                      Hide QR
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      className="h-11 rounded-2xl bg-orange-500 px-4 text-slate-950 hover:bg-orange-400"
-                      onClick={showQrPanel}
-                    >
-                      <QrCode className="mr-2 h-4 w-4" />
-                      Show QR
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              <KioskQrPanel
-                active={qrVisible}
-                activeUntil={qrVisibleUntil}
-                sessionSecondsLeft={qrSecondsLeft}
-                onScanSuccess={handleQrScanSuccess}
-              />
-            </CardContent>
-          </Card>
+            {primaryPunchNotice ? (
+              <Card className={darkCardClass}>
+                <CardContent className="p-6">
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                    <p className="text-sm font-semibold text-emerald-200">
+                      Punch completed
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-100/80">
+                      {primaryPunchNotice.employeeName} (
+                      {primaryPunchNotice.employeeCode}) recorded{" "}
+                      {formatPunchLabel(
+                        primaryPunchNotice.punchType as Punch["punchType"],
+                      )}{" "}
+                      at{" "}
+                      {formatZonedTime(primaryPunchNotice.punchTime, {
+                        hour12: true,
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                      .
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
 
           <div className="space-y-6">
             <Card className={darkCardClass}>

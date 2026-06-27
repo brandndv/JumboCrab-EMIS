@@ -17,7 +17,12 @@ import {
 import { getRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
 import { createAndDispatchNotification } from "@/lib/notifications";
-import { getPostSignInPath, normalizeRole } from "@/lib/rbac";
+import {
+  canManageAccountRole,
+  getManageableAccountRoles,
+  getPostSignInPath,
+  normalizeRole,
+} from "@/lib/rbac";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 
@@ -215,10 +220,14 @@ export async function createAuthUser(input: {
       };
     }
 
-    if (appRole === "admin") {
+    if (!canManageAccountRole(actorRole, appRole)) {
+      const allowedRoles = getManageableAccountRoles(actorRole);
       return {
         success: false,
-        error: "Admin accounts are reserved for system control and cannot be created here",
+        error:
+          allowedRoles.length > 0
+            ? `You can only create these roles: ${allowedRoles.join(", ")}`
+            : "You are not allowed to create user accounts",
       };
     }
 

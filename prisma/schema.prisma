@@ -461,6 +461,7 @@ model Punch {
 model AttendanceSecuritySetting {
   id                     String   @id @default("default")
   gpsValidationEnabled   Boolean  @default(false)
+  attendancePunchMode    String   @default("QR_ONLY")
   faceRecognitionEnabled Boolean  @default(false)
   faceRequiredForQrPunch Boolean  @default(false)
   faceLivenessRequired   Boolean  @default(true)
@@ -562,6 +563,10 @@ model EmployeeViolation {
   reviewRemarks        String?
   isAcknowledged       Boolean                 @default(false)
   acknowledgedAt       DateTime?
+  appealPaperSecuredAt            DateTime?
+  appealPaperFilledAt             DateTime?
+  appealPaperSubmittedToManagerAt DateTime?
+  appealSubmittedAt               DateTime?
   remarks              String?
   isCountedForStrike   Boolean                 @default(true)
   voidedAt             DateTime?
@@ -1300,6 +1305,8 @@ enum ScheduleSwapRequestStatus {
 }
 
 enum EmployeeViolationStatus {
+  PENDING_EMPLOYEE
+  PENDING_MANAGER_REVIEW
   DRAFT
   APPROVED
   REJECTED
@@ -1424,6 +1431,7 @@ enum NotificationEventType {
   VIOLATION_REJECTED
   VIOLATION_ACKNOWLEDGEMENT_REQUIRED
   VIOLATION_ACKNOWLEDGED
+  VIOLATION_APPEAL_PAPER_SUBMITTED
   PAYROLL_GENERATED
   PAYROLL_READY_FOR_REVIEW
   PAYROLL_MANAGER_APPROVED

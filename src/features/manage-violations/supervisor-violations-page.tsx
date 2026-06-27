@@ -32,7 +32,16 @@ const formatDate = (value: string) =>
 const statusClass = (status: ViolationRow["status"]) => {
   if (status === "APPROVED") return "border-emerald-600 text-emerald-700";
   if (status === "REJECTED") return "border-destructive text-destructive";
+  if (status === "PENDING_MANAGER_REVIEW") return "border-blue-600 text-blue-700";
   return "border-orange-600 text-orange-700";
+};
+
+const formatStatus = (status: ViolationRow["status"]) => {
+  if (status === "PENDING_EMPLOYEE") return "Pending Employee";
+  if (status === "PENDING_MANAGER_REVIEW") return "Ready for Review";
+  if (status === "APPROVED") return "Approved";
+  if (status === "REJECTED") return "Rejected";
+  return "Draft";
 };
 
 const SupervisorViolationsPage = () => {
@@ -49,7 +58,7 @@ const SupervisorViolationsPage = () => {
       setError(null);
       const result = await getViolations();
       if (!result.success) {
-        throw new Error(result.error || "Failed to load violation drafts");
+        throw new Error(result.error || "Failed to load violations");
       }
 
       const filteredRows = (result.data ?? []).filter(
@@ -75,12 +84,12 @@ const SupervisorViolationsPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionLoading, user?.userId]);
 
-  const draftCount = useMemo(
-    () => rows.filter((row) => row.status === "DRAFT").length,
+  const pendingEmployeeCount = useMemo(
+    () => rows.filter((row) => row.status === "PENDING_EMPLOYEE").length,
     [rows],
   );
-  const approvedCount = useMemo(
-    () => rows.filter((row) => row.status === "APPROVED").length,
+  const pendingManagerCount = useMemo(
+    () => rows.filter((row) => row.status === "PENDING_MANAGER_REVIEW").length,
     [rows],
   );
   const rejectedCount = useMemo(
@@ -92,7 +101,7 @@ const SupervisorViolationsPage = () => {
     return (
       <ModuleLoadingState
         title="Supervisor Violations"
-        description="Loading your drafts, review statuses, and violation form access."
+        description="Loading your submissions, review statuses, and violation form access."
       />
     );
   }
@@ -102,7 +111,7 @@ const SupervisorViolationsPage = () => {
       <div>
         <h1 className="text-2xl font-semibold">Supervisor Violations</h1>
         <p className="text-sm text-muted-foreground">
-          Draft employee violations for manager review and approval.
+          Submit employee violations for acknowledgement, appeal paper submission, and manager review.
         </p>
       </div>
 
@@ -116,21 +125,21 @@ const SupervisorViolationsPage = () => {
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Draft
+                Pending Employee
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold">{draftCount}</p>
+              <p className="text-2xl font-semibold">{pendingEmployeeCount}</p>
             </CardContent>
           </Card>
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Approved
+                Ready for Review
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold">{approvedCount}</p>
+              <p className="text-2xl font-semibold">{pendingManagerCount}</p>
             </CardContent>
           </Card>
           <Card className="shadow-sm">
@@ -148,7 +157,7 @@ const SupervisorViolationsPage = () => {
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg">My Violation Drafts</CardTitle>
+          <CardTitle className="text-lg">My Violation Submissions</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-lg border">
@@ -167,7 +176,7 @@ const SupervisorViolationsPage = () => {
                   <TableRow>
                     <TableCell colSpan={5} className="p-3">
                       <TableLoadingState
-                        label="Loading drafts"
+                        label="Loading submissions"
                         columns={5}
                         rows={3}
                       />
@@ -184,7 +193,7 @@ const SupervisorViolationsPage = () => {
                 {!loading && !error && rows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-muted-foreground">
-                      No violation drafts yet.
+                      No violation submissions yet.
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -202,7 +211,7 @@ const SupervisorViolationsPage = () => {
                       <TableCell>{formatDate(row.violationDate)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusClass(row.status)}>
-                          {row.status}
+                          {formatStatus(row.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">

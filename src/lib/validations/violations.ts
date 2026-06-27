@@ -8,6 +8,7 @@ export const violationsSchema = z.object({
   strikePointsSnapshot: z.number().int().nonnegative().optional(),
   isAcknowledged: z.boolean().default(false),
   acknowledgedAt: z.coerce.date().optional().nullable(),
+  appealSubmittedAt: z.coerce.date().optional().nullable(),
   remarks: z
     .string()
     .trim()

@@ -26,8 +26,9 @@ import { Loader2, Save } from "lucide-react";
 import { useToast } from "@/components/ui/toast-provider";
 import type { UserWithEmployee } from "@/lib/validations/users";
 import { getUserById, updateUser } from "@/actions/users/users-action";
-import { MANAGEABLE_APP_ROLES } from "@/lib/rbac";
+import { getManageableAccountRoles } from "@/lib/rbac";
 import { ModuleLoadingState } from "@/components/loading/loading-states";
+import { useSession } from "@/hooks/use-session";
 
 const Field = ({
   label,
@@ -88,6 +89,11 @@ export default function UserEditPage({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const { user: sessionUser } = useSession();
+  const allowedRoles = useMemo(
+    () => getManageableAccountRoles(sessionUser?.role),
+    [sessionUser?.role],
+  );
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -207,22 +213,6 @@ export default function UserEditPage({
     );
   }
 
-  if (error) {
-    return (
-      <div className="mx-auto max-w-3xl rounded-xl border border-destructive/30 bg-destructive/10 p-6 text-destructive">
-        <p className="font-medium">{error}</p>
-        <div className="mt-4 flex gap-2">
-          <Button variant="outline" onClick={() => router.back()}>
-            Go back
-          </Button>
-          <Button variant="secondary" onClick={() => window.location.reload()}>
-            Retry
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 py-10 px-5 md:px-16 lg:px-24">
       <div className="flex items-start justify-between gap-4">
@@ -266,6 +256,11 @@ export default function UserEditPage({
           </CardHeader>
           <CardContent>
             <form className="space-y-6" onSubmit={handleSubmit}>
+              {error && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+                  {error}
+                </div>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Username *">
                   <Input
@@ -286,11 +281,13 @@ export default function UserEditPage({
                 </Field>
                 <Field label="Role *">
                   <Select value={role} onValueChange={setRole}>
-                    <SelectTrigger>
+                    <SelectTrigger
+                      className={error ? "border-destructive" : undefined}
+                    >
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent>
-                      {MANAGEABLE_APP_ROLES.map((r) => (
+                      {allowedRoles.map((r) => (
                         <SelectItem key={r} value={r}>
                           {r}
                         </SelectItem>
@@ -343,7 +340,7 @@ export default function UserEditPage({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={saving}>
+                <Button type="submit" disabled={saving || !user}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <Save className="mr-2 h-4 w-4" />
                   Save changes

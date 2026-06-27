@@ -9,7 +9,11 @@ export const FACE_API_LIVENESS_PROMPTS = [
   "Turn your head right",
 ] as const;
 
-export type FaceApiLivenessPrompt = (typeof FACE_API_LIVENESS_PROMPTS)[number];
+export const FRONT_FACE_LIVENESS_PROMPT = "Face camera directly" as const;
+
+export type FaceApiLivenessPrompt =
+  | (typeof FACE_API_LIVENESS_PROMPTS)[number]
+  | typeof FRONT_FACE_LIVENESS_PROMPT;
 
 export type FaceApiDescriptorMetadata = {
   detectionScore: number;
@@ -49,6 +53,7 @@ export type FaceApiVerificationPayload = {
     eyeAspectRatioMax?: number;
     yawRatioMin?: number;
     yawRatioMax?: number;
+    frontFaceOnly?: boolean;
   };
 };
 
@@ -95,6 +100,11 @@ const detectorOptions = (faceapi: FaceApiModule) =>
     inputSize: 320,
     scoreThreshold: 0.45,
   });
+
+const FRONT_FACE_MIN_DETECTION_SCORE = 0.55;
+const FRONT_FACE_MIN_BOX_RATIO = 0.16;
+const FRONT_FACE_MAX_BOX_RATIO = 0.72;
+const FRONT_FACE_MAX_ABS_YAW_RATIO = 0.1;
 
 const delay = (ms: number) =>
   new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -237,6 +247,10 @@ const evaluateLiveness = (
   prompt: FaceApiLivenessPrompt,
   samples: FaceApiDescriptorResult[],
 ) => {
+  if (prompt === FRONT_FACE_LIVENESS_PROMPT) {
+    return samples.every((sample) => getFrontFaceSampleIssue(sample) === null);
+  }
+
   const metadata = compactMetadata(samples);
   const earMin = metadata.eyeAspectRatioMin;
   const earMax = metadata.eyeAspectRatioMax;
@@ -260,6 +274,8 @@ const evaluateLiveness = (
 
 export const livenessInstructionText = (prompt: FaceApiLivenessPrompt) => {
   switch (prompt) {
+    case FRONT_FACE_LIVENESS_PROMPT:
+      return "FACE CAMERA DIRECTLY";
     case "Blink twice":
       return "BLINK TWICE NOW";
     case "Turn your head left":
@@ -267,6 +283,40 @@ export const livenessInstructionText = (prompt: FaceApiLivenessPrompt) => {
     case "Turn your head right":
       return "TURN HEAD RIGHT";
   }
+};
+
+const getFrontFaceSampleIssue = (sample: FaceApiDescriptorResult) => {
+  const { detectionScore, faceBoxRatio, yawRatio } = sample.metadata;
+
+  if (detectionScore < FRONT_FACE_MIN_DETECTION_SCORE) {
+    return {
+      reason: "weak_detection",
+      message: "Need brighter light. Face camera directly.",
+    };
+  }
+
+  if (faceBoxRatio < FRONT_FACE_MIN_BOX_RATIO) {
+    return {
+      reason: "face_too_small",
+      message: "Move closer to the camera.",
+    };
+  }
+
+  if (faceBoxRatio > FRONT_FACE_MAX_BOX_RATIO) {
+    return {
+      reason: "face_too_close",
+      message: "Move back a little.",
+    };
+  }
+
+  if (yawRatio == null || Math.abs(yawRatio) > FRONT_FACE_MAX_ABS_YAW_RATIO) {
+    return {
+      reason: "face_not_front",
+      message: "Face camera directly. No left or right turn.",
+    };
+  }
+
+  return null;
 };
 
 export const loadFaceApiModels = async () => {
@@ -364,6 +414,56 @@ export const captureFaceVerificationPayload = async (
       validFrames: samples.length,
       totalFrames: 8,
       elapsedMs: Math.round(performance.now() - startedAt),
+      ...metadata,
+    },
+  };
+};
+
+export const captureFrontFaceVerificationPayload = async (
+  video: HTMLVideoElement,
+): Promise<FaceApiVerificationPayload> => {
+  const startedAt = performance.now();
+  const samples: FaceApiDescriptorResult[] = [];
+  let faceCount = 0;
+
+  for (let index = 0; index < 3; index += 1) {
+    const sample = await captureFaceDescriptor(video);
+    faceCount = sample.faceCount;
+
+    const issue = getFrontFaceSampleIssue(sample);
+    if (issue) {
+      throw new FaceApiClientError(issue.message, issue.reason, faceCount);
+    }
+
+    samples.push(sample);
+
+    if (index < 2) {
+      await delay(70);
+    }
+  }
+
+  const descriptor = averageDescriptors(samples.map((sample) => sample.descriptor));
+  if (!descriptor) {
+    throw new FaceApiClientError(
+      "Face descriptor is required before punching.",
+      "missing_face_descriptor",
+      faceCount,
+    );
+  }
+
+  const metadata = compactMetadata(samples);
+
+  return {
+    descriptor,
+    faceCount: 1,
+    livenessPassed: true,
+    livenessPrompt: FRONT_FACE_LIVENESS_PROMPT,
+    modelVersion: FACE_API_MODEL_VERSION,
+    metadata: {
+      validFrames: samples.length,
+      totalFrames: 3,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      frontFaceOnly: true,
       ...metadata,
     },
   };
