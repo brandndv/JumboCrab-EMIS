@@ -160,7 +160,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         },
       ],
       // ========== ORGANIZATION ACCESS ========= //
-      roles: ["admin", "generalManager", "manager", "supervisor"],
+      roles: ["admin", "generalManager", "manager"],
     },
     // ========== ATTENDANCE MENU ========== //
     {
