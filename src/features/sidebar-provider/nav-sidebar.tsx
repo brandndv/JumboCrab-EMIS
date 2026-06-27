@@ -81,13 +81,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       href: `/${userRole}/dashboard`,
       hasSubmenu: false,
       // ========== DASHBOARD ACCESS ========= //
-      roles: [
-        "admin",
-        "generalManager",
-        "manager",
-        "supervisor",
-        "employee",
-      ],
+      roles: ["admin", "generalManager", "manager", "supervisor", "employee"],
     },
     // ========== USERS MENU ========== //
     {
@@ -130,7 +124,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         {
           label: "Employees Directory",
           path: "",
-          roles: ["admin", "generalManager", "manager", "supervisor"],
+          roles: ["admin", "generalManager", "manager"],
         },
         {
           label: "Add Employee",
@@ -139,7 +133,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         },
       ],
       // ========== EMPLOYEE ACCESS ========= //
-      roles: ["admin", "generalManager", "manager", "supervisor"],
+      roles: ["admin", "generalManager", "manager"],
     },
     // ========== ORGANIZATION MENU ========== //
     {
@@ -229,13 +223,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         },
       ],
       // ========== ATTENDANCE ACCESS ========= //
-      roles: [
-        "admin",
-        "generalManager",
-        "manager",
-        "supervisor",
-        "employee",
-      ],
+      roles: ["admin", "generalManager", "manager", "supervisor", "employee"],
     },
     // ========== DEDUCTION MENU ========== //
     {
@@ -333,13 +321,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         },
       ],
       // ========== VIOLATION ACCESS ========= //
-      roles: [
-        "admin",
-        "generalManager",
-        "manager",
-        "supervisor",
-        "employee",
-      ],
+      roles: ["admin", "generalManager", "manager", "supervisor", "employee"],
     },
     // ========== PAYROLL MENU ========== //
     {
@@ -483,9 +465,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       ],
 
       // ========== SCAN ACCESS ========= //
-      roles: [
-        "employee",
-      ],
+      roles: ["employee"],
     },
     // ========== SCAN MENU ========= //
     {
@@ -495,9 +475,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       href: `/${userRole}/scan`,
       hasSubmenu: false,
       // ========== SCAN ACCESS ========= //
-      roles: [
-        "employee",
-      ],
+      roles: ["employee"],
     },
   ];
 
@@ -506,15 +484,14 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
   );
   return (
     <div className="flex w-full flex-col items-center space-y-2">
-        <SidebarGroup className="w-full">
-          <SidebarMenu className="space-y-1 w-full max-w-xs mx-auto">
+      <SidebarGroup className="w-full">
+        <SidebarMenu className="space-y-1 w-full max-w-xs mx-auto">
           {filteredMenuItems.map((item) => {
             // Subitem role gating: only show subitems whose optional 'roles' includes current userRole.
             // To configure, add `roles: ["admin","manager"]` on any subitem object in `menuItems` above.
             const visibleSubItems =
               item.subItems?.filter(
-                (subItem) =>
-                  !subItem.roles || subItem.roles.includes(userRole),
+                (subItem) => !subItem.roles || subItem.roles.includes(userRole),
               ) || [];
 
             if (item.hasSubmenu) {
@@ -580,9 +557,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                           }}
                         >
                           {/* Icon + label spacing: adjust gap here */}
-                          <div
-                            className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
-                          >
+                          <div className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
                             <item.icon className="h-[1.1rem] w-[1.1rem] shrink-0 stroke-[1.6] transition-[width,height,transform] duration-300 ease-out" />
                             <span className="max-w-[12rem] overflow-hidden whitespace-nowrap font-medium opacity-100 transition-[max-width,opacity,transform] duration-300 ease-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
                               {item.label}
@@ -599,9 +574,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                               ? "max-w-10 text-white hover:text-white"
                               : "max-w-10 text-inherit hover:text-inherit"
                           }`}
-                          onClick={(
-                            e: React.MouseEvent<HTMLButtonElement>,
-                          ) => {
+                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                             e.stopPropagation();
                             updateOpenState(item.id, !openStates[item.id]);
                           }}
@@ -675,10 +648,11 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
                       }}
                       className="w-full text-inherit transition-[width,height,padding,gap] duration-300 ease-out hover:bg-transparent hover:text-inherit active:bg-transparent active:text-inherit focus-visible:ring-0"
                     >
-                      <Link href={item.href} className="flex w-full items-center">
-                        <div
-                          className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
-                        >
+                      <Link
+                        href={item.href}
+                        className="flex w-full items-center"
+                      >
+                        <div className="flex w-full items-center justify-start gap-3 transition-[gap] duration-300 ease-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
                           <item.icon className="h-[1.1rem] w-[1.1rem] shrink-0 stroke-[1.6] transition-[width,height,transform] duration-300 ease-out" />
                           <span className="max-w-[12rem] overflow-hidden whitespace-nowrap font-medium opacity-100 transition-[max-width,opacity,transform] duration-300 ease-out group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
                             {item.label}
