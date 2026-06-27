@@ -156,7 +156,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         {
           label: "Structure",
           path: "/structure",
-          roles: ["admin", "generalManager", "manager", "supervisor"],
+          roles: ["admin", "generalManager", "manager"],
         },
       ],
       // ========== ORGANIZATION ACCESS ========= //
