@@ -36,6 +36,7 @@ model User {
   updatedPayrollEmployees           PayrollEmployee[]             @relation("PayrollEmployeeUpdatedBy")
   createdPayrollEarnings            PayrollEarning[]              @relation("PayrollEarningCreatedBy")
   createdPayrollDeductions          PayrollDeduction[]            @relation("PayrollDeductionCreatedBy")
+  createdContributionBracketVersions ContributionBracketVersion[]  @relation("ContributionBracketVersionCreatedBy")
   createdPositionRateHistories      PositionRateHistory[]         @relation("PositionRateHistoryCreatedBy")
   createdEmployeePositionHistories  EmployeePositionHistory[]     @relation("EmployeePositionHistoryCreatedBy")
   createdDeductionTypes             DeductionType[]               @relation("DeductionTypeCreatedBy")
@@ -45,6 +46,8 @@ model User {
   reviewedEmployeeDeductions        EmployeeDeductionAssignment[] @relation("EmployeeDeductionAssignmentReviewedBy")
   recordedEmployeeDeductionPayments EmployeeDeductionPayment[]    @relation("EmployeeDeductionPaymentCreatedBy")
   reviewedCashAdvanceRequests       CashAdvanceRequest[]          @relation("CashAdvanceRequestReviewedBy")
+  reviewedGovernmentLoanRequests    GovernmentLoanAssistanceRequest[] @relation("GovernmentLoanAssistanceRequestReviewedBy")
+  reviewedSilEncashmentRequests     SilEncashmentRequest[]        @relation("SilEncashmentRequestReviewedBy")
   reviewedLeaveRequests             LeaveRequest[]                @relation("LeaveRequestReviewedBy")
   reviewedDayOffRequests            DayOffRequest[]               @relation("DayOffRequestReviewedBy")
   reviewedScheduleChangeRequests    ScheduleChangeRequest[]       @relation("ScheduleChangeRequestReviewedBy")
@@ -162,6 +165,8 @@ model Employee {
   payrollEmployees             PayrollEmployee[]
   deductionAssignments         EmployeeDeductionAssignment[]
   cashAdvanceRequests          CashAdvanceRequest[]
+  governmentLoanAssistanceRequests GovernmentLoanAssistanceRequest[]
+  silEncashmentRequests        SilEncashmentRequest[]
   leaveRequests                LeaveRequest[]
   leaveCreditLedgerEntries     EmployeeLeaveCreditLedger[]
   dayOffRequests               DayOffRequest[]
@@ -231,8 +236,29 @@ model GovernmentId {
   employee                       Employee @relation("EmployeeGovernmentId", fields: [employeeId], references: [employeeId])
 }
 
+model ContributionBracketVersion {
+  id               String                @id @default(cuid())
+  contributionType ContributionType
+  payrollFrequency PayrollFrequency?
+  effectiveFrom    DateTime
+  effectiveTo      DateTime?
+  referenceCode    String?
+  changeReason     String?
+  createdByUserId  String?
+  createdBy        User?                 @relation("ContributionBracketVersionCreatedBy", fields: [createdByUserId], references: [userId], onDelete: SetNull)
+  brackets         ContributionBracket[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([contributionType, payrollFrequency, effectiveFrom])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([createdByUserId])
+}
+
 model ContributionBracket {
   id                  String                        @id @default(cuid())
+  versionId           String?
+  version             ContributionBracketVersion?   @relation(fields: [versionId], references: [id], onDelete: SetNull)
   contributionType    ContributionType
   calculationMethod   ContributionCalculationMethod
   baseKind            ContributionBaseKind
@@ -252,6 +278,7 @@ model ContributionBracket {
   createdAt           DateTime                      @default(now())
   updatedAt           DateTime                      @updatedAt
 
+  @@index([versionId])
   @@index([contributionType, payrollFrequency, effectiveFrom])
   @@index([contributionType, effectiveFrom, lowerBound])
   @@index([effectiveFrom, effectiveTo])
@@ -714,6 +741,7 @@ model EmployeeDeductionAssignment {
   payrollDeductions  PayrollDeduction[]
   payments           EmployeeDeductionPayment[]
   cashAdvanceRequest CashAdvanceRequest?
+  governmentLoanAssistanceRequest GovernmentLoanAssistanceRequest?
   assignedBy         User?                      @relation("EmployeeDeductionAssignmentAssignedBy", fields: [assignedByUserId], references: [userId], onDelete: SetNull)
   updatedBy          User?                      @relation("EmployeeDeductionAssignmentUpdatedBy", fields: [updatedByUserId], references: [userId], onDelete: SetNull)
   reviewedBy         User?                      @relation("EmployeeDeductionAssignmentReviewedBy", fields: [reviewedByUserId], references: [userId], onDelete: SetNull)
@@ -752,6 +780,65 @@ model CashAdvanceRequest {
   @@index([employeeId, status, submittedAt])
   @@index([status, submittedAt])
   @@index([reviewedByUserId, reviewedAt])
+}
+
+model GovernmentLoanAssistanceRequest {
+  id                          String                                @id @default(cuid())
+  employeeId                  String
+  agency                      GovernmentLoanAgency
+  requestedAmount             Decimal                               @db.Decimal(12, 2)
+  termMonths                  Int
+  estimatedMonthlyDeduction   Decimal                               @db.Decimal(12, 2)
+  estimatedPerPayrollDeduction Decimal                              @db.Decimal(12, 2)
+  governmentIdSnapshot        String
+  monthlySalarySnapshot       Decimal?                              @db.Decimal(12, 2)
+  checklist                   Json?
+  status                      GovernmentLoanAssistanceRequestStatus @default(PENDING_MANAGER_REVIEW)
+  employeeRemarks             String?
+  managerRemarks              String?
+  agencyRemarks               String?
+  approvedAmount              Decimal?                              @db.Decimal(12, 2)
+  approvedMonthlyPayment      Decimal?                              @db.Decimal(12, 2)
+  repaymentStartDate          DateTime?
+  submittedAt                 DateTime                              @default(now())
+  reviewedByUserId            String?
+  reviewedAt                  DateTime?
+  finalizedAt                 DateTime?
+  deductionAssignmentId       String?                               @unique
+  createdAt                   DateTime                              @default(now())
+  updatedAt                   DateTime                              @updatedAt
+
+  employee            Employee                     @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  reviewedBy          User?                        @relation("GovernmentLoanAssistanceRequestReviewedBy", fields: [reviewedByUserId], references: [userId], onDelete: SetNull)
+  deductionAssignment EmployeeDeductionAssignment? @relation(fields: [deductionAssignmentId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, status, submittedAt])
+  @@index([status, submittedAt])
+  @@index([agency, status])
+  @@index([reviewedByUserId, reviewedAt])
+}
+
+model SilEncashmentRequest {
+  id               String             @id @default(cuid())
+  employeeId       String
+  days             Int
+  status           LeaveRequestStatus @default(PENDING_MANAGER)
+  employeeRemarks  String?
+  managerRemarks   String?
+  submittedAt      DateTime           @default(now())
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  ledgerEntryId    String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  employee    Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
+  reviewedBy  User?    @relation("SilEncashmentRequestReviewedBy", fields: [reviewedByUserId], references: [userId], onDelete: SetNull)
+
+  @@index([employeeId, status, submittedAt])
+  @@index([status, submittedAt])
+  @@index([reviewedByUserId, reviewedAt])
+  @@index([ledgerEntryId])
 }
 
 model LeaveRequest {
@@ -1246,6 +1333,20 @@ enum CashAdvanceRequestStatus {
   CANCELLED
 }
 
+enum GovernmentLoanAgency {
+  SSS_SALARY_LOAN
+  PAGIBIG_MPL
+}
+
+enum GovernmentLoanAssistanceRequestStatus {
+  PENDING_MANAGER_REVIEW
+  PROCESSING
+  APPROVED_BY_AGENCY
+  DECLINED_BY_AGENCY
+  RECORDED_IN_PAYROLL
+  CANCELLED
+}
+
 enum LeaveRequestType {
   VACATION
   SICK
@@ -1264,6 +1365,7 @@ enum LeaveCreditLedgerEntryType {
   GRANT
   RESET
   USAGE
+  ENCASHMENT
   ADJUSTMENT
 }
 
@@ -1425,6 +1527,11 @@ enum NotificationEventType {
   CASH_ADVANCE_REQUEST_SUBMITTED
   CASH_ADVANCE_REQUEST_APPROVED
   CASH_ADVANCE_REQUEST_REJECTED
+  GOVERNMENT_LOAN_REQUEST_SUBMITTED
+  GOVERNMENT_LOAN_REQUEST_PROCESSING
+  GOVERNMENT_LOAN_REQUEST_APPROVED
+  GOVERNMENT_LOAN_REQUEST_DECLINED
+  GOVERNMENT_LOAN_REQUEST_RECORDED
   DEDUCTION_ASSIGNMENT_SUBMITTED
   DEDUCTION_ASSIGNMENT_APPROVED
   DEDUCTION_ASSIGNMENT_REJECTED

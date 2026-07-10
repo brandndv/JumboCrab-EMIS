@@ -6,9 +6,11 @@ import { db } from "@/lib/db";
 import { deductionTypeSchema } from "@/lib/validations/deductions";
 import {
   canManageDeductionTypes,
+  canSoftDeleteDeductionTypeRecord,
   canSearchEmployeesForDeductions,
   deductionTypeInclude,
   normalizeCode,
+  PROTECTED_DEDUCTION_TYPE_CODES,
   revalidateDeductionLayouts,
   serializeDeductionType,
 } from "./deductions-shared";
@@ -208,5 +210,62 @@ export async function updateDeductionType(input: {
   } catch (error) {
     console.error("Error updating deduction type:", error);
     return { success: false, error: "Failed to update deduction type." };
+  }
+}
+
+export async function softDeleteDeductionType(input: {
+  id: string;
+}): Promise<{ success: boolean; data?: DeductionTypeRow; error?: string }> {
+  try {
+    const session = await getSession();
+    if (!session?.isLoggedIn || !canManageDeductionTypes(session.role)) {
+      return {
+        success: false,
+        error: "You are not allowed to delete deduction types.",
+      };
+    }
+
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    if (!id) {
+      return { success: false, error: "Deduction type ID is required." };
+    }
+
+    const existing = await db.deductionType.findUnique({
+      where: { id },
+      include: deductionTypeInclude,
+    });
+    if (!existing) {
+      return { success: false, error: "Deduction type not found." };
+    }
+
+    if (PROTECTED_DEDUCTION_TYPE_CODES.has(existing.code)) {
+      return {
+        success: false,
+        error: "System deduction types cannot be deleted.",
+      };
+    }
+
+    if (!canSoftDeleteDeductionTypeRecord(existing)) {
+      return {
+        success: false,
+        error:
+          "This deduction type is already used by assignments or payroll records, so it cannot be deleted.",
+      };
+    }
+
+    const updated = await db.deductionType.update({
+      where: { id },
+      data: {
+        isActive: false,
+        updatedByUserId: session.userId ?? null,
+      },
+      include: deductionTypeInclude,
+    });
+
+    revalidateDeductionLayouts();
+    return { success: true, data: serializeDeductionType(updated) };
+  } catch (error) {
+    console.error("Error deleting deduction type:", error);
+    return { success: false, error: "Failed to delete deduction type." };
   }
 }

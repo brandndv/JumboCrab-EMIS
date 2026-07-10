@@ -274,7 +274,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       href: `/${userRole}/contributions`,
       hasSubmenu: false,
       // ========== CONTRIBUTION ACCESS ========= //
-      roles: ["admin", "manager"],
+      roles: ["admin", "generalManager", "manager", "employee"],
     },
     // ========== VIOLATION MENU ========== //
     {

@@ -25,6 +25,16 @@ const moneyField = numberField
     "Amount seems too large",
   );
 
+const positiveMoneyField = moneyField.refine(
+  (value) => typeof value === "number" && value > 0,
+  "Amount is required",
+);
+
+const termMonthsField = numberField.refine(
+  (value) => value === 12 || value === 24,
+  "Repayment term must be 12 or 24 months",
+);
+
 const dateField = z
   .union([z.string(), z.date()])
   .transform((value) => {
@@ -47,6 +57,69 @@ export const cashAdvanceRequestSchema = z.object({
       message: "Preferred bimonthly date is required",
     });
   }
+});
+
+export const governmentLoanAssistanceRequestSchema = z.object({
+  agency: z.enum(["SSS_SALARY_LOAN", "PAGIBIG_MPL"]),
+  requestedAmount: positiveMoneyField,
+  termMonths: termMonthsField,
+  employeeRemarks: optionalTrimmedString,
+});
+
+export const governmentLoanStatusUpdateSchema = z
+  .object({
+    id: z.string().trim().min(1, "Request is required"),
+    status: z.enum(["PROCESSING", "APPROVED_BY_AGENCY", "DECLINED_BY_AGENCY"]),
+    managerRemarks: optionalTrimmedString,
+    agencyRemarks: optionalTrimmedString,
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "DECLINED_BY_AGENCY" && !value.agencyRemarks && !value.managerRemarks) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["agencyRemarks"],
+        message: "Remarks are required when the agency declines a request",
+      });
+    }
+  });
+
+export const governmentLoanFinalizeSchema = z
+  .object({
+    id: z.string().trim().min(1, "Request is required"),
+    approvedAmount: positiveMoneyField,
+    approvedMonthlyPayment: positiveMoneyField,
+    repaymentStartDate: dateField.optional(),
+    managerRemarks: optionalTrimmedString,
+    agencyRemarks: optionalTrimmedString,
+  })
+  .superRefine((value, ctx) => {
+    if (!value.repaymentStartDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["repaymentStartDate"],
+        message: "Repayment start date is required",
+      });
+    }
+    if (
+      typeof value.approvedAmount === "number" &&
+      typeof value.approvedMonthlyPayment === "number" &&
+      value.approvedMonthlyPayment > value.approvedAmount
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["approvedMonthlyPayment"],
+        message: "Monthly payment cannot exceed approved amount",
+      });
+    }
+  });
+
+export const silEncashmentRequestSchema = z.object({
+  days: z.coerce
+    .number()
+    .int("SIL days must be a whole number")
+    .min(1, "Select at least 1 SIL day")
+    .max(30, "SIL days is too high"),
+  employeeRemarks: optionalTrimmedString,
 });
 
 export const requestReviewSchema = z

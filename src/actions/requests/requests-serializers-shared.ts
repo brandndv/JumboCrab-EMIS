@@ -1,4 +1,8 @@
-import { Prisma } from "@prisma/client";
+import {
+  GovernmentLoanAgency,
+  GovernmentLoanAssistanceRequestStatus,
+  Prisma,
+} from "@prisma/client";
 import {
   employeeRequestSelect,
   enumerateZonedDaysInclusive,
@@ -10,9 +14,12 @@ import type {
   CashAdvanceRequestRow,
   DayOffRequestRow,
   EmployeeLeaveCreditLedgerRow,
+  GovernmentLoanAssistanceRequestRow,
+  GovernmentLoanChecklistItem,
   LeaveCreditPolicyRow,
   LeaveCreditResetRunRow,
   LeaveRequestRow,
+  SilEncashmentRequestRow,
   ScheduleChangeRequestRow,
   ScheduleSwapRequestRow,
 } from "./types";
@@ -41,6 +48,22 @@ type CashAdvanceRequestRecord = Prisma.CashAdvanceRequestGetPayload<{
   };
 }>;
 
+type GovernmentLoanAssistanceRequestRecord =
+  Prisma.GovernmentLoanAssistanceRequestGetPayload<{
+    include: {
+      employee: { select: typeof employeeRequestSelect };
+      reviewedBy: { select: typeof reviewedBySelect };
+      deductionAssignment: {
+        select: {
+          id: true;
+          status: true;
+          effectiveFrom: true;
+          remainingBalance: true;
+        };
+      };
+    };
+  }>;
+
 export type CashAdvanceRequestRecordCompat = Omit<
   CashAdvanceRequestRecord,
   | "approvedAmount"
@@ -65,6 +88,13 @@ type LeaveRequestRecord = Prisma.LeaveRequestGetPayload<{
         workDate: true;
       };
     };
+  };
+}>;
+
+type SilEncashmentRequestRecord = Prisma.SilEncashmentRequestGetPayload<{
+  include: {
+    employee: { select: typeof employeeRequestSelect };
+    reviewedBy: { select: typeof reviewedBySelect };
   };
 }>;
 
@@ -154,6 +184,117 @@ export const serializeCashAdvanceRequest = (
   ),
 });
 
+export const governmentLoanAgencyLabel = (agency: GovernmentLoanAgency) => {
+  switch (agency) {
+    case GovernmentLoanAgency.SSS_SALARY_LOAN:
+      return "SSS Salary Loan";
+    case GovernmentLoanAgency.PAGIBIG_MPL:
+      return "Pag-IBIG MPL";
+    default:
+      return agency;
+  }
+};
+
+const GOVERNMENT_LOAN_CHECKLIST: Array<Omit<GovernmentLoanChecklistItem, "status">> = [
+  { key: "REQUEST_SUBMITTED", label: "Request submitted" },
+  { key: "MARK_PROCESSING", label: "Manager marks processing" },
+  { key: "AGENCY_APPROVED", label: "Agency approved" },
+  { key: "PAYROLL_DEDUCTION_RECORDED", label: "Payroll deduction recorded" },
+];
+
+const checklistIndexForGovernmentLoanStatus = (
+  status: GovernmentLoanAssistanceRequestStatus,
+) => {
+  switch (status) {
+    case GovernmentLoanAssistanceRequestStatus.PENDING_MANAGER_REVIEW:
+      return 1;
+    case GovernmentLoanAssistanceRequestStatus.PROCESSING:
+      return 2;
+    case GovernmentLoanAssistanceRequestStatus.APPROVED_BY_AGENCY:
+      return 3;
+    case GovernmentLoanAssistanceRequestStatus.RECORDED_IN_PAYROLL:
+      return 3;
+    case GovernmentLoanAssistanceRequestStatus.DECLINED_BY_AGENCY:
+    case GovernmentLoanAssistanceRequestStatus.CANCELLED:
+      return 2;
+    default:
+      return 0;
+  }
+};
+
+export const buildGovernmentLoanChecklist = (
+  status: GovernmentLoanAssistanceRequestStatus,
+): GovernmentLoanChecklistItem[] => {
+  const activeIndex = checklistIndexForGovernmentLoanStatus(status);
+
+  return GOVERNMENT_LOAN_CHECKLIST.map((item, index) => {
+    if (
+      status === GovernmentLoanAssistanceRequestStatus.DECLINED_BY_AGENCY &&
+      index === activeIndex
+    ) {
+      return { ...item, status: "BLOCKED" };
+    }
+    if (
+      status === GovernmentLoanAssistanceRequestStatus.CANCELLED &&
+      index >= activeIndex
+    ) {
+      return { ...item, status: "BLOCKED" };
+    }
+    if (status === GovernmentLoanAssistanceRequestStatus.RECORDED_IN_PAYROLL) {
+      return { ...item, status: "DONE" };
+    }
+    if (index < activeIndex) return { ...item, status: "DONE" };
+    if (index === activeIndex) return { ...item, status: "CURRENT" };
+    return { ...item, status: "PENDING" };
+  });
+};
+
+export const serializeGovernmentLoanAssistanceRequest = (
+  row: GovernmentLoanAssistanceRequestRecord,
+): GovernmentLoanAssistanceRequestRow => {
+  const checklist = buildGovernmentLoanChecklist(row.status);
+  const doneCount = checklist.filter((item) => item.status === "DONE").length;
+
+  return {
+    id: row.id,
+    employeeId: row.employeeId,
+    employeeCode: row.employee.employeeCode,
+    employeeName: toEmployeeName(row.employee),
+    agency: row.agency,
+    agencyLabel: governmentLoanAgencyLabel(row.agency),
+    requestedAmount: toNumber(row.requestedAmount) ?? 0,
+    termMonths: row.termMonths === 24 ? 24 : 12,
+    estimatedMonthlyDeduction: toNumber(row.estimatedMonthlyDeduction) ?? 0,
+    estimatedPerPayrollDeduction:
+      toNumber(row.estimatedPerPayrollDeduction) ?? 0,
+    governmentIdSnapshot: row.governmentIdSnapshot,
+    monthlySalarySnapshot: toNumber(row.monthlySalarySnapshot),
+    checklist,
+    checklistProgress: Math.round((doneCount / checklist.length) * 100),
+    employeeRemarks: row.employeeRemarks ?? null,
+    status: row.status,
+    managerRemarks: row.managerRemarks ?? null,
+    agencyRemarks: row.agencyRemarks ?? null,
+    approvedAmount: toNumber(row.approvedAmount),
+    approvedMonthlyPayment: toNumber(row.approvedMonthlyPayment),
+    repaymentStartDate: toIsoString(row.repaymentStartDate),
+    reviewedByName: row.reviewedBy?.username ?? null,
+    reviewedAt: toIsoString(row.reviewedAt),
+    finalizedAt: toIsoString(row.finalizedAt),
+    submittedAt: row.submittedAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    deductionAssignmentId: row.deductionAssignmentId ?? null,
+    linkedDeductionStatus: row.deductionAssignment?.status ?? null,
+    linkedDeductionEffectiveFrom: toIsoString(
+      row.deductionAssignment?.effectiveFrom,
+    ),
+    linkedDeductionRemainingBalance: toNumber(
+      row.deductionAssignment?.remainingBalance,
+    ),
+  };
+};
+
 export const serializeLeaveRequest = (
   row: LeaveRequestRecord,
 ): LeaveRequestRow => {
@@ -229,6 +370,25 @@ export const serializeDayOffRequest = (
   managerRemarks: row.managerRemarks ?? null,
   reviewedByName: row.reviewedBy?.username ?? null,
   reviewedAt: toIsoString(row.reviewedAt),
+  submittedAt: row.submittedAt.toISOString(),
+  createdAt: row.createdAt.toISOString(),
+  updatedAt: row.updatedAt.toISOString(),
+});
+
+export const serializeSilEncashmentRequest = (
+  row: SilEncashmentRequestRecord,
+): SilEncashmentRequestRow => ({
+  id: row.id,
+  employeeId: row.employeeId,
+  employeeCode: row.employee.employeeCode,
+  employeeName: toEmployeeName(row.employee),
+  days: row.days,
+  status: row.status,
+  employeeRemarks: row.employeeRemarks ?? null,
+  managerRemarks: row.managerRemarks ?? null,
+  reviewedByName: row.reviewedBy?.username ?? null,
+  reviewedAt: toIsoString(row.reviewedAt),
+  ledgerEntryId: row.ledgerEntryId ?? null,
   submittedAt: row.submittedAt.toISOString(),
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
@@ -321,7 +481,7 @@ export const serializeEmployeeLeaveCreditLedger = (row: {
   id: string;
   employeeId: string;
   leaveType: "SICK" | "SIL";
-  entryType: "GRANT" | "RESET" | "USAGE" | "ADJUSTMENT";
+  entryType: "GRANT" | "RESET" | "USAGE" | "ENCASHMENT" | "ADJUSTMENT";
   amount: number;
   balanceBefore: number;
   balanceAfter: number;

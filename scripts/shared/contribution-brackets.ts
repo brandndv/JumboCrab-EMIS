@@ -284,8 +284,72 @@ export async function seedContributionBrackets(
     withholdingEffectiveFrom: Date;
   },
 ) {
-  await prisma.contributionBracket.deleteMany({});
-  await prisma.contributionBracket.createMany({
-    data: getContributionBracketSeedRows(input),
-  });
+  const rowsByVersion = new Map<
+    string,
+    Prisma.ContributionBracketCreateManyInput[]
+  >();
+
+  for (const row of getContributionBracketSeedRows(input)) {
+    const key = [
+      row.contributionType,
+      row.payrollFrequency ?? "NONE",
+      row.effectiveFrom instanceof Date
+        ? row.effectiveFrom.toISOString()
+        : String(row.effectiveFrom),
+      row.referenceCode ?? "NO_REFERENCE",
+    ].join("|");
+    rowsByVersion.set(key, [...(rowsByVersion.get(key) ?? []), row]);
+  }
+
+  for (const rows of rowsByVersion.values()) {
+    const firstRow = rows[0];
+    const version = await prisma.contributionBracketVersion.upsert({
+      where: {
+        id:
+          [
+            "seed",
+            firstRow.contributionType,
+            firstRow.payrollFrequency ?? "none",
+            firstRow.referenceCode ?? "reference",
+          ]
+            .join("_")
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "_"),
+      },
+      update: {
+        contributionType: firstRow.contributionType,
+        payrollFrequency: firstRow.payrollFrequency ?? null,
+        effectiveFrom: firstRow.effectiveFrom as Date,
+        effectiveTo: firstRow.effectiveTo as Date | null,
+        referenceCode: firstRow.referenceCode ?? null,
+        changeReason: "Seeded statutory contribution bracket schedule",
+      },
+      create: {
+        id:
+          [
+            "seed",
+            firstRow.contributionType,
+            firstRow.payrollFrequency ?? "none",
+            firstRow.referenceCode ?? "reference",
+          ]
+            .join("_")
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "_"),
+        contributionType: firstRow.contributionType,
+        payrollFrequency: firstRow.payrollFrequency ?? null,
+        effectiveFrom: firstRow.effectiveFrom as Date,
+        effectiveTo: firstRow.effectiveTo as Date | null,
+        referenceCode: firstRow.referenceCode ?? null,
+        changeReason: "Seeded statutory contribution bracket schedule",
+      },
+      select: { id: true },
+    });
+
+    await prisma.contributionBracket.deleteMany({
+      where: { versionId: version.id },
+    });
+    await prisma.contributionBracket.createMany({
+      data: rows.map((row) => ({ ...row, versionId: version.id })),
+    });
+  }
 }

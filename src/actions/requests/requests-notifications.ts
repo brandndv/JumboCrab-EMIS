@@ -47,7 +47,8 @@ export async function notifyEmployeeOfRequestDecision(input: {
     title: input.title,
     message: input.message,
     severity:
-      input.eventType.toString().includes("REJECTED")
+      input.eventType.toString().includes("REJECTED") ||
+      input.eventType.toString().includes("DECLINED")
         ? NotificationSeverity.WARNING
         : NotificationSeverity.SUCCESS,
     actorUserId: input.actorUserId ?? null,

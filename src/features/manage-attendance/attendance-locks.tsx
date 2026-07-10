@@ -24,10 +24,8 @@ import {
 import { Lock, RefreshCcw, Search, Unlock } from "lucide-react";
 import { TableLoadingState } from "@/components/loading/loading-states";
 
-type BimonthlyPeriod = "first" | "second";
-
 type BimonthlyOption = {
-  value: BimonthlyPeriod;
+  value: string;
   label: string;
   start: string;
   end: string;
@@ -68,42 +66,54 @@ const toFullDateLabel = (date: Date) =>
     year: "numeric",
   });
 
-const buildCurrentMonthBimonthlyOptions = (): {
+const buildBimonthlyOptions = (): {
   options: BimonthlyOption[];
-  defaultPeriod: BimonthlyPeriod;
+  defaultPeriod: string;
 } => {
   const nowInTz = new Date(
     new Date().toLocaleString("en-US", { timeZone: TZ }),
   );
-  const year = nowInTz.getFullYear();
-  const month = nowInTz.getMonth();
   const day = nowInTz.getDate();
-  const lastDay = new Date(year, month + 1, 0).getDate();
 
-  const makeDate = (targetDay: number) =>
-    new Date(Date.UTC(year, month, targetDay, 12, 0, 0));
+  const options: BimonthlyOption[] = [];
+  for (let monthOffset = -3; monthOffset <= 0; monthOffset += 1) {
+    const baseMonth = nowInTz.getMonth() + monthOffset;
+    const year = nowInTz.getFullYear() + Math.floor(baseMonth / 12);
+    const month = ((baseMonth % 12) + 12) % 12;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const makeDate = (targetDay: number) =>
+      new Date(Date.UTC(year, month, targetDay, 12, 0, 0));
+    const halves = [
+      {
+        half: "1st half",
+        start: makeDate(1),
+        end: makeDate(15),
+      },
+      {
+        half: "2nd half",
+        start: makeDate(16),
+        end: makeDate(lastDay),
+      },
+    ];
 
-  const firstStart = makeDate(1);
-  const firstEnd = makeDate(15);
-  const secondStart = makeDate(16);
-  const secondEnd = makeDate(lastDay);
+    halves.forEach((entry) => {
+      const start = toTzIsoDate(entry.start);
+      const end = toTzIsoDate(entry.end);
+      options.push({
+        value: `${start}:${end}`,
+        label: `${entry.half}: ${toFullDateLabel(entry.start)} - ${toFullDateLabel(entry.end)}`,
+        start,
+        end,
+      });
+    });
+  }
 
-  const options: BimonthlyOption[] = [
-    {
-      value: "first",
-      label: `1st half: ${toFullDateLabel(firstStart)} - ${toFullDateLabel(firstEnd)}`,
-      start: toTzIsoDate(firstStart),
-      end: toTzIsoDate(firstEnd),
-    },
-    {
-      value: "second",
-      label: `2nd half: ${toFullDateLabel(secondStart)} - ${toFullDateLabel(secondEnd)}`,
-      start: toTzIsoDate(secondStart),
-      end: toTzIsoDate(secondEnd),
-    },
-  ];
-
-  return { options, defaultPeriod: day <= 15 ? "first" : "second" };
+  const currentMonthOptions = options.slice(-2);
+  const defaultOption = currentMonthOptions[day <= 15 ? 0 : 1] ?? options.at(-1);
+  return {
+    options: options.reverse(),
+    defaultPeriod: defaultOption?.value ?? "",
+  };
 };
 
 const formatDate = (value: string) => {
@@ -138,11 +148,11 @@ const lockStateLabel = (state: LockSummaryRow["lockState"]) => {
 export function AttendanceLocks() {
   const toast = useToast();
   const { options: periodOptions, defaultPeriod } = useMemo(
-    () => buildCurrentMonthBimonthlyOptions(),
+    () => buildBimonthlyOptions(),
     [],
   );
 
-  const [period, setPeriod] = useState<BimonthlyPeriod>(defaultPeriod);
+  const [period, setPeriod] = useState(defaultPeriod);
   const [summaryRows, setSummaryRows] = useState<LockSummaryRow[]>([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
@@ -161,6 +171,28 @@ export function AttendanceLocks() {
 
   const selectedRange =
     periodOptions.find((opt) => opt.value === period) ?? periodOptions[0];
+
+  const summaryToggleState = useMemo(() => {
+    const rowsWithAttendance = summaryRows.filter((row) => row.totalRows > 0);
+    const allLocked =
+      rowsWithAttendance.length > 0 &&
+      rowsWithAttendance.every((row) => row.lockState === "LOCKED");
+    return {
+      lock: !allLocked,
+      label: allLocked ? "Unlock Bimonthly" : "Lock Bimonthly",
+      success: allLocked ? "Bimonthly unlock applied" : "Bimonthly lock applied",
+    };
+  }, [summaryRows]);
+
+  const employeeRangeToggleState = useMemo(() => {
+    const allLocked =
+      employeeRows.length > 0 && employeeRows.every((row) => Boolean(row.isLocked));
+    return {
+      lock: !allLocked,
+      label: allLocked ? "Unlock Employee Range" : "Lock Employee Range",
+      success: allLocked ? "Employee range unlocked" : "Employee range locked",
+    };
+  }, [employeeRows]);
 
   const loadSummary = async () => {
     if (!selectedRange) return;
@@ -336,7 +368,7 @@ export function AttendanceLocks() {
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <select
               value={period}
-              onChange={(e) => setPeriod(e.target.value as BimonthlyPeriod)}
+              onChange={(e) => setPeriod(e.target.value)}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 sm:w-80"
             >
               {periodOptions.map((option) => (
@@ -359,7 +391,7 @@ export function AttendanceLocks() {
         <CardContent className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             <Button
-              variant="default"
+              variant={summaryToggleState.lock ? "default" : "outline"}
               className="gap-2"
               disabled={actionLoading || summaryLoading || !selectedRange}
               onClick={() =>
@@ -368,31 +400,18 @@ export function AttendanceLocks() {
                   {
                     start: selectedRange.start,
                     end: selectedRange.end,
-                    lock: true,
+                    lock: summaryToggleState.lock,
                   },
-                  "Bimonthly lock applied",
+                  summaryToggleState.success,
                 )
               }
             >
-              <Lock className="h-4 w-4" /> Lock Bimonthly
-            </Button>
-            <Button
-              variant="outline"
-              className="gap-2"
-              disabled={actionLoading || summaryLoading || !selectedRange}
-              onClick={() =>
-                selectedRange &&
-                void runLockAction(
-                  {
-                    start: selectedRange.start,
-                    end: selectedRange.end,
-                    lock: false,
-                  },
-                  "Bimonthly unlock applied",
-                )
-              }
-            >
-              <Unlock className="h-4 w-4" /> Unlock Bimonthly
+              {summaryToggleState.lock ? (
+                <Lock className="h-4 w-4" />
+              ) : (
+                <Unlock className="h-4 w-4" />
+              )}
+              {summaryToggleState.label}
             </Button>
           </div>
 
@@ -449,35 +468,26 @@ export function AttendanceLocks() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            className="gap-1"
-                            disabled={actionLoading}
-                            onClick={() =>
-                              void runLockAction(
-                                { start: row.date, lock: true },
-                                `Locked ${row.date}`,
-                              )
-                            }
-                          >
-                            <Lock className="h-3.5 w-3.5" /> Lock
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1"
-                            disabled={actionLoading}
-                            onClick={() =>
-                              void runLockAction(
-                                { start: row.date, lock: false },
-                                `Unlocked ${row.date}`,
-                              )
-                            }
-                          >
-                            <Unlock className="h-3.5 w-3.5" /> Unlock
-                          </Button>
-                        </div>
+                        <Button
+                          size="sm"
+                          variant={row.lockState === "LOCKED" ? "outline" : "default"}
+                          className="gap-1"
+                          disabled={actionLoading}
+                          onClick={() => {
+                            const nextLock = row.lockState !== "LOCKED";
+                            return void runLockAction(
+                              { start: row.date, lock: nextLock },
+                              `${nextLock ? "Locked" : "Unlocked"} ${row.date}`,
+                            );
+                          }}
+                        >
+                          {row.lockState === "LOCKED" ? (
+                            <Unlock className="h-3.5 w-3.5" />
+                          ) : (
+                            <Lock className="h-3.5 w-3.5" />
+                          )}
+                          {row.lockState === "LOCKED" ? "Unlock" : "Lock"}
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -550,6 +560,7 @@ export function AttendanceLocks() {
               ))}
             </select>
             <Button
+              variant={employeeRangeToggleState.lock ? "default" : "outline"}
               className="gap-2"
               disabled={actionLoading || !selectedEmployeeId}
               onClick={() =>
@@ -559,34 +570,19 @@ export function AttendanceLocks() {
                   {
                     start: selectedRange.start,
                     end: selectedRange.end,
-                    lock: true,
+                    lock: employeeRangeToggleState.lock,
                     employeeId: selectedEmployeeId,
                   },
-                  "Employee range locked",
+                  employeeRangeToggleState.success,
                 )
               }
             >
-              <Lock className="h-4 w-4" /> Lock Employee Range
-            </Button>
-            <Button
-              variant="outline"
-              className="gap-2"
-              disabled={actionLoading || !selectedEmployeeId}
-              onClick={() =>
-                selectedEmployeeId &&
-                selectedRange &&
-                void runLockAction(
-                  {
-                    start: selectedRange.start,
-                    end: selectedRange.end,
-                    lock: false,
-                    employeeId: selectedEmployeeId,
-                  },
-                  "Employee range unlocked",
-                )
-              }
-            >
-              <Unlock className="h-4 w-4" /> Unlock Employee Range
+              {employeeRangeToggleState.lock ? (
+                <Lock className="h-4 w-4" />
+              ) : (
+                <Unlock className="h-4 w-4" />
+              )}
+              {employeeRangeToggleState.label}
             </Button>
           </div>
 

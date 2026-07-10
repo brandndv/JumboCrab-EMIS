@@ -6,6 +6,7 @@ import {
   DeductionFrequency,
   EmployeeDeductionAssignmentStatus,
   EmployeeDeductionWorkflowStatus,
+  GovernmentLoanAgency,
   PayrollStatus,
   Roles,
   Prisma,
@@ -48,6 +49,12 @@ const normalizeCode = (code: string | undefined, name: string) => {
 
 const duplicateAssignmentMessage =
   "A deduction assignment for this employee, deduction type, and start date already exists. Edit the existing record or choose a different effective start date.";
+
+const PROTECTED_DEDUCTION_TYPE_CODES = new Set([
+  "CASH_ADVANCE",
+  "CASH_ADVANCE_ONE_TIME",
+  "GOVERNMENT_LOAN",
+]);
 
 const canManageDeductionTypes = (role?: Roles) =>
   role === Roles.Admin || role === Roles.GeneralManager;
@@ -121,6 +128,12 @@ type DeductionTypeRecord = Prisma.DeductionTypeGetPayload<{
         username: true;
       };
     };
+    _count: {
+      select: {
+        assignments: true;
+        payrollDeductions: true;
+      };
+    };
   };
 }>;
 
@@ -176,8 +189,22 @@ type EmployeeDeductionAssignmentRecord =
           };
         };
       };
+      governmentLoanAssistanceRequest: {
+        select: {
+          agency: true;
+        };
+      };
     };
   }>;
+
+type EmployeeDeductionAssignmentRecordCompat = Omit<
+  EmployeeDeductionAssignmentRecord,
+  "governmentLoanAssistanceRequest"
+> & {
+  governmentLoanAssistanceRequest?: {
+    agency: GovernmentLoanAgency;
+  } | null;
+};
 
 type EmployeeDeductionPaymentRecord =
   Prisma.EmployeeDeductionPaymentGetPayload<{
@@ -201,6 +228,10 @@ export type DeductionTypeRow = {
   defaultAmount?: number | null;
   defaultPercent?: number | null;
   isActive: boolean;
+  assignmentCount: number;
+  payrollDeductionCount: number;
+  isSystemProtected: boolean;
+  canSoftDelete: boolean;
   createdAt: string;
   updatedAt: string;
   createdByName?: string | null;
@@ -263,6 +294,17 @@ export type DeductionPaymentRow = {
   createdByName?: string | null;
 };
 
+const canSoftDeleteDeductionTypeRecord = (row: {
+  code: string;
+  _count: {
+    assignments: number;
+    payrollDeductions: number;
+  };
+}) =>
+  !PROTECTED_DEDUCTION_TYPE_CODES.has(row.code) &&
+  row._count.assignments === 0 &&
+  row._count.payrollDeductions === 0;
+
 const serializeDeductionType = (
   row: DeductionTypeRecord,
 ): DeductionTypeRow => ({
@@ -275,6 +317,10 @@ const serializeDeductionType = (
   defaultAmount: toNumber(row.defaultAmount),
   defaultPercent: toNumber(row.defaultPercent),
   isActive: Boolean(row.isActive),
+  assignmentCount: row._count.assignments,
+  payrollDeductionCount: row._count.payrollDeductions,
+  isSystemProtected: PROTECTED_DEDUCTION_TYPE_CODES.has(row.code),
+  canSoftDelete: canSoftDeleteDeductionTypeRecord(row),
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
   createdByName: row.createdBy?.username ?? null,
@@ -294,12 +340,19 @@ const serializeDeductionPayment = (
 });
 
 const serializeDeductionAssignment = (
-  row: EmployeeDeductionAssignmentRecord,
+  row: EmployeeDeductionAssignmentRecordCompat,
 ): DeductionAssignmentRow => {
   const employeeName = [row.employee.firstName, row.employee.lastName]
     .filter(Boolean)
     .join(" ")
     .trim();
+  const governmentLoanName =
+    row.governmentLoanAssistanceRequest?.agency ===
+    GovernmentLoanAgency.SSS_SALARY_LOAN
+      ? "Government Loan - SSS Salary Loan"
+      : row.governmentLoanAssistanceRequest?.agency === GovernmentLoanAgency.PAGIBIG_MPL
+        ? "Government Loan - Pag-IBIG MPL"
+        : null;
 
   return {
     id: row.id,
@@ -310,7 +363,7 @@ const serializeDeductionAssignment = (
     avatarUrl: row.employee.img ?? null,
     deductionTypeId: row.deductionTypeId,
     deductionCode: row.deductionType.code,
-    deductionName: row.deductionType.name,
+    deductionName: governmentLoanName ?? row.deductionType.name,
     deductionDescription: row.deductionType.description ?? null,
     deductionTypeIsActive: Boolean(row.deductionType.isActive),
     amountMode: row.deductionType.amountMode,
@@ -509,6 +562,11 @@ const loadAssignmentRecord = async (id: string) =>
           },
         },
       },
+      governmentLoanAssistanceRequest: {
+        select: {
+          agency: true,
+        },
+      },
     },
   });
 
@@ -540,6 +598,7 @@ export async function listDeductionTypes(input?: {
       include: {
         createdBy: { select: { username: true } },
         updatedBy: { select: { username: true } },
+        _count: { select: { assignments: true, payrollDeductions: true } },
       },
     });
 
@@ -617,6 +676,7 @@ export async function createDeductionType(
       include: {
         createdBy: { select: { username: true } },
         updatedBy: { select: { username: true } },
+        _count: { select: { assignments: true, payrollDeductions: true } },
       },
     });
 
@@ -715,6 +775,7 @@ export async function updateDeductionType(
       include: {
         createdBy: { select: { username: true } },
         updatedBy: { select: { username: true } },
+        _count: { select: { assignments: true, payrollDeductions: true } },
       },
     });
 
@@ -723,6 +784,71 @@ export async function updateDeductionType(
   } catch (error) {
     console.error("Error updating deduction type:", error);
     return { success: false, error: "Failed to update deduction type." };
+  }
+}
+
+export async function softDeleteDeductionType(input: {
+  id: string;
+}): Promise<{ success: boolean; data?: DeductionTypeRow; error?: string }> {
+  try {
+    const session = await getSession();
+    if (!session?.isLoggedIn || !canManageDeductionTypes(session.role)) {
+      return {
+        success: false,
+        error: "You are not allowed to delete deduction types.",
+      };
+    }
+
+    const id = typeof input.id === "string" ? input.id.trim() : "";
+    if (!id) {
+      return { success: false, error: "Deduction type ID is required." };
+    }
+
+    const existing = await db.deductionType.findUnique({
+      where: { id },
+      include: {
+        createdBy: { select: { username: true } },
+        updatedBy: { select: { username: true } },
+        _count: { select: { assignments: true, payrollDeductions: true } },
+      },
+    });
+    if (!existing) {
+      return { success: false, error: "Deduction type not found." };
+    }
+
+    if (PROTECTED_DEDUCTION_TYPE_CODES.has(existing.code)) {
+      return {
+        success: false,
+        error: "System deduction types cannot be deleted.",
+      };
+    }
+
+    if (!canSoftDeleteDeductionTypeRecord(existing)) {
+      return {
+        success: false,
+        error:
+          "This deduction type is already used by assignments or payroll records, so it cannot be deleted.",
+      };
+    }
+
+    const updated = await db.deductionType.update({
+      where: { id },
+      data: {
+        isActive: false,
+        updatedByUserId: session.userId ?? null,
+      },
+      include: {
+        createdBy: { select: { username: true } },
+        updatedBy: { select: { username: true } },
+        _count: { select: { assignments: true, payrollDeductions: true } },
+      },
+    });
+
+    revalidateDeductionLayouts();
+    return { success: true, data: serializeDeductionType(updated) };
+  } catch (error) {
+    console.error("Error deleting deduction type:", error);
+    return { success: false, error: "Failed to delete deduction type." };
   }
 }
 
@@ -936,6 +1062,11 @@ export async function listEmployeeDeductionAssignments(input?: {
                 username: true,
               },
             },
+          },
+        },
+        governmentLoanAssistanceRequest: {
+          select: {
+            agency: true,
           },
         },
       },

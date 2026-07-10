@@ -4,9 +4,20 @@ import {
   listCashAdvanceRequests as listCashAdvanceRequestsImpl,
 } from "./requests-cash-advance-list-action";
 import {
+  createGovernmentLoanAssistanceRequest as createGovernmentLoanAssistanceRequestImpl,
+  finalizeGovernmentLoanAssistanceRequest as finalizeGovernmentLoanAssistanceRequestImpl,
+  listGovernmentLoanAssistanceRequests as listGovernmentLoanAssistanceRequestsImpl,
+  updateGovernmentLoanAssistanceStatus as updateGovernmentLoanAssistanceStatusImpl,
+} from "./requests-government-loan-action";
+import {
   getEmployeeLeaveBalanceSummary as getEmployeeLeaveBalanceSummaryImpl,
   listLeaveRequests as listLeaveRequestsImpl,
 } from "./requests-leave-list-action";
+import {
+  createSilEncashmentRequest as createSilEncashmentRequestImpl,
+  listSilEncashmentRequests as listSilEncashmentRequestsImpl,
+  reviewSilEncashmentRequest as reviewSilEncashmentRequestImpl,
+} from "./requests-sil-encashment-action";
 import {
   listEmployeeLeaveCreditLedger as listEmployeeLeaveCreditLedgerImpl,
   listLeaveCreditPolicies as listLeaveCreditPoliciesImpl,
@@ -48,6 +59,7 @@ import {
   respondToScheduleSwapRequest as respondToScheduleSwapRequestImpl,
   reviewScheduleSwapRequest as reviewScheduleSwapRequestImpl,
 } from "./requests-swap-review-action";
+import { softDeleteRequest as softDeleteRequestImpl } from "./requests-soft-delete-action";
 import { reviewDayOffRequest as reviewDayOffRequestImpl } from "./requests-day-off-review-action";
 import { reviewScheduleChangeRequest as reviewScheduleChangeRequestImpl } from "./requests-schedule-change-review-action";
 import { reviewCashAdvanceRequest as reviewCashAdvanceRequestImpl } from "./requests-cash-advance-review-action";
@@ -59,10 +71,22 @@ export async function listCashAdvanceRequests(
   return listCashAdvanceRequestsImpl(...args);
 }
 
+export async function listGovernmentLoanAssistanceRequests(
+  ...args: Parameters<typeof listGovernmentLoanAssistanceRequestsImpl>
+) {
+  return listGovernmentLoanAssistanceRequestsImpl(...args);
+}
+
 export async function listLeaveRequests(
   ...args: Parameters<typeof listLeaveRequestsImpl>
 ) {
   return listLeaveRequestsImpl(...args);
+}
+
+export async function listSilEncashmentRequests(
+  ...args: Parameters<typeof listSilEncashmentRequestsImpl>
+) {
+  return listSilEncashmentRequestsImpl(...args);
 }
 
 export async function getEmployeeLeaveBalanceSummary(
@@ -161,10 +185,22 @@ export async function createCashAdvanceRequest(
   return createCashAdvanceRequestImpl(...args);
 }
 
+export async function createGovernmentLoanAssistanceRequest(
+  ...args: Parameters<typeof createGovernmentLoanAssistanceRequestImpl>
+) {
+  return createGovernmentLoanAssistanceRequestImpl(...args);
+}
+
 export async function createLeaveRequest(
   ...args: Parameters<typeof createLeaveRequestImpl>
 ) {
   return createLeaveRequestImpl(...args);
+}
+
+export async function createSilEncashmentRequest(
+  ...args: Parameters<typeof createSilEncashmentRequestImpl>
+) {
+  return createSilEncashmentRequestImpl(...args);
 }
 
 export async function createDayOffRequest(
@@ -215,10 +251,34 @@ export async function reviewCashAdvanceRequest(
   return reviewCashAdvanceRequestImpl(...args);
 }
 
+export async function updateGovernmentLoanAssistanceStatus(
+  ...args: Parameters<typeof updateGovernmentLoanAssistanceStatusImpl>
+) {
+  return updateGovernmentLoanAssistanceStatusImpl(...args);
+}
+
+export async function finalizeGovernmentLoanAssistanceRequest(
+  ...args: Parameters<typeof finalizeGovernmentLoanAssistanceRequestImpl>
+) {
+  return finalizeGovernmentLoanAssistanceRequestImpl(...args);
+}
+
+export async function softDeleteRequest(
+  ...args: Parameters<typeof softDeleteRequestImpl>
+) {
+  return softDeleteRequestImpl(...args);
+}
+
 export async function reviewLeaveRequest(
   ...args: Parameters<typeof reviewLeaveRequestImpl>
 ) {
   return reviewLeaveRequestImpl(...args);
+}
+
+export async function reviewSilEncashmentRequest(
+  ...args: Parameters<typeof reviewSilEncashmentRequestImpl>
+) {
+  return reviewSilEncashmentRequestImpl(...args);
 }
 
 export type {
@@ -227,6 +287,11 @@ export type {
   DayOffPreview,
   DayOffRequestPayload,
   DayOffRequestRow,
+  GovernmentLoanAssistanceRequestPayload,
+  GovernmentLoanAssistanceRequestRow,
+  GovernmentLoanChecklistItem,
+  GovernmentLoanFinalizePayload,
+  GovernmentLoanStatusUpdatePayload,
   EmployeeLeaveCreditLedgerRow,
   EmployeeDayOffMonthlySummary,
   EmployeeLeaveBalanceSummary,
@@ -235,6 +300,10 @@ export type {
   LeaveRequestPayload,
   LeaveRequestRow,
   RequestReviewPayload,
+  RequestSoftDeletePayload,
+  SilEncashmentRequestPayload,
+  SilEncashmentRequestRow,
+  SilEncashmentReviewPayload,
   ScheduleChangePreview,
   ScheduleChangeRequestPayload,
   ScheduleChangeRequestRow,

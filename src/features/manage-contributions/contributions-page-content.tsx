@@ -12,10 +12,11 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import ContributionBracketSidebar from "@/features/manage-contributions/contribution-bracket-sidebar";
+import ContributionBracketManagement from "@/features/manage-contributions/contribution-bracket-management";
 import { ContributionsTable } from "@/features/manage-contributions/contributions-table";
 import { Button } from "@/components/ui/button";
 import { useContributions } from "@/hooks/use-contributions";
+import { useRole } from "@/hooks/use-role";
 import { useMemo, useState } from "react";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -33,8 +34,11 @@ export default function ContributionsPageContent() {
     setStatusFilter,
     departments,
     bracketSections,
+    refreshContributions,
     updateContributionInclusion,
   } = useContributions();
+  const { role } = useRole();
+  const canManageBrackets = role === "admin" || role === "generalManager";
   const [activeView, setActiveView] = useState<"employees" | "brackets">(
     "employees",
   );
@@ -162,14 +166,15 @@ export default function ContributionsPageContent() {
             </>
           ) : (
             <div className="text-sm text-muted-foreground sm:col-span-3">
-              Full read-only table view of the active statutory brackets using
-              monthly contribution and tax preview rules.
+              Versioned statutory bracket schedules for contribution preview
+              and payroll generation.
             </div>
           )}
 
           {activeView === "brackets" ? (
             <div className="text-sm text-muted-foreground">
-              SSS, PhilHealth, Pag-IBIG, and withholding previews use the active monthly bracket tables.
+              Payroll generated after a version effective date uses that
+              bracket schedule.
             </div>
           ) : null}
         </div>
@@ -325,9 +330,11 @@ export default function ContributionsPageContent() {
             )}
           </>
         ) : (
-          <ContributionBracketSidebar
+          <ContributionBracketManagement
             sections={bracketSections}
             loading={loading && bracketSections.length === 0}
+            canManage={canManageBrackets}
+            onChanged={refreshContributions}
           />
         )}
       </div>

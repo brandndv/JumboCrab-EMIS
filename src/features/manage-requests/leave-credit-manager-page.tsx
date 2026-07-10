@@ -17,7 +17,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModuleLoadingState } from "@/components/loading/loading-states";
 import { useToast } from "@/components/ui/toast-provider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatDate } from "./request-ui-helpers";
+
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
+  const month = index + 1;
+  return {
+    value: String(month),
+    label: new Date(`2026-${String(month).padStart(2, "0")}-01T12:00:00+08:00`)
+      .toLocaleDateString(undefined, { month: "long" }),
+  };
+});
+
+const monthDayLabel = (month: string, day: string) => {
+  const parsedMonth = Math.max(1, Math.min(12, Number(month) || 1));
+  const parsedDay = Math.max(1, Math.min(31, Number(day) || 1));
+  return new Date(
+    `2026-${String(parsedMonth).padStart(2, "0")}-${String(parsedDay).padStart(2, "0")}T12:00:00+08:00`,
+  ).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+};
 
 export default function LeaveCreditManagerPage() {
   const toast = useToast();
@@ -139,31 +163,48 @@ export default function LeaveCreditManagerPage() {
                     <CardContent className="space-y-4 p-4">
                       <div>
                         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          {policy.leaveType}
+                          {policy.leaveType === "SIL" ? "Service Incentive Leave" : "Sick Leave"}
                         </p>
                         <p className="mt-2 text-lg font-semibold">
-                          {policy.annualCredits} credits
+                          {policy.annualCredits} credit(s) per year
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Resets every {monthDayLabel(String(policy.resetMonth), String(policy.resetDay))}
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="space-y-1">
-                          <Label>Month</Label>
-                          <Input
+                          <Label>Reset month</Label>
+                          <Select
                             value={draft?.resetMonth ?? ""}
-                            onChange={(event) =>
+                            onValueChange={(value) =>
                               setPolicyDrafts((current) => ({
                                 ...current,
                                 [policy.leaveType]: {
                                   ...current[policy.leaveType],
-                                  resetMonth: event.target.value,
+                                  resetMonth: value,
                                 },
                               }))
                             }
-                          />
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Month" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {MONTH_OPTIONS.map((month) => (
+                                <SelectItem key={month.value} value={month.value}>
+                                  {month.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="space-y-1">
-                          <Label>Day</Label>
+                          <Label>Reset day</Label>
                           <Input
+                            type="number"
+                            min="1"
+                            max="31"
                             value={draft?.resetDay ?? ""}
                             onChange={(event) =>
                               setPolicyDrafts((current) => ({
@@ -177,8 +218,10 @@ export default function LeaveCreditManagerPage() {
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label>Credits</Label>
+                          <Label>Credits per year</Label>
                           <Input
+                            type="number"
+                            min="0"
                             value={draft?.annualCredits ?? ""}
                             onChange={(event) =>
                               setPolicyDrafts((current) => ({
@@ -191,6 +234,15 @@ export default function LeaveCreditManagerPage() {
                             }
                           />
                         </div>
+                      </div>
+                      <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-sm">
+                        <p className="font-medium">
+                          Preview: {draft?.annualCredits || 0} credit(s) reset every{" "}
+                          {monthDayLabel(draft?.resetMonth ?? "1", draft?.resetDay ?? "1")}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Month = when new yearly credits begin. Day = exact reset date.
+                        </p>
                       </div>
                       <div className="flex gap-2">
                         <Button onClick={() => void savePolicy(policy.leaveType)}>

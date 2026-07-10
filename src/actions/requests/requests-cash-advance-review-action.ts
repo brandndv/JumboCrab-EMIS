@@ -15,6 +15,7 @@ import { startOfZonedDay } from "@/lib/timezone";
 import { cashAdvanceReviewSchema } from "@/lib/validations/requests";
 import {
   CASH_ADVANCE_DEDUCTION_CODE,
+  CASH_ADVANCE_ONE_TIME_DEDUCTION_CODE,
   canReviewRequests,
   employeeRequestSelect,
   reviewedBySelect,
@@ -42,6 +43,9 @@ const resolveDefaultNextPayrollDate = async () => {
 
   return today;
 };
+
+const getCurrentCashAdvanceDeductionMode = (): CashAdvanceDeductionMode =>
+  CashAdvanceDeductionMode.FULL_NEXT_PAYROLL;
 
 export async function reviewCashAdvanceRequest(
   input: RequestReviewPayload,
@@ -137,37 +141,25 @@ export async function reviewCashAdvanceRequest(
       return { success: true, data: serializeCashAdvanceRequest(reviewed) };
     }
 
-    const deductionType = await db.deductionType.findFirst({
-      where: {
-        code: CASH_ADVANCE_DEDUCTION_CODE,
-        isActive: true,
-        amountMode: DeductionAmountMode.FIXED,
-        frequency: DeductionFrequency.INSTALLMENT,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!deductionType) {
-      return {
-        success: false,
-        error:
-          "An active installment deduction type with code CASH_ADVANCE is required before approving this request.",
-      };
-    }
-
     const approvedAmount = Number(parsed.data.approvedAmount);
-    const approvedDeductionMode =
-      parsed.data.deductionMode === CashAdvanceDeductionMode.INSTALLMENTS
-        ? CashAdvanceDeductionMode.INSTALLMENTS
-        : CashAdvanceDeductionMode.FULL_NEXT_PAYROLL;
+    // Current policy: employee cash advance requests are one-time deductions only.
+    // Installment support below stays in place for future re-enable.
+    const approvedDeductionMode = getCurrentCashAdvanceDeductionMode();
+    const isInstallment =
+      approvedDeductionMode === CashAdvanceDeductionMode.INSTALLMENTS;
     const approvedRepaymentPerPayroll =
-      approvedDeductionMode === CashAdvanceDeductionMode.FULL_NEXT_PAYROLL
-        ? approvedAmount
-        : Number(parsed.data.approvedRepaymentPerPayroll);
+      isInstallment ? Number(parsed.data.approvedRepaymentPerPayroll) : approvedAmount;
     const approvedEffectiveFrom =
       parsed.data.approvedEffectiveFrom ?? (await resolveDefaultNextPayrollDate());
+    const deductionTypeCode = isInstallment
+      ? CASH_ADVANCE_DEDUCTION_CODE
+      : CASH_ADVANCE_ONE_TIME_DEDUCTION_CODE;
+    const deductionTypeName = isInstallment
+      ? "Cash Advance - Installment"
+      : "Cash Advance - One Time";
+    const deductionFrequency = isInstallment
+      ? DeductionFrequency.INSTALLMENT
+      : DeductionFrequency.ONE_TIME;
 
     const duplicateAssignmentMessage =
       "A cash advance deduction already exists for this employee on the selected start date. Adjust the request start date or settle the existing record first.";
@@ -197,14 +189,39 @@ export async function reviewCashAdvanceRequest(
           throw new Error("This cash advance request has already been reviewed.");
         }
 
+        const deductionType = await tx.deductionType.upsert({
+          where: { code: deductionTypeCode },
+          create: {
+            code: deductionTypeCode,
+            name: deductionTypeName,
+            description: isInstallment
+              ? "Cash advance repayment split across payroll periods."
+              : "Cash advance repayment deducted once on the selected payroll.",
+            amountMode: DeductionAmountMode.FIXED,
+            frequency: deductionFrequency,
+            isActive: true,
+            createdByUserId: session.userId ?? null,
+            updatedByUserId: session.userId ?? null,
+          },
+          update: {
+            name: deductionTypeName,
+            amountMode: DeductionAmountMode.FIXED,
+            frequency: deductionFrequency,
+            isActive: true,
+            updatedByUserId: session.userId ?? null,
+          },
+          select: { id: true },
+        });
+
         const assignment = await tx.employeeDeductionAssignment.create({
           data: {
             employeeId: fresh.employeeId,
             deductionTypeId: deductionType.id,
             effectiveFrom: approvedEffectiveFrom,
-            installmentTotal: approvedAmount,
-            installmentPerPayroll: approvedRepaymentPerPayroll,
-            remainingBalance: approvedAmount,
+            amountOverride: isInstallment ? null : approvedAmount,
+            installmentTotal: isInstallment ? approvedAmount : null,
+            installmentPerPayroll: isInstallment ? approvedRepaymentPerPayroll : null,
+            remainingBalance: isInstallment ? approvedAmount : null,
             workflowStatus: EmployeeDeductionWorkflowStatus.APPROVED,
             status: EmployeeDeductionAssignmentStatus.ACTIVE,
             reason: fresh.reason

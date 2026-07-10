@@ -13,11 +13,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type ContributionBracketSidebarProps = {
   sections: ContributionBracketViewSection[];
   loading?: boolean;
+  canManage?: boolean;
+  onEditRow?: (
+    row: ContributionBracketViewRow,
+    section: ContributionBracketViewSection,
+  ) => void;
 };
 
 const formatCurrency = (value: number) =>
@@ -46,6 +52,8 @@ const formatRate = (value: number | null) =>
 export function ContributionBracketSidebar({
   sections,
   loading,
+  canManage = false,
+  onEditRow,
 }: ContributionBracketSidebarProps) {
   return (
     <div className="space-y-4">
@@ -53,7 +61,7 @@ export function ContributionBracketSidebar({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Official Bracket Tables</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Read-only active brackets currently used by the contribution preview and payroll calculations.
+            Active brackets currently used by the contribution preview and payroll calculations.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -98,6 +106,7 @@ export function ContributionBracketSidebar({
                         <TableHead>Base Tax</TableHead>
                         <TableHead>Marginal Rate</TableHead>
                         <TableHead>Reference</TableHead>
+                        {canManage ? <TableHead>Actions</TableHead> : null}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -113,6 +122,19 @@ export function ContributionBracketSidebar({
                           <TableCell>{formatFixedAmount(row.baseTax)}</TableCell>
                           <TableCell>{formatRate(row.marginalRate)}</TableCell>
                           <TableCell>{row.referenceCode || "—"}</TableCell>
+                          {canManage ? (
+                            <TableCell>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={!row.versionId}
+                                onClick={() => onEditRow?.(row, section)}
+                              >
+                                Edit Row
+                              </Button>
+                            </TableCell>
+                          ) : null}
                         </TableRow>
                       ))}
                     </TableBody>

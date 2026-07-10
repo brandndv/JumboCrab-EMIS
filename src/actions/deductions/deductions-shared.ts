@@ -3,6 +3,7 @@ import {
   DeductionAmountMode,
   DeductionFrequency,
   EmployeeDeductionAssignmentStatus,
+  GovernmentLoanAgency,
   Roles,
   type Prisma,
 } from "@prisma/client";
@@ -30,6 +31,12 @@ export const deductionTypeInclude = {
   updatedBy: {
     select: {
       username: true,
+    },
+  },
+  _count: {
+    select: {
+      assignments: true,
+      payrollDeductions: true,
     },
   },
 } satisfies Prisma.DeductionTypeInclude;
@@ -82,6 +89,11 @@ export const employeeDeductionAssignmentInclude = {
     orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
     include: employeeDeductionPaymentInclude,
   },
+  governmentLoanAssistanceRequest: {
+    select: {
+      agency: true,
+    },
+  },
 } satisfies Prisma.EmployeeDeductionAssignmentInclude;
 
 type DeductionTypeRecord = Prisma.DeductionTypeGetPayload<{
@@ -99,6 +111,12 @@ type EmployeeDeductionPaymentRecord = Prisma.EmployeeDeductionPaymentGetPayload<
 
 export const duplicateAssignmentMessage =
   "A deduction assignment for this employee, deduction type, and start date already exists. Edit the existing record or choose a different effective start date.";
+
+export const PROTECTED_DEDUCTION_TYPE_CODES = new Set([
+  "CASH_ADVANCE",
+  "CASH_ADVANCE_ONE_TIME",
+  "GOVERNMENT_LOAN",
+]);
 
 export const toIsoString = (value: Date | null | undefined) =>
   value ? value.toISOString() : null;
@@ -147,6 +165,17 @@ export const revalidateDeductionLayouts = () => {
   });
 };
 
+export const canSoftDeleteDeductionTypeRecord = (row: {
+  code: string;
+  _count: {
+    assignments: number;
+    payrollDeductions: number;
+  };
+}) =>
+  !PROTECTED_DEDUCTION_TYPE_CODES.has(row.code) &&
+  row._count.assignments === 0 &&
+  row._count.payrollDeductions === 0;
+
 export const serializeDeductionType = (
   row: DeductionTypeRecord,
 ): DeductionTypeRow => ({
@@ -159,6 +188,10 @@ export const serializeDeductionType = (
   defaultAmount: toNumber(row.defaultAmount),
   defaultPercent: toNumber(row.defaultPercent),
   isActive: Boolean(row.isActive),
+  assignmentCount: row._count.assignments,
+  payrollDeductionCount: row._count.payrollDeductions,
+  isSystemProtected: PROTECTED_DEDUCTION_TYPE_CODES.has(row.code),
+  canSoftDelete: canSoftDeleteDeductionTypeRecord(row),
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
   createdByName: row.createdBy?.username ?? null,
@@ -184,6 +217,13 @@ export const serializeDeductionAssignment = (
     .filter(Boolean)
     .join(" ")
     .trim();
+  const governmentLoanName =
+    row.governmentLoanAssistanceRequest?.agency ===
+    GovernmentLoanAgency.SSS_SALARY_LOAN
+      ? "Government Loan - SSS Salary Loan"
+      : row.governmentLoanAssistanceRequest?.agency === GovernmentLoanAgency.PAGIBIG_MPL
+        ? "Government Loan - Pag-IBIG MPL"
+        : null;
 
   return {
     id: row.id,
@@ -193,7 +233,7 @@ export const serializeDeductionAssignment = (
     avatarUrl: row.employee.img ?? null,
     deductionTypeId: row.deductionTypeId,
     deductionCode: row.deductionType.code,
-    deductionName: row.deductionType.name,
+    deductionName: governmentLoanName ?? row.deductionType.name,
     deductionDescription: row.deductionType.description ?? null,
     deductionTypeIsActive: Boolean(row.deductionType.isActive),
     amountMode: row.deductionType.amountMode,

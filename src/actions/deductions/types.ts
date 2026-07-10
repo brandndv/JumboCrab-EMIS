@@ -48,6 +48,10 @@ export type DeductionTypeRow = {
   defaultAmount?: number | null;
   defaultPercent?: number | null;
   isActive: boolean;
+  assignmentCount: number;
+  payrollDeductionCount: number;
+  isSystemProtected: boolean;
+  canSoftDelete: boolean;
   createdAt: string;
   updatedAt: string;
   createdByName?: string | null;

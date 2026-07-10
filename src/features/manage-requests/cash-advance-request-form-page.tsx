@@ -14,11 +14,13 @@ import {
   startOfWeek,
 } from "date-fns";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import { LeaveRequestType } from "@prisma/client";
+import { GovernmentLoanAgency, LeaveRequestType } from "@prisma/client";
 import {
   createCashAdvanceRequest,
   createDayOffRequest,
+  createGovernmentLoanAssistanceRequest,
   createLeaveRequest,
+  createSilEncashmentRequest,
   createScheduleChangeRequest,
   createScheduleSwapRequest,
   getDayOffPreview,
@@ -65,6 +67,8 @@ import {
 
 type RequestType =
   | "CASH_ADVANCE"
+  | "GOVERNMENT_LOAN"
+  | "SIL_ENCASHMENT"
   | "DAY_OFF"
   | "LEAVE"
   | "SCHEDULE_CHANGE"
@@ -84,23 +88,27 @@ const REQUEST_TYPE_GROUPS: Array<{
   label: string;
   options: RequestType[];
 }> = [
-  { label: "Time off", options: ["LEAVE"] },
+  { label: "Time off", options: ["LEAVE", "SIL_ENCASHMENT"] },
   {
     label: "Schedule",
     options: ["DAY_OFF", "SCHEDULE_CHANGE", "SCHEDULE_SWAP"],
   },
-  { label: "Finance", options: ["CASH_ADVANCE"] },
+  { label: "Finance", options: ["CASH_ADVANCE", "GOVERNMENT_LOAN"] },
 ];
 
 const REQUEST_TYPE_DESCRIPTIONS: Record<RequestType, string> = {
   LEAVE: "Book continuous leave dates, review remaining credits, and send for approval.",
+  SIL_ENCASHMENT:
+    "Convert available current-year SIL credits to cash after manager approval.",
   DAY_OFF: "Move an off day to another workday by picking source and target dates.",
   SCHEDULE_CHANGE:
     "Request a shift replacement across one day or a selected range of workdays.",
   SCHEDULE_SWAP:
     "Pick one scheduled workday, then request a same-date swap with a coworker.",
   CASH_ADVANCE:
-    "Request an advance amount now. Approved requests deduct on payroll review.",
+    "Request an advance amount now. Approved requests are deducted one time on the next payroll.",
+  GOVERNMENT_LOAN:
+    "Request help preparing an SSS or Pag-IBIG loan application and record agency results.",
 };
 
 const buildUpcomingBimonthlyStartOptions = (): CashAdvanceStartOption[] => {
@@ -272,7 +280,9 @@ export default function CashAdvanceRequestFormPage({
         "DAY_OFF",
         "SCHEDULE_CHANGE",
         "SCHEDULE_SWAP",
+        "SIL_ENCASHMENT",
         "CASH_ADVANCE",
+        "GOVERNMENT_LOAN",
       ] as const);
   const [requestType, setRequestType] = useState<RequestType>(
     lockedRequestType ?? "LEAVE",
@@ -286,6 +296,8 @@ export default function CashAdvanceRequestFormPage({
   const [leaveStartDate, setLeaveStartDate] = useState(toDateInputValue(new Date()));
   const [leaveEndDate, setLeaveEndDate] = useState(toDateInputValue(new Date()));
   const [leaveReason, setLeaveReason] = useState("");
+  const [silEncashDays, setSilEncashDays] = useState("1");
+  const [silEncashRemarks, setSilEncashRemarks] = useState("");
 
   const [sourceOffDate, setSourceOffDate] = useState("");
   const [targetWorkDate, setTargetWorkDate] = useState("");
@@ -311,6 +323,12 @@ export default function CashAdvanceRequestFormPage({
   const [cashAmount, setCashAmount] = useState("");
   const [cashPreferredStartDate, setCashPreferredStartDate] = useState("");
   const [cashReason, setCashReason] = useState("");
+  const [governmentLoanAgency, setGovernmentLoanAgency] =
+    useState<GovernmentLoanAgency>(GovernmentLoanAgency.SSS_SALARY_LOAN);
+  const [governmentLoanAmount, setGovernmentLoanAmount] = useState("");
+  const [governmentLoanTermMonths, setGovernmentLoanTermMonths] =
+    useState<12 | 24>(12);
+  const [governmentLoanRemarks, setGovernmentLoanRemarks] = useState("");
 
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
   const [calendarDays, setCalendarDays] = useState<RequestCalendarDay[]>([]);
@@ -340,7 +358,7 @@ export default function CashAdvanceRequestFormPage({
   const leaveInlineError = silBlocked
     ? "SIL must be requested at least 14 days in advance."
     : leaveCreditBlocked
-      ? `Only ${leaveBucket?.remaining ?? 0} credit(s) remaining.`
+      ? `Only ${leaveBucket?.remaining ?? 0} credit(s) remaining. Choose unpaid leave instead.`
       : null;
 
   const loadLeaveSummary = useCallback(async () => {
@@ -371,7 +389,12 @@ export default function CashAdvanceRequestFormPage({
   }, []);
 
   const loadCalendarMonth = useCallback(async () => {
-    if (!employee?.employeeId || requestType === "CASH_ADVANCE") {
+    if (
+      !employee?.employeeId ||
+      requestType === "CASH_ADVANCE" ||
+      requestType === "SIL_ENCASHMENT" ||
+      requestType === "GOVERNMENT_LOAN"
+    ) {
       setCalendarDays([]);
       return;
     }
@@ -397,7 +420,7 @@ export default function CashAdvanceRequestFormPage({
   }, [calendarMonth, employee?.employeeId, requestType]);
 
   useEffect(() => {
-    if (requestType === "LEAVE") {
+    if (requestType === "LEAVE" || requestType === "SIL_ENCASHMENT") {
       void loadLeaveSummary();
       return;
     }
@@ -419,6 +442,13 @@ export default function CashAdvanceRequestFormPage({
     () => buildUpcomingBimonthlyStartOptions(),
     [],
   );
+  const governmentLoanAmountNumber = Number(governmentLoanAmount) || 0;
+  const governmentLoanEstimatedMonthly =
+    governmentLoanAmountNumber > 0
+      ? governmentLoanAmountNumber / governmentLoanTermMonths
+      : 0;
+  const governmentLoanEstimatedPerPayroll =
+    governmentLoanEstimatedMonthly > 0 ? governmentLoanEstimatedMonthly / 2 : 0;
 
   useEffect(() => {
     if (!cashPreferredStartDate && cashAdvanceStartOptions[0]) {
@@ -597,15 +627,23 @@ export default function CashAdvanceRequestFormPage({
       );
     }
     if (requestType === "SCHEDULE_SWAP") return Boolean(swapCoworkerId && swapWorkDate);
+    if (requestType === "GOVERNMENT_LOAN") {
+      return Boolean(governmentLoanAmount.trim());
+    }
+    if (requestType === "SIL_ENCASHMENT") {
+      return Boolean(silEncashDays.trim());
+    }
     return Boolean(cashPreferredStartDate);
   }, [
     cashPreferredStartDate,
+    governmentLoanAmount,
     leaveEndDate,
     leaveStartDate,
     requestType,
     scheduleChangeEndDate,
     scheduleChangeShiftId,
     scheduleChangeStartDate,
+    silEncashDays,
     sourceOffDate,
     swapCoworkerId,
     swapWorkDate,
@@ -668,6 +706,11 @@ export default function CashAdvanceRequestFormPage({
               endDate: leaveEndDate,
               reason: leaveReason,
             })
+          : requestType === "SIL_ENCASHMENT"
+            ? await createSilEncashmentRequest({
+                days: silEncashDays,
+                employeeRemarks: silEncashRemarks,
+              })
           : requestType === "DAY_OFF"
             ? await createDayOffRequest({
                 sourceOffDate,
@@ -687,6 +730,13 @@ export default function CashAdvanceRequestFormPage({
                     workDate: swapWorkDate,
                     reason: swapReason,
                   })
+                : requestType === "GOVERNMENT_LOAN"
+                  ? await createGovernmentLoanAssistanceRequest({
+                      agency: governmentLoanAgency,
+                      requestedAmount: governmentLoanAmount,
+                      termMonths: governmentLoanTermMonths,
+                      employeeRemarks: governmentLoanRemarks,
+                    })
                 : await createCashAdvanceRequest({
                     amount: cashAmount,
                     preferredStartDate: cashPreferredStartDate,
@@ -788,6 +838,10 @@ export default function CashAdvanceRequestFormPage({
                       <p className="mt-2 text-xs leading-5 text-muted-foreground">
                         {requestType === "CASH_ADVANCE"
                           ? "No calendar needed. Enter amount and reason, then submit."
+                          : requestType === "SIL_ENCASHMENT"
+                            ? "No calendar needed. Choose how many current-year SIL credits to encash."
+                          : requestType === "GOVERNMENT_LOAN"
+                            ? "Choose agency, amount, and 12 or 24 monthly payments."
                           : bookingHint}
                       </p>
                     </div>
@@ -795,7 +849,9 @@ export default function CashAdvanceRequestFormPage({
                 </div>
               </div>
 
-              {requestType !== "CASH_ADVANCE" ? (
+              {requestType !== "CASH_ADVANCE" &&
+              requestType !== "SIL_ENCASHMENT" &&
+              requestType !== "GOVERNMENT_LOAN" ? (
                 <Card className="border-border/70">
                   <CardHeader className="border-b border-border/70 pb-3">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -963,36 +1019,86 @@ export default function CashAdvanceRequestFormPage({
                 <Card className="border-border/70">
                   <CardHeader className="border-b border-border/70 pb-3">
                     <div>
-                      <CardTitle className="text-base">Preferred Bimonthly Start</CardTitle>
+                      <CardTitle className="text-base">
+                        {requestType === "CASH_ADVANCE"
+                          ? "Next Payroll Deduction"
+                          : requestType === "SIL_ENCASHMENT"
+                            ? "SIL Encashment"
+                          : "Agency Application Guide"}
+                      </CardTitle>
                       <p className="text-xs text-muted-foreground">
-                        Choose when payroll deduction should start.
+                        {requestType === "CASH_ADVANCE"
+                          ? "Cash advance repayment is deducted one time on the next payroll."
+                          : requestType === "SIL_ENCASHMENT"
+                            ? "Current-year SIL credits can be converted after manager approval."
+                          : "Use official government portals and ask your manager for employer documents when needed."}
                       </p>
                     </div>
                   </CardHeader>
                   <CardContent className="p-4">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {cashAdvanceStartOptions.map((option) => {
-                        const active = cashPreferredStartDate === option.value;
-                        return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => setCashPreferredStartDate(option.value)}
-                            className={cn(
-                              "rounded-xl border p-4 text-left transition",
-                              active
-                                ? "border-primary/70 bg-primary/18 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.45)]"
-                                : "border-border/70 bg-muted/20 hover:border-primary/40 hover:bg-muted/30",
-                            )}
-                          >
-                            <p className="text-sm font-medium">{option.title}</p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {option.subtitle}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {requestType === "CASH_ADVANCE" ? (
+                      <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm">
+                        <p className="font-medium">
+                          {cashAdvanceStartOptions[0]?.title ?? "Next payroll"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {cashAdvanceStartOptions[0]?.subtitle ??
+                            "One-time deduction on next payroll."}
+                        </p>
+                      </div>
+                    ) : requestType === "SIL_ENCASHMENT" ? (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="rounded-xl border border-border/70 bg-muted/20 p-4 text-sm">
+                          <span className="font-medium">Current SIL balance</span>
+                          <span className="mt-2 block text-2xl font-semibold">
+                            {leaveSummary?.sil.remaining ?? 0}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            available of {leaveSummary?.sil.annualCredits ?? 0}
+                          </span>
+                        </div>
+                        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+                          <span className="font-medium">Approval required</span>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            Manager approval deducts selected days from SIL credits.
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <a
+                          href="https://www.sss.gov.ph/salary-loan/"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-xl border border-border/70 bg-muted/20 p-4 text-sm transition hover:border-primary/40"
+                        >
+                          <span className="font-medium">SSS Salary Loan</span>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            Review official SSS salary loan guidance and My.SSS application steps.
+                          </span>
+                        </a>
+                        <a
+                          href="https://www.pagibigfundservices.com/virtualpagibig/Loans.aspx"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-xl border border-border/70 bg-muted/20 p-4 text-sm transition hover:border-primary/40"
+                        >
+                          <span className="font-medium">Virtual Pag-IBIG Loans</span>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            Open official Pag-IBIG loan services and MPL application resources.
+                          </span>
+                        </a>
+                        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm md:col-span-2">
+                          <p className="font-medium text-amber-800 dark:text-amber-200">
+                            Employer documents
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            If SSS/Pag-IBIG requires employer certification, signed documents,
+                            or net-pay confirmation, go to your manager for assistance.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -1108,6 +1214,9 @@ export default function CashAdvanceRequestFormPage({
                             </SelectGroup>
                           </SelectContent>
                         </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Leave credits are set by the Manager in Leave Credits. When Sick or SIL credits are zero or insufficient, the system blocks that request and only unpaid leave can be requested.
+                        </p>
                       </div>
 
                       <div className="space-y-2">
@@ -1166,6 +1275,67 @@ export default function CashAdvanceRequestFormPage({
                           rows={5}
                         />
                       </div>
+                    </>
+                  ) : null}
+
+                  {requestType === "SIL_ENCASHMENT" ? (
+                    <>
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                        <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            Available SIL
+                          </p>
+                          <p className="mt-2 text-lg font-semibold">
+                            {leaveSummary?.sil.remaining ?? 0}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            current-year credits
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            After request
+                          </p>
+                          <p className="mt-2 text-lg font-semibold">
+                            {Math.max(
+                              0,
+                              (leaveSummary?.sil.remaining ?? 0) -
+                                (Number(silEncashDays) || 0),
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            if approved
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>SIL days to encash</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          max={leaveSummary?.sil.remaining ?? 0}
+                          value={silEncashDays}
+                          onChange={(event) => setSilEncashDays(event.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Notes</Label>
+                        <Textarea
+                          value={silEncashRemarks}
+                          onChange={(event) => setSilEncashRemarks(event.target.value)}
+                          rows={5}
+                        />
+                      </div>
+
+                      {(Number(silEncashDays) || 0) >
+                      (leaveSummary?.sil.remaining ?? 0) ? (
+                        <p className="text-sm text-destructive">
+                          Only {leaveSummary?.sil.remaining ?? 0} SIL credit(s)
+                          available.
+                        </p>
+                      ) : null}
                     </>
                   ) : null}
 
@@ -1325,8 +1495,7 @@ export default function CashAdvanceRequestFormPage({
                       <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-sm">
                         <p className="font-medium">Payroll note</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Approved requests default to full deduction on next payroll.
-                          Manager can switch to installments during review.
+                          Approved requests are deducted one time on the next payroll.
                         </p>
                       </div>
 
@@ -1379,6 +1548,138 @@ export default function CashAdvanceRequestFormPage({
                     </>
                   ) : null}
 
+                  {requestType === "GOVERNMENT_LOAN" ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Loan agency</Label>
+                        <div className="grid gap-2">
+                          {[
+                            {
+                              value: GovernmentLoanAgency.SSS_SALARY_LOAN,
+                              title: "SSS Salary Loan",
+                              subtitle: "Requires saved SSS number.",
+                            },
+                            {
+                              value: GovernmentLoanAgency.PAGIBIG_MPL,
+                              title: "Pag-IBIG Multi-Purpose Loan",
+                              subtitle: "Requires saved Pag-IBIG MID number.",
+                            },
+                          ].map((option) => {
+                            const active = governmentLoanAgency === option.value;
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setGovernmentLoanAgency(option.value)}
+                                className={cn(
+                                  "rounded-xl border p-3 text-left text-sm transition",
+                                  active
+                                    ? "border-primary/70 bg-primary/18 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.45)]"
+                                    : "border-border/70 bg-muted/20 hover:border-primary/40",
+                                )}
+                              >
+                                <span className="font-medium">{option.title}</span>
+                                <span className="mt-1 block text-xs text-muted-foreground">
+                                  {option.subtitle}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Requested amount</Label>
+                        <Input
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={governmentLoanAmount}
+                          onChange={(event) =>
+                            setGovernmentLoanAmount(event.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Payment term</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([12, 24] as const).map((term) => {
+                            const active = governmentLoanTermMonths === term;
+                            return (
+                              <button
+                                key={term}
+                                type="button"
+                                onClick={() => setGovernmentLoanTermMonths(term)}
+                                className={cn(
+                                  "rounded-xl border p-3 text-left text-sm transition",
+                                  active
+                                    ? "border-primary/70 bg-primary/18 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.45)]"
+                                    : "border-border/70 bg-muted/20 hover:border-primary/40",
+                                )}
+                              >
+                                <span className="font-medium">{term} months</span>
+                                <span className="mt-1 block text-xs text-muted-foreground">
+                                  Monthly repayment term
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                        <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            Est. monthly
+                          </p>
+                          <p className="mt-2 text-sm font-medium">
+                            {formatMoney(governmentLoanEstimatedMonthly)}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            Est. per payroll
+                          </p>
+                          <p className="mt-2 text-sm font-medium">
+                            {formatMoney(governmentLoanEstimatedPerPayroll)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-sm">
+                        <p className="font-medium">Workflow</p>
+                        <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                          Prerequisite complete: saved government ID verified.
+                        </p>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                          <div className="h-2 w-1/4 rounded-full bg-primary" />
+                        </div>
+                        <ul className="mt-3 grid gap-2 text-xs text-muted-foreground">
+                          <li>Request submitted</li>
+                          <li>Manager marks processing</li>
+                          <li>Agency approved</li>
+                          <li>Payroll deduction recorded</li>
+                        </ul>
+                      </div>
+
+                      <div className="rounded-xl border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+                        Estimates are not final. SSS or Pag-IBIG decides final loanable
+                        amount, repayment period, and monthly amortization.
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Notes</Label>
+                        <Textarea
+                          value={governmentLoanRemarks}
+                          onChange={(event) =>
+                            setGovernmentLoanRemarks(event.target.value)
+                          }
+                          rows={4}
+                        />
+                      </div>
+                    </>
+                  ) : null}
+
                   {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
                   <div className="flex flex-col gap-2 border-t border-border/70 pt-4">
@@ -1386,7 +1687,13 @@ export default function CashAdvanceRequestFormPage({
                       disabled={
                         submitting ||
                         !isCalendarSelectionValid ||
-                        (requestType === "LEAVE" && Boolean(leaveInlineError))
+                        (requestType === "LEAVE" && Boolean(leaveInlineError)) ||
+                        (requestType === "SIL_ENCASHMENT" &&
+                          ((Number(silEncashDays) || 0) <= 0 ||
+                            (Number(silEncashDays) || 0) >
+                              (leaveSummary?.sil.remaining ?? 0))) ||
+                        (requestType === "GOVERNMENT_LOAN" &&
+                          governmentLoanAmountNumber <= 0)
                       }
                       onClick={() => void submit()}
                     >

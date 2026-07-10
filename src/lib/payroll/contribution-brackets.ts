@@ -13,6 +13,7 @@ type JsonRecord = Record<string, unknown>;
 
 export type ContributionBracketRecord = {
   id: string;
+  versionId: string | null;
   contributionType: ContributionType;
   calculationMethod: ContributionCalculationMethod;
   payrollFrequency: PayrollFrequency | null;
@@ -25,6 +26,8 @@ export type ContributionBracketRecord = {
   baseTax: number | null;
   marginalRate: number | null;
   referenceCode: string | null;
+  effectiveFrom: Date;
+  effectiveTo: Date | null;
   metadata: JsonRecord | null;
 };
 
@@ -58,6 +61,7 @@ export async function loadActiveContributionBrackets(
     ],
     select: {
       id: true,
+      versionId: true,
       contributionType: true,
       calculationMethod: true,
       payrollFrequency: true,
@@ -70,6 +74,8 @@ export async function loadActiveContributionBrackets(
       baseTax: true,
       marginalRate: true,
       referenceCode: true,
+      effectiveFrom: true,
+      effectiveTo: true,
       metadata: true,
     },
   });
@@ -77,6 +83,7 @@ export async function loadActiveContributionBrackets(
   return rows.map(
     (row): ContributionBracketRecord => ({
       id: row.id,
+      versionId: row.versionId ?? null,
       contributionType: row.contributionType,
       calculationMethod: row.calculationMethod,
       payrollFrequency: row.payrollFrequency ?? null,
@@ -89,6 +96,8 @@ export async function loadActiveContributionBrackets(
       baseTax: toNumberOrNull(row.baseTax),
       marginalRate: toNumberOrNull(row.marginalRate),
       referenceCode: row.referenceCode ?? null,
+      effectiveFrom: row.effectiveFrom,
+      effectiveTo: row.effectiveTo ?? null,
       metadata: serializeJsonRecord(row.metadata),
     }),
   );

@@ -2,6 +2,8 @@ import {
   CashAdvanceRequestStatus,
   DayOffRequestStatus,
   EmployeeDeductionAssignmentStatus,
+  GovernmentLoanAgency,
+  GovernmentLoanAssistanceRequestStatus,
   LeaveRequestStatus,
   LeaveRequestType,
   ScheduleChangeRequestStatus,
@@ -30,6 +32,7 @@ export const requestStatusLabel = (
   status:
     | CashAdvanceRequestStatus
     | DayOffRequestStatus
+    | GovernmentLoanAssistanceRequestStatus
     | LeaveRequestStatus
     | ScheduleChangeRequestStatus
     | ScheduleSwapRequestStatus,
@@ -37,6 +40,18 @@ export const requestStatusLabel = (
   switch (status) {
     case ScheduleSwapRequestStatus.PENDING_COWORKER:
       return "Pending coworker";
+    case GovernmentLoanAssistanceRequestStatus.PENDING_MANAGER_REVIEW:
+      return "Pending manager review";
+    case GovernmentLoanAssistanceRequestStatus.PROCESSING:
+      return "Processing";
+    case GovernmentLoanAssistanceRequestStatus.APPROVED_BY_AGENCY:
+      return "Approved by agency";
+    case GovernmentLoanAssistanceRequestStatus.DECLINED_BY_AGENCY:
+      return "Declined by agency";
+    case GovernmentLoanAssistanceRequestStatus.RECORDED_IN_PAYROLL:
+      return "Recorded in payroll";
+    case GovernmentLoanAssistanceRequestStatus.CANCELLED:
+      return "Cancelled";
     case CashAdvanceRequestStatus.PENDING_MANAGER:
     case DayOffRequestStatus.PENDING_MANAGER:
     case LeaveRequestStatus.PENDING_MANAGER:
@@ -72,6 +87,7 @@ export const requestStatusClass = (
   status:
     | CashAdvanceRequestStatus
     | DayOffRequestStatus
+    | GovernmentLoanAssistanceRequestStatus
     | LeaveRequestStatus
     | ScheduleChangeRequestStatus
     | ScheduleSwapRequestStatus,
@@ -81,8 +97,11 @@ export const requestStatusClass = (
     case DayOffRequestStatus.APPROVED:
     case LeaveRequestStatus.APPROVED:
     case ScheduleChangeRequestStatus.APPROVED:
+    case GovernmentLoanAssistanceRequestStatus.APPROVED_BY_AGENCY:
+    case GovernmentLoanAssistanceRequestStatus.RECORDED_IN_PAYROLL:
       return "border-emerald-600 text-emerald-700";
     case ScheduleSwapRequestStatus.PENDING_COWORKER:
+    case GovernmentLoanAssistanceRequestStatus.PROCESSING:
       return "border-sky-600 text-sky-700";
     case CashAdvanceRequestStatus.REJECTED:
     case DayOffRequestStatus.REJECTED:
@@ -90,18 +109,21 @@ export const requestStatusClass = (
     case ScheduleChangeRequestStatus.REJECTED:
     case ScheduleSwapRequestStatus.REJECTED:
     case ScheduleSwapRequestStatus.DECLINED:
+    case GovernmentLoanAssistanceRequestStatus.DECLINED_BY_AGENCY:
       return "border-destructive text-destructive";
     case CashAdvanceRequestStatus.CANCELLED:
     case DayOffRequestStatus.CANCELLED:
     case LeaveRequestStatus.CANCELLED:
     case ScheduleChangeRequestStatus.CANCELLED:
     case ScheduleSwapRequestStatus.CANCELLED:
+    case GovernmentLoanAssistanceRequestStatus.CANCELLED:
       return "border-slate-500 text-slate-600";
     case CashAdvanceRequestStatus.PENDING_MANAGER:
     case DayOffRequestStatus.PENDING_MANAGER:
     case LeaveRequestStatus.PENDING_MANAGER:
     case ScheduleChangeRequestStatus.PENDING_MANAGER:
     case ScheduleSwapRequestStatus.PENDING_MANAGER:
+    case GovernmentLoanAssistanceRequestStatus.PENDING_MANAGER_REVIEW:
     default:
       return "border-orange-600 text-orange-700";
   }
@@ -110,6 +132,8 @@ export const requestStatusClass = (
 export const requestTypeLabel = (
   type:
     | "CASH_ADVANCE"
+    | "GOVERNMENT_LOAN"
+    | "SIL_ENCASHMENT"
     | "LEAVE"
     | "DAY_OFF"
     | "SCHEDULE_CHANGE"
@@ -124,9 +148,24 @@ export const requestTypeLabel = (
       return "Change Shift";
     case "SCHEDULE_SWAP":
       return "Schedule Swap";
+    case "GOVERNMENT_LOAN":
+      return "Government Loan Assistance";
+    case "SIL_ENCASHMENT":
+      return "SIL Encashment";
     case "CASH_ADVANCE":
     default:
       return "Cash Advance";
+  }
+};
+
+export const governmentLoanAgencyLabel = (agency: GovernmentLoanAgency) => {
+  switch (agency) {
+    case GovernmentLoanAgency.SSS_SALARY_LOAN:
+      return "SSS Salary Loan";
+    case GovernmentLoanAgency.PAGIBIG_MPL:
+      return "Pag-IBIG Multi-Purpose Loan";
+    default:
+      return agency;
   }
 };
 
