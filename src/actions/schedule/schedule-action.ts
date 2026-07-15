@@ -11,6 +11,7 @@ import {
   getWeekPlannerSnapshot as getWeekPlannerSnapshotImpl,
   saveWeekPlannerAssignments as saveWeekPlannerAssignmentsImpl,
 } from "./week-planner-action";
+import { getSupervisorTeamWeekSchedule as getSupervisorTeamWeekScheduleImpl } from "./supervisor-team-week-schedule-action";
 
 export async function getScheduleSnapshot(
   ...args: Parameters<typeof getScheduleSnapshotImpl>
@@ -52,4 +53,10 @@ export async function saveWeekPlannerAssignments(
   ...args: Parameters<typeof saveWeekPlannerAssignmentsImpl>
 ) {
   return saveWeekPlannerAssignmentsImpl(...args);
+}
+
+export async function getSupervisorTeamWeekSchedule(
+  ...args: Parameters<typeof getSupervisorTeamWeekScheduleImpl>
+) {
+  return getSupervisorTeamWeekScheduleImpl(...args);
 }

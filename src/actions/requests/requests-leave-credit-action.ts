@@ -4,7 +4,7 @@ import { LeaveCreditResetRunType, LeaveCreditType } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
-  canReviewRequests,
+  canManageLeaveCredits,
   employeeRequestSelect,
 } from "./requests-shared";
 import {
@@ -29,7 +29,7 @@ export async function listLeaveCreditPolicies(): Promise<{
 }> {
   try {
     const session = await getSession();
-    if (!session?.isLoggedIn || !canReviewRequests(session.role)) {
+    if (!session?.isLoggedIn || !canManageLeaveCredits(session.role)) {
       return { success: false, error: "You are not allowed to view leave credit policies." };
     }
 
@@ -53,7 +53,7 @@ export async function updateLeaveCreditPolicy(input: {
 }> {
   try {
     const session = await getSession();
-    if (!session?.isLoggedIn || !canReviewRequests(session.role)) {
+    if (!session?.isLoggedIn || !canManageLeaveCredits(session.role)) {
       return { success: false, error: "You are not allowed to update leave credit policies." };
     }
 
@@ -90,7 +90,7 @@ export async function runLeaveCreditReset(input: {
 }> {
   try {
     const session = await getSession();
-    if (!session?.isLoggedIn || !canReviewRequests(session.role)) {
+    if (!session?.isLoggedIn || !canManageLeaveCredits(session.role)) {
       return { success: false, error: "You are not allowed to run leave credit resets." };
     }
 
@@ -131,7 +131,7 @@ export async function listLeaveCreditResetRuns(input?: {
 }> {
   try {
     const session = await getSession();
-    if (!session?.isLoggedIn || !canReviewRequests(session.role)) {
+    if (!session?.isLoggedIn || !canManageLeaveCredits(session.role)) {
       return { success: false, error: "You are not allowed to view leave credit reset history." };
     }
 
@@ -158,7 +158,7 @@ export async function listEmployeeLeaveCreditLedger(input?: {
 }> {
   try {
     const session = await getSession();
-    if (!session?.isLoggedIn || !canReviewRequests(session.role)) {
+    if (!session?.isLoggedIn || !canManageLeaveCredits(session.role)) {
       return { success: false, error: "You are not allowed to view leave credit history." };
     }
 

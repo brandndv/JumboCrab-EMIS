@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   listCashAdvanceRequests,
@@ -589,9 +588,9 @@ export default function ManagerRequestsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="mx-auto w-full max-w-[1500px] space-y-6 px-4 py-8 sm:px-8 lg:px-12">
+      <Card className="shadow-sm">
+        <CardHeader className="p-5 sm:p-6">
           <div>
             <CardTitle>Requests</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -599,17 +598,14 @@ export default function ManagerRequestsPage() {
               swap requests, cash advances, and government loan assistance.
             </p>
           </div>
-          <Button asChild variant="outline">
-            <Link href="/manager/requests/leave-credits">Leave Credits</Link>
-          </Button>
         </CardHeader>
       </Card>
 
-      <Card>
-        <CardHeader className="px-4 py-4">
+      <Card className="shadow-sm">
+        <CardHeader className="p-5 pb-3 sm:p-6 sm:pb-4">
           <CardTitle>Pending Review</CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
+        <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
           {loading ? (
             <ModuleLoadingState
               title="Loading manager requests"
@@ -622,7 +618,7 @@ export default function ManagerRequestsPage() {
           ) : (
             <div className="space-y-3">
               {pendingRows.map((row) => (
-                <div key={`${row.requestType}:${row.id}`} className="rounded-xl border border-border/70 p-3">
+                <div key={`${row.requestType}:${row.id}`} className="rounded-xl border border-border/70 p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="flex items-center gap-2">
@@ -745,17 +741,17 @@ export default function ManagerRequestsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="px-4 py-4">
+      <Card className="shadow-sm">
+        <CardHeader className="p-5 pb-3 sm:p-6 sm:pb-4">
           <CardTitle>Reviewed</CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
+        <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
           {loading ? null : reviewedRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">No reviewed requests yet.</p>
           ) : (
             <div className="space-y-3">
               {reviewedRows.map((row) => (
-                <div key={`${row.requestType}:${row.id}`} className="rounded-xl border border-border/70 p-3">
+                <div key={`${row.requestType}:${row.id}`} className="rounded-xl border border-border/70 p-4">
                   <div className="flex items-center gap-2">
                     <p className="font-medium">{requestTypeLabel(row.requestType)}</p>
                     <Badge variant="outline" className={requestStatusClass(row.status)}>

@@ -78,15 +78,19 @@ const RBAC_RULES: AccessRule[] = [
     allowedRoles: ["admin"],
   },
   {
-    path: rolePath("admin", "/attendance/overrides"),
+    path: rolePath("admin", "/schedule/overrides"),
     allowedRoles: ["admin"],
   },
   {
-    path: rolePath("admin", "/attendance/shifts"),
+    path: rolePath("admin", "/schedule/shifts"),
     allowedRoles: ["admin"],
   },
   {
-    path: rolePath("admin", "/attendance/patterns"),
+    path: rolePath("admin", "/schedule/patterns"),
+    allowedRoles: ["admin"],
+  },
+  {
+    path: rolePath("admin", "/schedule"),
     allowedRoles: ["admin"],
   },
   {

@@ -760,7 +760,7 @@ export default function CashAdvanceRequestFormPage({
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] space-y-6 px-4 pb-8 lg:px-6">
+    <div className="mx-auto w-full max-w-[1500px] space-y-6 px-4 py-8 sm:px-8 lg:px-12">
       <Card className="overflow-hidden">
         <CardContent className="p-5 sm:p-6">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
@@ -1215,7 +1215,7 @@ export default function CashAdvanceRequestFormPage({
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
-                          Leave credits are set by the Manager in Leave Credits. When Sick or SIL credits are zero or insufficient, the system blocks that request and only unpaid leave can be requested.
+                          Leave credits are set by the General Manager in Leave Credits. When Sick or SIL credits are zero or insufficient, the system blocks that request and only unpaid leave can be requested.
                         </p>
                       </div>
 

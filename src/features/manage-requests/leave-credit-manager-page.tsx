@@ -141,12 +141,19 @@ export default function LeaveCreditManagerPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
+    <div className="mx-auto w-full max-w-[1500px] space-y-6 px-4 py-8 sm:px-8 lg:px-12">
+      <div>
+        <h1 className="text-2xl font-semibold">Leave Credits</h1>
+        <p className="text-sm text-muted-foreground">
+          Manage paid leave credit policies, reset schedules, and credit history.
+        </p>
+      </div>
+
+      <Card className="shadow-sm">
+        <CardHeader className="p-5 pb-3 sm:p-6 sm:pb-4">
           <CardTitle>Leave Credit Settings</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
           {loading ? (
             <ModuleLoadingState
               title="Loading leave credits"
@@ -159,7 +166,7 @@ export default function LeaveCreditManagerPage() {
               {policies.map((policy) => {
                 const draft = policyDrafts[policy.leaveType];
                 return (
-                  <Card key={policy.id} className="border-border/70">
+                  <Card key={policy.id} className="border-border/70 shadow-none">
                     <CardContent className="space-y-4 p-4">
                       <div>
                         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
@@ -265,11 +272,11 @@ export default function LeaveCreditManagerPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="shadow-sm">
+        <CardHeader className="p-5 pb-3 sm:p-6 sm:pb-4">
           <CardTitle>Reset History</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 px-5 pb-5 sm:px-6 sm:pb-6">
           {runs.length === 0 ? (
             <p className="text-sm text-muted-foreground">No reset runs yet.</p>
           ) : (
@@ -290,11 +297,11 @@ export default function LeaveCreditManagerPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="shadow-sm">
+        <CardHeader className="p-5 pb-3 sm:p-6 sm:pb-4">
           <CardTitle>Credit Ledger</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 px-5 pb-5 sm:px-6 sm:pb-6">
           {ledger.length === 0 ? (
             <p className="text-sm text-muted-foreground">No leave credit ledger entries yet.</p>
           ) : (

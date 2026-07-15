@@ -282,7 +282,7 @@ export default function EmployeeRequestsPage({
   };
 
   return (
-    <div className="space-y-6 px-4 py-8 sm:px-8 lg:px-12">
+    <div className="mx-auto w-full max-w-[1500px] space-y-6 px-4 py-8 sm:px-8 lg:px-12">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">

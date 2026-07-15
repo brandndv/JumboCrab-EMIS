@@ -21,9 +21,9 @@ const RELATED_LAYOUT_PATHS = [
   "/manager/deductions/employee",
   "/employee/deductions",
   "/manager/attendance",
-  "/manager/attendance/overrides",
+  "/manager/schedule/overrides",
   "/employee/attendance",
-  "/employee/attendance/schedule",
+  "/employee/schedule",
 ] as const;
 
 export const CASH_ADVANCE_DEDUCTION_CODE = "CASH_ADVANCE";
@@ -48,6 +48,9 @@ export const canCreateEmployeeRequests = (role?: Roles) =>
 
 export const canReviewRequests = (role?: Roles) =>
   role === Roles.Admin || role === Roles.Manager;
+
+export const canManageLeaveCredits = (role?: Roles) =>
+  role === Roles.GeneralManager;
 
 export const enumerateZonedDaysInclusive = (start: Date, end: Date) => {
   const days: Date[] = [];

@@ -19,6 +19,7 @@ import {
   Users,
   FileText,
   Clock,
+  CalendarDays,
   BookMinus,
   HandCoins,
   ClipboardClock,
@@ -187,21 +188,6 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["admin"],
         },
         {
-          label: "Overrides",
-          path: "/overrides",
-          roles: ["admin", "generalManager", "manager", "supervisor"],
-        },
-        {
-          label: "Shifts",
-          path: "/shifts",
-          roles: ["admin", "generalManager", "manager", "supervisor"],
-        },
-        {
-          label: "Weekly Schedule",
-          path: "/patterns",
-          roles: ["admin", "generalManager", "manager", "supervisor"],
-        },
-        {
           label: "Attendance Locks",
           path: "/locks",
           roles: ["admin", "manager"],
@@ -212,11 +198,6 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["employee"],
         },
         {
-          label: "View Schedule",
-          path: "/schedule",
-          roles: ["employee"],
-        },
-        {
           label: "History",
           path: "/history",
           roles: ["employee"],
@@ -224,6 +205,43 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
       ],
       // ========== ATTENDANCE ACCESS ========= //
       roles: ["admin", "generalManager", "manager", "supervisor", "employee"],
+    },
+    // ========== SCHEDULE MENU ========== //
+    {
+      id: "schedule",
+      label: "Schedule",
+      icon: CalendarDays,
+      href: `/${userRole}/schedule`,
+      hasSubmenu: true,
+      subItems: [
+        {
+          label: "Overrides",
+          path: "/overrides",
+          roles: ["admin", "manager"],
+        },
+        {
+          label: "Shifts",
+          path: "/shifts",
+          roles: ["admin", "manager"],
+        },
+        {
+          label: "Weekly Schedule",
+          path: "/patterns",
+          roles: ["admin", "manager"],
+        },
+        {
+          label: "View Schedule",
+          path: "",
+          roles: ["employee"],
+        },
+        {
+          label: "View Team Schedule",
+          path: "",
+          roles: ["supervisor"],
+        },
+      ],
+      // ========== SCHEDULE ACCESS ========= //
+      roles: ["admin", "manager", "employee", "supervisor"],
     },
     // ========== DEDUCTION MENU ========== //
     {
@@ -369,6 +387,11 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
           roles: ["manager"],
         },
         {
+          label: "Leave Credits",
+          path: "/leave-credits",
+          roles: ["generalManager"],
+        },
+        {
           label: "My Requests",
           path: "",
           roles: ["employee"],
@@ -390,7 +413,7 @@ const NavSidebar = ({ userRole }: NavSidebarProps) => {
         },
       ],
       // ========== REQUEST ACCESS ========= //
-      roles: ["manager", "employee"],
+      roles: ["generalManager", "manager", "employee"],
     },
     // ========== REPORTS MENU ========== //
     {
